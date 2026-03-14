@@ -1,0 +1,10 @@
+[package]
+name = "wg-adapter-webhook"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+wg-adapter-api = { path = "../wg-adapter-api" }
