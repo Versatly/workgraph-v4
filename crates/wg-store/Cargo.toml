@@ -1,0 +1,17 @@
+[package]
+name = "wg-store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_yaml.workspace = true
+wg-encoding = { path = "../wg-encoding" }
+wg-error = { path = "../wg-error" }
+wg-paths = { path = "../wg-paths" }
+wg-types = { path = "../wg-types" }
+
+[dev-dependencies]
+tempfile.workspace = true

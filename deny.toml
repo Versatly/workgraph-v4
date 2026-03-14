@@ -1,0 +1,13 @@
+[licenses]
+version = 2
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Unicode-3.0",
+]
+
+[advisories]
+yanked = "deny"
+
+[bans]
+multiple-versions = "allow"

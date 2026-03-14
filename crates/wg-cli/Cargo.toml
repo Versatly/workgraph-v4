@@ -1,0 +1,19 @@
+[package]
+name = "wg-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+clap.workspace = true
+serde_yaml.workspace = true
+uuid.workspace = true
+wg-encoding = { path = "../wg-encoding" }
+wg-ledger = { path = "../wg-ledger" }
+wg-paths = { path = "../wg-paths" }
+wg-registry = { path = "../wg-registry" }
+wg-store = { path = "../wg-store" }
+wg-types = { path = "../wg-types" }

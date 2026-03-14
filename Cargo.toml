@@ -1,0 +1,91 @@
+[package]
+name = "workgraph-v4"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[workspace]
+members = [
+    ".",
+    "bins/workgraph",
+    "crates/wg-types",
+    "crates/wg-error",
+    "crates/wg-paths",
+    "crates/wg-fs",
+    "crates/wg-encoding",
+    "crates/wg-clock",
+    "crates/wg-store",
+    "crates/wg-ledger",
+    "crates/wg-registry",
+    "crates/wg-thread",
+    "crates/wg-mission",
+    "crates/wg-graph",
+    "crates/wg-policy",
+    "crates/wg-orientation",
+    "crates/wg-dispatch",
+    "crates/wg-adapter-api",
+    "crates/wg-adapter-cursor",
+    "crates/wg-adapter-claude",
+    "crates/wg-adapter-shell",
+    "crates/wg-adapter-webhook",
+    "crates/wg-trigger",
+    "crates/wg-autonomy",
+    "crates/wg-connector-api",
+    "crates/wg-connector-github",
+    "crates/wg-transport",
+    "crates/wg-federation",
+    "crates/wg-net",
+    "crates/wg-signal",
+    "crates/wg-cli",
+    "crates/wg-mcp",
+    "crates/wg-api",
+    "crates/wg-projections",
+    "crates/wg-markdown",
+    "crates/wg-obsidian",
+    "crates/wg-otel",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+clap = { version = "4", features = ["derive", "env"] }
+thiserror = "2"
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+sha2 = "0.10"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+uuid = { version = "1", features = ["v4", "serde"] }
+pulldown-cmark = "0.12"
+tempfile = "3"
+walkdir = "2"
+glob = "0.3"
+
+[dev-dependencies]
+serde_yaml.workspace = true
+tempfile.workspace = true
+wg-ledger = { path = "crates/wg-ledger" }
+wg-paths = { path = "crates/wg-paths" }
+wg-store = { path = "crates/wg-store" }
+wg-types = { path = "crates/wg-types" }
+wg-cli = { path = "crates/wg-cli" }
+
+[profile.dev]
+debug = 1
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = "symbols"
+

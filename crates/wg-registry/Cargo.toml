@@ -1,0 +1,10 @@
+[package]
+name = "wg-registry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+wg-error = { path = "../wg-error" }
+wg-types = { path = "../wg-types" }
