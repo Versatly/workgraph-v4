@@ -11,7 +11,8 @@ This repository currently implements the Phase 0 foundation described in `AGENTS
 - A Rust workspace monorepo with layered crates
 - A markdown-native workspace layout for primitives such as `org`, `client`, and `decision`
 - A JSONL ledger with hash-chain verification
-- A clap-based CLI for workspace initialization, creation, querying, and inspection
+- A clap-based CLI for workspace initialization, agent briefing, creation, querying, and inspection
+- Durable workspace metadata in `.workgraph/config.yaml`
 
 Future phases will add adapters, triggers, transport, MCP, and API surfaces on top of this core.
 
@@ -41,6 +42,9 @@ cargo build --release
 # Initialize a new workspace
 ./target/release/workgraph init
 
+# Get a quick agent-first orientation summary
+./target/release/workgraph brief
+
 # Create primitives
 ./target/release/workgraph create org --title "Versatly"
 ./target/release/workgraph create client --title "Hale Pet Door"
@@ -57,6 +61,7 @@ cargo build --release
 The Phase 0 CLI currently supports:
 
 - `workgraph init`
+- `workgraph brief`
 - `workgraph status`
 - `workgraph create <type> --title "..." [--field key=value]`
 - `workgraph query <type> [--filter key=value]`

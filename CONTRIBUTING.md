@@ -45,6 +45,20 @@ cargo test --workspace
 - Avoid unsafe code.
 - Use real filesystem-backed tests for storage and ledger behavior.
 - Keep markdown and YAML outputs human-readable.
+- Split growing files early. If a file starts owning argument parsing, orchestration, rendering, and helpers, it should be broken up immediately.
+
+## Surface crate layout
+
+Surface crates are part of the agent experience. Keep them intentionally modular.
+
+- `wg-cli`
+  - prefer `args.rs`, `app.rs`, `commands/`, `output/`, and `util/`
+- `wg-mcp`
+  - prefer separate modules for server wiring, resources, prompts, and tools
+- `wg-api`
+  - prefer separate route, service, and serialization modules
+
+As a rule of thumb, once a surface crate has multiple commands or output modes, each command or surface concern should get its own module rather than expanding a single central file.
 
 ## Dependency management
 

@@ -237,6 +237,11 @@ glob = "0.3"
 - Tests for all core logic (store read/write, ledger append/verify, registry)
 - Use `#[cfg(test)]` modules, not separate test files, for unit tests
 - Integration tests in `tests/` at workspace root
+- Surface crates must be split by responsibility before they become large:
+  - `wg-cli` should prefer `args.rs`, `app.rs`, `commands/`, `output/`, and `util/`
+  - `wg-mcp` should prefer `server/`, `resources/`, `tools/`, and transport-specific modules
+  - `wg-api` should prefer route modules, service modules, and serialization modules
+- Do not allow command or surface crates to collapse into a single large file once multiple commands or renderers exist
 
 ## Design Principles
 
@@ -246,3 +251,5 @@ glob = "0.3"
 4. **Errors are values** — thiserror for library crates, anyhow for binary
 5. **Test with real files** — tempdir-based tests, not mocks, for store/ledger
 6. **Markdown is the API** — if a human can't read the workspace in a text editor, something is wrong
+7. **Surface crates mirror agent experience** — CLI, MCP, and API should evolve toward shared workspace loading, orientation, and output semantics rather than bespoke one-off logic
+8. **Split early, not late** — once a file owns parsing + orchestration + rendering + helpers, it is already too large

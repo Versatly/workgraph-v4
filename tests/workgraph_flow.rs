@@ -1,6 +1,7 @@
 //! End-to-end integration coverage for the Phase 0 WorkGraph flow.
 
 use tempfile::tempdir;
+use tokio::fs;
 use wg_cli::execute;
 use wg_ledger::verify_chain;
 
@@ -8,9 +9,26 @@ use wg_ledger::verify_chain;
 async fn init_create_query_and_verify_ledger_chain() {
     let temp_dir = tempdir().expect("temporary directory should be created");
 
-    execute(["workgraph", "init"], temp_dir.path())
+    let init_output = execute(["workgraph", "--json", "init"], temp_dir.path())
         .await
         .expect("workspace initialization should succeed");
+    let init_json: serde_json::Value =
+        serde_json::from_str(&init_output).expect("init output should be valid JSON");
+    assert_eq!(init_json["command"], "init");
+    assert_eq!(
+        init_json["result"]["config"]["config_file"],
+        temp_dir
+            .path()
+            .join(".workgraph")
+            .join("config.yaml")
+            .display()
+            .to_string()
+    );
+    assert!(
+        fs::try_exists(temp_dir.path().join(".workgraph").join("config.yaml"))
+            .await
+            .expect("config file existence check should succeed")
+    );
 
     execute(
         [
@@ -82,6 +100,15 @@ async fn init_create_query_and_verify_ledger_chain() {
         status_json["result"]["last_entry"]["primitive_type"],
         "decision"
     );
+
+    let brief_output = execute(["workgraph", "--json", "brief"], temp_dir.path())
+        .await
+        .expect("brief should succeed");
+    let brief_json: serde_json::Value =
+        serde_json::from_str(&brief_output).expect("brief output should be valid JSON");
+    assert_eq!(brief_json["command"], "brief");
+    assert_eq!(brief_json["result"]["orgs"][0], "Versatly");
+    assert_eq!(brief_json["result"]["clients"][0], "Hale Pet Door");
 
     verify_chain(temp_dir.path())
         .await
