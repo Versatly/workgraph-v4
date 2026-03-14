@@ -219,7 +219,7 @@ fn builtin_types() -> Vec<PrimitiveType> {
             vec![
                 field("id", "string", "Stable decision identifier", true, false),
                 field("title", "string", "Decision title", true, false),
-                field("status", "string", "Decision status", true, false),
+                field("status", "string", "Decision status", false, false),
                 field(
                     "decided_by",
                     "actor_id",
@@ -263,7 +263,7 @@ fn builtin_types() -> Vec<PrimitiveType> {
                 field("id", "string", "Stable policy identifier", true, false),
                 field("title", "string", "Policy title", true, false),
                 field("scope", "string", "Scope of the policy", false, false),
-                field("rule", "string", "Normative rule statement", true, false),
+                field("rule", "string", "Normative rule statement", false, false),
             ],
         ),
         builtin_type(
@@ -285,7 +285,7 @@ fn builtin_types() -> Vec<PrimitiveType> {
         ),
         builtin_type(
             "strategic_note",
-            "strategic-notes",
+            "strategic_notes",
             "Long-term context about company direction or market understanding.",
             vec![
                 field("id", "string", "Stable note identifier", true, false),
@@ -311,7 +311,7 @@ fn builtin_types() -> Vec<PrimitiveType> {
                     "status",
                     "thread_status",
                     "Thread lifecycle status",
-                    true,
+                    false,
                     false,
                 ),
             ],
@@ -323,7 +323,7 @@ fn builtin_types() -> Vec<PrimitiveType> {
             vec![
                 field("id", "string", "Stable run identifier", true, false),
                 field("title", "string", "Run title", true, false),
-                field("status", "run_status", "Run lifecycle status", true, false),
+                field("status", "run_status", "Run lifecycle status", false, false),
             ],
         ),
         builtin_type(
@@ -347,7 +347,7 @@ fn builtin_types() -> Vec<PrimitiveType> {
                     "event",
                     "string",
                     "Subscribed ledger event pattern",
-                    true,
+                    false,
                     false,
                 ),
             ],
@@ -422,7 +422,7 @@ mod tests {
                 .get_type("strategic_note")
                 .expect("strategic_note should be builtin")
                 .directory,
-            "strategic-notes"
+            "strategic_notes"
         );
         assert!(registry.get_type("thread").is_some());
         assert!(registry.get_type("trigger").is_some());

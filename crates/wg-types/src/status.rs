@@ -128,10 +128,12 @@ mod tests {
     #[test]
     fn thread_status_rejects_invalid_transitions() {
         assert!(!ThreadStatus::Draft.can_transition_to(ThreadStatus::Done));
-        assert!(ThreadStatus::Cancelled
-            .transition_to(ThreadStatus::Active)
-            .expect_err("cancelled should be terminal")
-            .contains("cannot transition thread status"));
+        assert!(
+            ThreadStatus::Cancelled
+                .transition_to(ThreadStatus::Active)
+                .expect_err("cancelled should be terminal")
+                .contains("cannot transition thread status")
+        );
     }
 
     #[test]
@@ -151,9 +153,11 @@ mod tests {
     #[test]
     fn run_status_rejects_invalid_transitions() {
         assert!(!RunStatus::Queued.can_transition_to(RunStatus::Succeeded));
-        assert!(RunStatus::Succeeded
-            .transition_to(RunStatus::Running)
-            .expect_err("succeeded should be terminal")
-            .contains("cannot transition run status"));
+        assert!(
+            RunStatus::Succeeded
+                .transition_to(RunStatus::Running)
+                .expect_err("succeeded should be terminal")
+                .contains("cannot transition run status")
+        );
     }
 }

@@ -185,7 +185,7 @@ mod tests {
             provider: "github".into(),
             kind: "pull_request".into(),
             url: "https://github.com/Versatly/workgraph-v4/pull/7".into(),
-            external_id: Some("7".into()),
+            id: Some("7".into()),
             metadata: BTreeMap::from([("repo".into(), "Versatly/workgraph-v4".into())]),
         }
     }

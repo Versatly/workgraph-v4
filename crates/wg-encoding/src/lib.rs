@@ -8,8 +8,8 @@
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 /// A Markdown document split into typed frontmatter and body content.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -121,8 +121,7 @@ where
 {
     let serialized = serde_yaml::to_string(frontmatter).map_err(FrontmatterError::SerializeYaml)?;
     let serialized = strip_yaml_document_marker(&serialized);
-    let serialized =
-        serialized.trim_end_matches(|character| character == '\n' || character == '\r');
+    let serialized = serialized.trim_end_matches(['\n', '\r']);
 
     if serialized.trim().is_empty() {
         return Err(FrontmatterError::EmptyFrontmatter);

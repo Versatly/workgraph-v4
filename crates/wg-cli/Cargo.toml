@@ -1,0 +1,26 @@
+[package]
+name = "wg-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+wg-clock = { path = "../wg-clock" }
+wg-fs = { path = "../wg-fs" }
+wg-ledger = { path = "../wg-ledger" }
+wg-paths = { path = "../wg-paths" }
+wg-registry = { path = "../wg-registry" }
+wg-store = { path = "../wg-store" }
+wg-types = { path = "../wg-types" }
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -174,7 +174,7 @@ mod tests {
             provider: "github".into(),
             kind: "repo".into(),
             url: "https://github.com/Versatly/workgraph-v4".into(),
-            external_id: None,
+            id: None,
             metadata: BTreeMap::from([("visibility".into(), "private".into())]),
         }
     }

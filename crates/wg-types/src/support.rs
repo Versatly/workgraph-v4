@@ -15,7 +15,7 @@ pub struct ExternalRef {
     pub url: String,
     /// The provider-specific identifier when it differs from the URL.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub external_id: Option<String>,
+    pub id: Option<String>,
     /// Additional small metadata fields needed to orient an agent without calling the provider.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub metadata: BTreeMap<String, String>,
@@ -59,7 +59,7 @@ mod tests {
             provider: "github".into(),
             kind: "issue".into(),
             url: "https://github.com/Versatly/workgraph-v4/issues/42".into(),
-            external_id: Some("42".into()),
+            id: Some("42".into()),
             metadata: BTreeMap::from([
                 ("repo".into(), "Versatly/workgraph-v4".into()),
                 ("state".into(), "open".into()),
@@ -86,7 +86,7 @@ mod tests {
                 provider: "hubspot".into(),
                 kind: "deal".into(),
                 url: "https://example.com/deals/123".into(),
-                external_id: Some("123".into()),
+                id: Some("123".into()),
                 metadata: BTreeMap::from([("pipeline".into(), "enterprise".into())]),
             }],
         };

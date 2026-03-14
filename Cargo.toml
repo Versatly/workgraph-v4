@@ -1,3 +1,12 @@
+[package]
+name = "workgraph-workspace"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
 [workspace]
 resolver = "2"
 members = [
@@ -63,6 +72,15 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 uuid = { version = "1", features = ["v4", "serde"] }
 walkdir = "2"
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+wg-cli = { path = "crates/wg-cli" }
+wg-ledger = { path = "crates/wg-ledger" }
+wg-paths = { path = "crates/wg-paths" }
+wg-types = { path = "crates/wg-types" }
 
 [profile.release]
 lto = true
