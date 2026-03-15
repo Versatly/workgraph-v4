@@ -46,6 +46,7 @@ cargo test --workspace
 - Use real filesystem-backed tests for storage and ledger behavior.
 - Keep markdown and YAML outputs human-readable.
 - Split growing files early. If a file starts owning argument parsing, orchestration, rendering, and helpers, it should be broken up immediately.
+- Apply the same rule to kernel crates: if one file owns models, IO, validation, querying, or verification together, split it before adding more behavior.
 
 ## Surface crate layout
 
@@ -59,6 +60,17 @@ Surface crates are part of the agent experience. Keep them intentionally modular
   - prefer separate route, service, and serialization modules
 
 As a rule of thumb, once a surface crate has multiple commands or output modes, each command or surface concern should get its own module rather than expanding a single central file.
+
+## Kernel crate layout
+
+Kernel crates should keep domain types and operational logic separate.
+
+- `wg-store`
+  - prefer `document.rs`, `io.rs`, `query.rs`, and `validate.rs`
+- `wg-ledger`
+  - prefer `model.rs`, `reader.rs`, `writer.rs`, `hash.rs`, and `verify.rs`
+
+When a kernel crate begins mixing public models, persistence, validation, query logic, or verification in one file, that is a signal to split it immediately rather than waiting for a future cleanup pass.
 
 ## Dependency management
 
