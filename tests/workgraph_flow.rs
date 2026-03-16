@@ -14,6 +14,8 @@ async fn init_create_query_and_verify_ledger_chain() {
         .expect("workspace initialization should succeed");
     let init_json: serde_json::Value =
         serde_json::from_str(&init_output).expect("init output should be valid JSON");
+    assert_eq!(init_json["schema_version"], "workgraph.cli.v1alpha1");
+    assert_eq!(init_json["success"], true);
     assert_eq!(init_json["command"], "init");
     assert_eq!(
         init_json["result"]["config"]["config_file"],
@@ -33,6 +35,7 @@ async fn init_create_query_and_verify_ledger_chain() {
     execute(
         [
             "workgraph",
+            "--json",
             "create",
             "org",
             "--title",
@@ -48,6 +51,7 @@ async fn init_create_query_and_verify_ledger_chain() {
     execute(
         [
             "workgraph",
+            "--json",
             "create",
             "client",
             "--title",
@@ -63,6 +67,7 @@ async fn init_create_query_and_verify_ledger_chain() {
     execute(
         [
             "workgraph",
+            "--json",
             "create",
             "decision",
             "--title",
@@ -80,6 +85,7 @@ async fn init_create_query_and_verify_ledger_chain() {
         .expect("client query should succeed");
     let query_json: serde_json::Value =
         serde_json::from_str(&query_output).expect("query output should be valid JSON");
+    assert_eq!(query_json["success"], true);
     assert_eq!(query_json["command"], "query");
     assert_eq!(query_json["result"]["count"], 1);
     assert_eq!(
@@ -92,6 +98,7 @@ async fn init_create_query_and_verify_ledger_chain() {
         .expect("status should succeed");
     let status_json: serde_json::Value =
         serde_json::from_str(&status_output).expect("status output should be valid JSON");
+    assert_eq!(status_json["success"], true);
     assert_eq!(status_json["command"], "status");
     assert_eq!(status_json["result"]["type_counts"]["org"], 1);
     assert_eq!(status_json["result"]["type_counts"]["client"], 1);
@@ -101,14 +108,37 @@ async fn init_create_query_and_verify_ledger_chain() {
         "decision"
     );
 
-    let brief_output = execute(["workgraph", "--json", "brief"], temp_dir.path())
-        .await
-        .expect("brief should succeed");
+    let brief_output = execute(
+        ["workgraph", "--json", "brief", "--lens", "workspace"],
+        temp_dir.path(),
+    )
+    .await
+    .expect("brief should succeed");
     let brief_json: serde_json::Value =
         serde_json::from_str(&brief_output).expect("brief output should be valid JSON");
+    assert_eq!(brief_json["success"], true);
     assert_eq!(brief_json["command"], "brief");
-    assert_eq!(brief_json["result"]["orgs"][0], "Versatly");
-    assert_eq!(brief_json["result"]["clients"][0], "Hale Pet Door");
+    assert_eq!(brief_json["result"]["lens"], "workspace");
+    assert_eq!(
+        brief_json["result"]["sections"][0]["items"][0]["title"],
+        "Versatly"
+    );
+
+    let skills_output = execute(["workgraph", "--json", "skills"], temp_dir.path())
+        .await
+        .expect("skills should succeed");
+    let skills_json: serde_json::Value =
+        serde_json::from_str(&skills_output).expect("skills output should be valid JSON");
+    assert_eq!(skills_json["command"], "skills");
+    assert!(skills_json["result"]["commands"].is_array());
+
+    let schema_output = execute(["workgraph", "--json", "schema", "create"], temp_dir.path())
+        .await
+        .expect("schema should succeed");
+    let schema_json: serde_json::Value =
+        serde_json::from_str(&schema_output).expect("schema output should be valid JSON");
+    assert_eq!(schema_json["command"], "schema");
+    assert_eq!(schema_json["result"]["commands"][0]["name"], "create");
 
     verify_chain(temp_dir.path())
         .await

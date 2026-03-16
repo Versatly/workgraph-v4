@@ -17,9 +17,11 @@ tracing.workspace = true
 wg-clock = { path = "../wg-clock" }
 wg-fs = { path = "../wg-fs" }
 wg-ledger = { path = "../wg-ledger" }
+wg-orientation = { path = "../wg-orientation" }
 wg-paths = { path = "../wg-paths" }
 wg-registry = { path = "../wg-registry" }
 wg-store = { path = "../wg-store" }
+wg-error = { path = "../wg-error" }
 wg-types = { path = "../wg-types" }
 
 [dev-dependencies]

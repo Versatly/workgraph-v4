@@ -1001,8 +1001,10 @@ dependencies = [
  "tokio",
  "tracing",
  "wg-clock",
+ "wg-error",
  "wg-fs",
  "wg-ledger",
+ "wg-orientation",
  "wg-paths",
  "wg-registry",
  "wg-store",
@@ -1104,6 +1106,11 @@ version = "0.1.0"
 [[package]]
 name = "wg-orientation"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "wg-types",
+]
 
 [[package]]
 name = "wg-otel"

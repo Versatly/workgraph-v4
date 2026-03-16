@@ -7,14 +7,15 @@ mod app;
 mod args;
 mod commands;
 mod output;
+mod services;
 mod util;
 
 use std::ffi::OsString;
 use std::path::Path;
 
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use app::AppContext;
-use args::parse_cli;
+use args::{OutputFormat, parse_cli};
 
 /// Parses CLI arguments from the current process, executes the requested command, and prints the result.
 ///
@@ -24,9 +25,15 @@ use args::parse_cli;
 pub async fn run_from_env() -> anyhow::Result<()> {
     let current_dir =
         std::env::current_dir().context("failed to determine the current directory")?;
-    let output = execute(std::env::args_os(), current_dir).await?;
-    println!("{output}");
-    Ok(())
+    let args = std::env::args_os().collect::<Vec<_>>();
+    let execution = execute_contract(args, current_dir).await?;
+    println!("{}", execution.rendered);
+
+    if execution.success {
+        Ok(())
+    } else {
+        Err(anyhow!("command execution failed"))
+    }
 }
 
 /// Executes the CLI using an arbitrary argument iterator and workspace root.
@@ -41,10 +48,85 @@ where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
-    let cli = parse_cli(args)?;
-    let app = AppContext::new(workspace_root.as_ref().to_path_buf());
-    let output = commands::execute(&app, cli.command).await?;
-    output::render(&output, cli.json)
+    let execution = execute_contract(args, workspace_root).await?;
+    if execution.success {
+        Ok(execution.rendered)
+    } else {
+        Err(anyhow!("command execution failed"))
+    }
+}
+
+struct ExecutionContract {
+    rendered: String,
+    success: bool,
+}
+
+async fn execute_contract<I, T>(
+    args: I,
+    workspace_root: impl AsRef<Path>,
+) -> anyhow::Result<ExecutionContract>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<OsString> + Clone,
+{
+    let args = args.into_iter().map(Into::into).collect::<Vec<OsString>>();
+    let output_format = parse_output_format(&args);
+
+    match parse_cli(args.clone()) {
+        Ok(cli) => {
+            let command_name = cli.command.name();
+            let app = AppContext::new(workspace_root.as_ref().to_path_buf());
+            match commands::execute(&app, cli.command).await {
+                Ok(output) => Ok(ExecutionContract {
+                    rendered: output::render_success(&output, cli.json || cli.format.is_json())?,
+                    success: true,
+                }),
+                Err(error) => Ok(ExecutionContract {
+                    rendered: output::render_failure(
+                        Some(command_name),
+                        &error,
+                        cli.json || cli.format.is_json(),
+                    )?,
+                    success: false,
+                }),
+            }
+        }
+        Err(error) => Ok(ExecutionContract {
+            rendered: output::render_failure(None, &error.into(), output_format.is_json())?,
+            success: false,
+        }),
+    }
+}
+
+fn parse_output_format(args: &[OsString]) -> OutputFormat {
+    let mut iter = args.iter();
+    while let Some(argument) = iter.next() {
+        if argument.to_str() == Some("--json") {
+            return OutputFormat::Json;
+        }
+
+        if let Some(argument) = argument.to_str() {
+            if let Some(value) = argument.strip_prefix("--format=") {
+                return if value == "json" {
+                    OutputFormat::Json
+                } else {
+                    OutputFormat::Human
+                };
+            }
+        }
+
+        if argument.to_str() == Some("--format") {
+            if let Some(value) = iter.next().and_then(|value| value.to_str()) {
+                return if value == "json" {
+                    OutputFormat::Json
+                } else {
+                    OutputFormat::Human
+                };
+            }
+        }
+    }
+
+    OutputFormat::Human
 }
 
 #[cfg(test)]
@@ -70,22 +152,34 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn execute_supports_init_brief_create_status_query_show_and_json() {
+    async fn execute_supports_agent_native_json_contract_and_discovery_commands() {
         let temp_dir = tempdir().expect("temporary directory should be created");
 
-        let init_output = execute(["workgraph", "init"], temp_dir.path())
+        let init_output = execute(["workgraph", "--json", "init"], temp_dir.path())
             .await
             .expect("init should succeed");
-        assert!(init_output.contains("Initialized WorkGraph workspace"));
+        let init_json: JsonValue =
+            serde_json::from_str(&init_output).expect("init output should be valid JSON");
+        assert_eq!(init_json["schema_version"], "workgraph.cli.v1alpha1");
+        assert_eq!(init_json["success"], true);
+        assert_eq!(init_json["command"], "init");
+        assert!(init_json["next_actions"].is_array());
 
-        let brief_output = execute(["workgraph", "brief"], temp_dir.path())
-            .await
-            .expect("brief should succeed");
-        assert!(brief_output.contains("Workspace brief"));
+        let brief_output = execute(
+            ["workgraph", "--json", "brief", "--lens", "workspace"],
+            temp_dir.path(),
+        )
+        .await
+        .expect("brief should succeed");
+        let brief_json: JsonValue =
+            serde_json::from_str(&brief_output).expect("brief output should be valid JSON");
+        assert_eq!(brief_json["command"], "brief");
+        assert_eq!(brief_json["result"]["lens"], "workspace");
 
         let create_output = execute(
             [
                 "workgraph",
+                "--json",
                 "create",
                 "org",
                 "--title",
@@ -97,44 +191,53 @@ mod tests {
         )
         .await
         .expect("create should succeed");
-        assert!(create_output.contains("Created org/versatly"));
+        let create_json: JsonValue =
+            serde_json::from_str(&create_output).expect("create output should be valid JSON");
+        assert_eq!(create_json["command"], "create");
+        assert_eq!(create_json["result"]["reference"], "org/versatly");
+        assert!(create_json["next_actions"].is_array());
 
-        let status_output = execute(["workgraph", "status"], temp_dir.path())
+        let status_output = execute(["workgraph", "--json", "status"], temp_dir.path())
             .await
             .expect("status should succeed");
-        assert!(status_output.contains("org: 1"));
-        assert!(status_output.contains("Last ledger entry:"));
+        let status_json: JsonValue =
+            serde_json::from_str(&status_output).expect("status output should be valid JSON");
+        assert_eq!(status_json["command"], "status");
+        assert_eq!(status_json["result"]["type_counts"]["org"], 1);
 
-        let query_output = execute(["workgraph", "query", "org"], temp_dir.path())
+        let query_output = execute(["workgraph", "--json", "query", "org"], temp_dir.path())
             .await
             .expect("query should succeed");
-        assert!(query_output.contains("org/versatly"));
+        let query_json: JsonValue =
+            serde_json::from_str(&query_output).expect("query output should be valid JSON");
+        assert_eq!(query_json["command"], "query");
+        assert_eq!(query_json["result"]["count"], 1);
 
-        let show_output = execute(["workgraph", "show", "org/versatly"], temp_dir.path())
-            .await
-            .expect("show should succeed");
-        assert!(show_output.contains("summary: AI-native company"));
+        let show_output = execute(
+            ["workgraph", "--json", "show", "org/versatly"],
+            temp_dir.path(),
+        )
+        .await
+        .expect("show should succeed");
+        let show_json: JsonValue =
+            serde_json::from_str(&show_output).expect("show output should be valid JSON");
+        assert_eq!(show_json["command"], "show");
+        assert_eq!(show_json["result"]["reference"], "org/versatly");
 
-        let json_output = execute(["workgraph", "--json", "status"], temp_dir.path())
+        let skills_output = execute(["workgraph", "--json", "skills"], temp_dir.path())
             .await
-            .expect("json status should succeed");
-        let parsed: JsonValue =
-            serde_json::from_str(&json_output).expect("status output should be valid JSON");
-        assert_eq!(parsed["command"], "status");
-        assert_eq!(parsed["result"]["type_counts"]["org"], 1);
+            .expect("skills should succeed");
+        let skills_json: JsonValue =
+            serde_json::from_str(&skills_output).expect("skills output should be valid JSON");
+        assert_eq!(skills_json["command"], "skills");
+        assert!(skills_json["result"]["workflows"].is_array());
 
-        let brief_json = execute(["workgraph", "--json", "brief"], temp_dir.path())
+        let schema_output = execute(["workgraph", "--json", "schema", "create"], temp_dir.path())
             .await
-            .expect("json brief should succeed");
-        let parsed_brief: JsonValue =
-            serde_json::from_str(&brief_json).expect("brief output should be valid JSON");
-        assert_eq!(parsed_brief["command"], "brief");
-        assert!(
-            parsed_brief["result"]["workspace_name"]
-                .as_str()
-                .expect("workspace name should be a string")
-                .len()
-                > 1
-        );
+            .expect("schema should succeed");
+        let schema_json: JsonValue =
+            serde_json::from_str(&schema_output).expect("schema output should be valid JSON");
+        assert_eq!(schema_json["command"], "schema");
+        assert_eq!(schema_json["result"]["commands"][0]["name"], "create");
     }
 }
