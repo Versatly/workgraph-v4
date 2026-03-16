@@ -24,8 +24,8 @@ pub enum CommandOutput {
     Brief(WorkspaceBrief),
     /// Result of `workgraph status`.
     Status(StatusOutput),
-    /// Result of `workgraph skills`.
-    Skills(SkillsOutput),
+    /// Result of `workgraph capabilities`.
+    Capabilities(CapabilitiesOutput),
     /// Result of `workgraph schema`.
     Schema(SchemaOutput),
     /// Result of `workgraph create`.
@@ -64,9 +64,9 @@ pub struct StatusOutput {
     pub last_entry: Option<LedgerEntry>,
 }
 
-/// Output model produced by the `skills` command.
+/// Output model produced by the `capabilities` command.
 #[derive(Debug, Serialize)]
-pub struct SkillsOutput {
+pub struct CapabilitiesOutput {
     /// Recommended machine-readable format for autonomous agents.
     pub recommended_format: String,
     /// Grouped workflows exposed by the CLI.
@@ -177,7 +177,7 @@ impl CommandOutput {
             Self::Init(_) => "init",
             Self::Brief(_) => "brief",
             Self::Status(_) => "status",
-            Self::Skills(_) => "skills",
+            Self::Capabilities(_) => "capabilities",
             Self::Schema(_) => "schema",
             Self::Create(_) => "create",
             Self::Query(_) => "query",
@@ -195,7 +195,7 @@ impl CommandOutput {
             Self::Init(output) => serde_json::to_value(output),
             Self::Brief(output) => serde_json::to_value(output),
             Self::Status(output) => serde_json::to_value(output),
-            Self::Skills(output) => serde_json::to_value(output),
+            Self::Capabilities(output) => serde_json::to_value(output),
             Self::Schema(output) => serde_json::to_value(output),
             Self::Create(output) => serde_json::to_value(output),
             Self::Query(output) => serde_json::to_value(output),
@@ -215,8 +215,8 @@ impl CommandOutput {
                     "Orient a new agent entering the workspace.",
                 ),
                 next_action(
-                    "skills",
-                    "workgraph --json skills",
+                    "capabilities",
+                    "workgraph --json capabilities",
                     "Discover structured CLI capabilities and workflows.",
                 ),
                 next_action(
@@ -254,7 +254,7 @@ impl CommandOutput {
                     "Inspect a specific primitive type.",
                 ),
             ],
-            Self::Skills(_) => vec![
+            Self::Capabilities(_) => vec![
                 next_action(
                     "schema",
                     "workgraph --json schema",
@@ -268,8 +268,8 @@ impl CommandOutput {
             ],
             Self::Schema(_) => vec![
                 next_action(
-                    "skills",
-                    "workgraph --json skills",
+                    "capabilities",
+                    "workgraph --json capabilities",
                     "Inspect higher-level workflows and examples.",
                 ),
                 next_action(

@@ -1,12 +1,12 @@
 //! Individual command handlers and dispatch logic for the WorkGraph CLI.
 
 mod brief;
+mod capabilities;
 mod create;
 mod init;
 mod query;
 mod schema;
 mod show;
-mod skills;
 mod status;
 
 use crate::app::AppContext;
@@ -23,7 +23,7 @@ pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<Comma
         Command::Init => Ok(CommandOutput::Init(init::handle(app).await?)),
         Command::Brief { lens } => Ok(CommandOutput::Brief(brief::handle(app, lens.0).await?)),
         Command::Status => Ok(CommandOutput::Status(status::handle(app).await?)),
-        Command::Skills => Ok(CommandOutput::Skills(skills::handle())),
+        Command::Capabilities => Ok(CommandOutput::Capabilities(capabilities::handle())),
         Command::Schema { command } => {
             Ok(CommandOutput::Schema(schema::handle(command.as_deref())))
         }

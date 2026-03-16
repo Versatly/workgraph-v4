@@ -124,13 +124,13 @@ async fn init_create_query_and_verify_ledger_chain() {
         "Versatly"
     );
 
-    let skills_output = execute(["workgraph", "--json", "skills"], temp_dir.path())
+    let capabilities_output = execute(["workgraph", "--json", "capabilities"], temp_dir.path())
         .await
-        .expect("skills should succeed");
-    let skills_json: serde_json::Value =
-        serde_json::from_str(&skills_output).expect("skills output should be valid JSON");
-    assert_eq!(skills_json["command"], "skills");
-    assert!(skills_json["result"]["commands"].is_array());
+        .expect("capabilities should succeed");
+    let capabilities_json: serde_json::Value = serde_json::from_str(&capabilities_output)
+        .expect("capabilities output should be valid JSON");
+    assert_eq!(capabilities_json["command"], "capabilities");
+    assert!(capabilities_json["result"]["commands"].is_array());
 
     let schema_output = execute(["workgraph", "--json", "schema", "create"], temp_dir.path())
         .await

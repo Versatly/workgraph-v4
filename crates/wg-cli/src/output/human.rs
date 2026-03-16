@@ -5,8 +5,8 @@ use std::fmt::Write as _;
 use serde_yaml::Value;
 
 use super::{
-    CommandOutput, CreateOutput, InitOutput, QueryOutput, SchemaOutput, ShowOutput, SkillsOutput,
-    StatusOutput,
+    CapabilitiesOutput, CommandOutput, CreateOutput, InitOutput, QueryOutput, SchemaOutput,
+    ShowOutput, StatusOutput,
 };
 use wg_orientation::WorkspaceBrief;
 
@@ -17,7 +17,7 @@ pub fn render(output: &CommandOutput) -> String {
         CommandOutput::Init(output) => render_init(output),
         CommandOutput::Brief(output) => render_brief(output),
         CommandOutput::Status(output) => render_status(output),
-        CommandOutput::Skills(output) => render_skills(output),
+        CommandOutput::Capabilities(output) => render_capabilities(output),
         CommandOutput::Schema(output) => render_schema(output),
         CommandOutput::Create(output) => render_create(output),
         CommandOutput::Query(output) => render_query(output),
@@ -39,7 +39,7 @@ pub fn render_failure(command: Option<&str>, error: &anyhow::Error) -> String {
     let _ = writeln!(rendered, "{}", error);
     let _ = writeln!(rendered);
     let _ = writeln!(rendered, "Try:");
-    let _ = writeln!(rendered, "- workgraph --json skills");
+    let _ = writeln!(rendered, "- workgraph --json capabilities");
     let _ = writeln!(rendered, "- workgraph --json schema");
     rendered.trim_end().to_owned()
 }
@@ -163,11 +163,11 @@ fn render_create(output: &CreateOutput) -> String {
     )
 }
 
-fn render_skills(output: &SkillsOutput) -> String {
+fn render_capabilities(output: &CapabilitiesOutput) -> String {
     let mut rendered = String::new();
     let _ = writeln!(
         rendered,
-        "WorkGraph CLI skills (recommended format: {})",
+        "WorkGraph CLI capabilities (recommended format: {})",
         output.recommended_format
     );
     let _ = writeln!(rendered, "Workflows:");

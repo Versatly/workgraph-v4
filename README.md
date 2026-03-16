@@ -47,7 +47,7 @@ cargo build --release
 ./target/release/workgraph brief
 
 # Discover structured agent capabilities
-./target/release/workgraph skills
+./target/release/workgraph capabilities
 ./target/release/workgraph schema
 
 # Create primitives
@@ -67,7 +67,7 @@ The Phase 0 CLI currently supports:
 
 - `workgraph init`
 - `workgraph brief`
-- `workgraph skills`
+- `workgraph capabilities`
 - `workgraph schema [command]`
 - `workgraph status`
 - `workgraph create <type> --title "..." [--field key=value]`

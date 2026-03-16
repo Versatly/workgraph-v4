@@ -2,9 +2,9 @@
 
 use serde::Serialize;
 
-/// Structured skill and workflow discovery output for the WorkGraph CLI.
+/// Structured capability and workflow discovery output for the WorkGraph CLI.
 #[derive(Debug, Clone, Serialize)]
-pub struct SkillsCatalog {
+pub struct CapabilitiesCatalog {
     /// Recommended machine-readable output format for autonomous agents.
     pub recommended_format: String,
     /// High-level workflow groupings exposed by the CLI.
@@ -91,10 +91,10 @@ pub struct CommandArgument {
     pub required: bool,
 }
 
-/// Returns the static CLI skills catalog.
+/// Returns the static CLI capabilities catalog.
 #[must_use]
-pub fn skills_catalog() -> SkillsCatalog {
-    SkillsCatalog {
+pub fn capabilities_catalog() -> CapabilitiesCatalog {
+    CapabilitiesCatalog {
         recommended_format: "json".to_owned(),
         workflows: vec![
             WorkflowSkill {
@@ -123,7 +123,7 @@ pub fn skills_catalog() -> SkillsCatalog {
                 title: "Capability discovery".to_owned(),
                 description: "Discover available commands, schemas, and structured agent contracts.".to_owned(),
                 commands: vec![
-                    "workgraph --json skills".to_owned(),
+                    "workgraph --json capabilities".to_owned(),
                     "workgraph --json schema".to_owned(),
                 ],
                 common: true,
@@ -170,16 +170,16 @@ pub fn skills_catalog() -> SkillsCatalog {
                 vec!["query".to_owned(), "status".to_owned()],
             ),
             command_skill(
-                "skills",
-                "List structured agent workflows and command capabilities.",
-                vec!["workgraph --json skills".to_owned()],
+                "capabilities",
+                "List structured agent workflows and CLI capabilities.",
+                vec!["workgraph --json capabilities".to_owned()],
                 vec!["schema".to_owned()],
             ),
             command_skill(
                 "schema",
                 "Describe JSON result envelopes and command argument contracts.",
                 vec!["workgraph --json schema".to_owned()],
-                vec!["skills".to_owned()],
+                vec!["capabilities".to_owned()],
             ),
         ],
     }
@@ -261,10 +261,10 @@ pub fn cli_schema(schema_version: &str, requested_command: Option<&str>) -> CliS
             "workgraph --json show org/versatly",
         ),
         command_schema(
-            "skills",
+            "capabilities",
             "List structured CLI capabilities.",
             vec![],
-            "workgraph --json skills",
+            "workgraph --json capabilities",
         ),
         command_schema(
             "schema",

@@ -224,13 +224,13 @@ mod tests {
         assert_eq!(show_json["command"], "show");
         assert_eq!(show_json["result"]["reference"], "org/versatly");
 
-        let skills_output = execute(["workgraph", "--json", "skills"], temp_dir.path())
+        let capabilities_output = execute(["workgraph", "--json", "capabilities"], temp_dir.path())
             .await
-            .expect("skills should succeed");
-        let skills_json: JsonValue =
-            serde_json::from_str(&skills_output).expect("skills output should be valid JSON");
-        assert_eq!(skills_json["command"], "skills");
-        assert!(skills_json["result"]["workflows"].is_array());
+            .expect("capabilities should succeed");
+        let capabilities_json: JsonValue = serde_json::from_str(&capabilities_output)
+            .expect("capabilities output should be valid JSON");
+        assert_eq!(capabilities_json["command"], "capabilities");
+        assert!(capabilities_json["result"]["workflows"].is_array());
 
         let schema_output = execute(["workgraph", "--json", "schema", "create"], temp_dir.path())
             .await

@@ -66,7 +66,7 @@ For agent-native surfaces specifically:
 - treat machine-readable output as a real contract, not an afterthought
 - keep human rendering as a view over the same typed result model
 - include structured recovery hints and likely next actions where practical
-- prefer discoverable capability surfaces (`skills`, `schema`, etc.) over forcing agents to scrape long help text
+- prefer discoverable capability surfaces (`capabilities`, `schema`, etc.) over forcing agents to scrape long help text
 
 ## Kernel crate layout
 

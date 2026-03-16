@@ -77,8 +77,8 @@ fn classify_error(
                     "Inspect structured command contracts and arguments.",
                 ),
                 next_action(
-                    "skills",
-                    "workgraph --json skills",
+                    "capabilities",
+                    "workgraph --json capabilities",
                     "Inspect recommended workflows and examples.",
                 ),
             ],
@@ -103,8 +103,8 @@ fn classify_error(
                         "Inspect structured command schemas.",
                     ),
                     next_action(
-                        "skills",
-                        "workgraph --json skills",
+                        "capabilities",
+                        "workgraph --json capabilities",
                         "Inspect valid CLI workflows and examples.",
                     ),
                 ],
@@ -145,7 +145,7 @@ fn guess_fix(command: Option<&str>, error: &anyhow::Error) -> Option<String> {
         command,
         Some("brief" | "status" | "create" | "query" | "show")
     ) {
-        return Some("Inspect `workgraph --json skills` or `workgraph --json schema` for a structured recovery path.".to_owned());
+        return Some("Inspect `workgraph --json capabilities` or `workgraph --json schema` for a structured recovery path.".to_owned());
     }
     None
 }
@@ -153,8 +153,8 @@ fn guess_fix(command: Option<&str>, error: &anyhow::Error) -> Option<String> {
 fn generic_recovery_actions() -> Vec<super::NextAction> {
     vec![
         next_action(
-            "skills",
-            "workgraph --json skills",
+            "capabilities",
+            "workgraph --json capabilities",
             "Inspect available workflows and examples for autonomous recovery.",
         ),
         next_action(

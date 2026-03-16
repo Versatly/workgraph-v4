@@ -60,7 +60,7 @@ pub enum Command {
     /// Shows primitive counts and the latest recorded ledger entry.
     Status,
     /// Lists the structured capabilities and workflows exposed by this CLI.
-    Skills,
+    Capabilities,
     /// Describes command arguments, outputs, and result envelope structure.
     Schema {
         /// Optionally narrows the schema view to a single command.
@@ -100,7 +100,7 @@ impl Command {
             Self::Init => "init",
             Self::Brief { .. } => "brief",
             Self::Status => "status",
-            Self::Skills => "skills",
+            Self::Capabilities => "capabilities",
             Self::Schema { .. } => "schema",
             Self::Create { .. } => "create",
             Self::Query { .. } => "query",
