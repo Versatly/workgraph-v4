@@ -61,6 +61,13 @@ Surface crates are part of the agent experience. Keep them intentionally modular
 
 As a rule of thumb, once a surface crate has multiple commands or output modes, each command or surface concern should get its own module rather than expanding a single central file.
 
+For agent-native surfaces specifically:
+
+- treat machine-readable output as a real contract, not an afterthought
+- keep human rendering as a view over the same typed result model
+- include structured recovery hints and likely next actions where practical
+- prefer discoverable capability surfaces (`skills`, `schema`, etc.) over forcing agents to scrape long help text
+
 ## Kernel crate layout
 
 Kernel crates should keep domain types and operational logic separate.

@@ -9,10 +9,11 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 /// The perspective or slice of context requested for a workspace brief.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ContextLens {
     /// A broad workspace orientation across key entity and knowledge types.
+    #[default]
     Workspace,
     /// A lens emphasizing active delivery context such as clients and projects.
     Delivery,
@@ -32,12 +33,6 @@ impl ContextLens {
             Self::Policy => "policy",
             Self::Agents => "agents",
         }
-    }
-}
-
-impl Default for ContextLens {
-    fn default() -> Self {
-        Self::Workspace
     }
 }
 
@@ -82,7 +77,7 @@ pub struct BriefSection {
     /// A one-line summary of the section contents.
     pub summary: String,
     /// The concrete items included in the section.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub items: Vec<BriefItem>,
 }
 
@@ -114,16 +109,16 @@ pub struct WorkspaceBrief {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_actor_id: Option<String>,
     /// Key primitive counts across the workspace.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default)]
     pub type_counts: BTreeMap<String, usize>,
     /// The primary orientation sections in this brief.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub sections: Vec<BriefSection>,
     /// Recent immutable ledger activity.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub recent_activity: Vec<RecentActivity>,
     /// Warnings or gaps an entering agent should notice immediately.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub warnings: Vec<String>,
 }
 
@@ -132,6 +127,28 @@ impl WorkspaceBrief {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.sections.is_empty() && self.recent_activity.is_empty()
+    }
+}
+
+/// Single line of compact orientation output used by lightweight placeholder crates.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct StatusLine(pub String);
+
+/// Minimal briefing container retained for placeholder crates that need a tiny orientation type.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct Briefing {
+    /// Heading that describes the briefing.
+    pub heading: String,
+    /// Individual status lines.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<StatusLine>,
+}
+
+impl Briefing {
+    /// Returns true when the briefing has no items.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
     }
 }
 
