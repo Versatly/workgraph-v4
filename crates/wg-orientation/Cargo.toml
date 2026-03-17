@@ -7,8 +7,18 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+chrono.workspace = true
 serde.workspace = true
+serde_yaml.workspace = true
+wg-error = { path = "../wg-error" }
+wg-graph = { path = "../wg-graph" }
+wg-ledger = { path = "../wg-ledger" }
+wg-paths = { path = "../wg-paths" }
+wg-store = { path = "../wg-store" }
 wg-types = { path = "../wg-types" }
 
 [dev-dependencies]
 serde_json.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+wg-clock = { path = "../wg-clock" }

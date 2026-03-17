@@ -75,11 +75,18 @@ walkdir = "2"
 
 [dev-dependencies]
 serde_json.workspace = true
+serde_yaml.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
 wg-cli = { path = "crates/wg-cli" }
+wg-graph = { path = "crates/wg-graph" }
 wg-ledger = { path = "crates/wg-ledger" }
+wg-mission = { path = "crates/wg-mission" }
+wg-orientation = { path = "crates/wg-orientation" }
 wg-paths = { path = "crates/wg-paths" }
+wg-policy = { path = "crates/wg-policy" }
+wg-store = { path = "crates/wg-store" }
+wg-thread = { path = "crates/wg-thread" }
 wg-types = { path = "crates/wg-types" }
 
 [profile.release]
