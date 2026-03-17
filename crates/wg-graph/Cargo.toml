@@ -7,3 +7,11 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+serde_yaml.workspace = true
+tokio.workspace = true
+wg-encoding = { path = "../wg-encoding" }
+wg-error = { path = "../wg-error" }
+wg-fs = { path = "../wg-fs" }
+wg-paths = { path = "../wg-paths" }
+wg-store = { path = "../wg-store" }
+wg-types = { path = "../wg-types" }

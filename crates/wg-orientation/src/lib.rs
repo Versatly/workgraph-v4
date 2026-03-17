@@ -8,6 +8,10 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
+mod runtime;
+
+pub use runtime::{ActorBrief, WorkspaceStatus, brief, checkpoint, status};
+
 /// The perspective or slice of context requested for a workspace brief.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]

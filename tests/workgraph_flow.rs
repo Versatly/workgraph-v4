@@ -1,9 +1,20 @@
 //! End-to-end integration coverage for the Phase 0 WorkGraph flow.
 
+use std::collections::BTreeMap;
+
+use serde_yaml::Value;
 use tempfile::tempdir;
 use tokio::fs;
 use wg_cli::execute;
+use wg_graph::{NeighborDirection, NodeRef, build_graph};
 use wg_ledger::verify_chain;
+use wg_mission::{add_thread_to_mission, create_mission, mission_progress};
+use wg_orientation::{brief, checkpoint, status};
+use wg_paths::WorkspacePath;
+use wg_policy::{PolicyAction, PolicyContext, PolicyDecision, PolicyEngine};
+use wg_store::{PrimitiveFrontmatter, StoredPrimitive, write_primitive};
+use wg_thread::{add_message, claim_thread, complete_thread, create_thread, open_thread};
+use wg_types::{ActorId, Registry};
 
 #[tokio::test]
 async fn init_create_query_and_verify_ledger_chain() {
@@ -139,6 +150,162 @@ async fn init_create_query_and_verify_ledger_chain() {
         serde_json::from_str(&schema_output).expect("schema output should be valid JSON");
     assert_eq!(schema_json["command"], "schema");
     assert_eq!(schema_json["result"]["commands"][0]["name"], "create");
+
+    let workspace = WorkspacePath::new(temp_dir.path());
+
+    create_thread(
+        &workspace,
+        "kernel-thread-1",
+        "Kernel implementation thread",
+        Some("phase-1-kernel"),
+    )
+    .await
+    .expect("thread should be created");
+    open_thread(&workspace, "kernel-thread-1")
+        .await
+        .expect("thread should open");
+    claim_thread(&workspace, "kernel-thread-1", ActorId::new("pedro"))
+        .await
+        .expect("thread should be claimed");
+    add_message(
+        &workspace,
+        "kernel-thread-1",
+        ActorId::new("agent:cursor"),
+        "Linking implementation to [[decision/rust-for-workgraph-v4]].",
+    )
+    .await
+    .expect("thread message should be added");
+    complete_thread(&workspace, "kernel-thread-1")
+        .await
+        .expect("thread should complete");
+
+    create_mission(
+        &workspace,
+        "phase-1-kernel",
+        "Phase 1 kernel implementation",
+        "Implement remaining kernel crates and tests.",
+    )
+    .await
+    .expect("mission should be created");
+    add_thread_to_mission(&workspace, "phase-1-kernel", "kernel-thread-1")
+        .await
+        .expect("thread should be attached to mission");
+    let progress = mission_progress(&workspace, "phase-1-kernel")
+        .await
+        .expect("mission progress should compute");
+    assert_eq!(progress.completed_threads, 1);
+    assert_eq!(progress.total_threads, 1);
+
+    let policy_primitive = StoredPrimitive {
+        frontmatter: PrimitiveFrontmatter {
+            r#type: "policy".to_owned(),
+            id: "decision-guard".to_owned(),
+            title: "Decision create guard".to_owned(),
+            extra_fields: BTreeMap::from([
+                (
+                    "scope".to_owned(),
+                    Value::Sequence(vec![Value::String("decision".to_owned())]),
+                ),
+                (
+                    "rules".to_owned(),
+                    Value::Sequence(vec![
+                        Value::Mapping(
+                            [
+                                (
+                                    Value::String("effect".to_owned()),
+                                    Value::String("allow".to_owned()),
+                                ),
+                                (
+                                    Value::String("actions".to_owned()),
+                                    Value::Sequence(vec![Value::String("create".to_owned())]),
+                                ),
+                                (
+                                    Value::String("actors".to_owned()),
+                                    Value::Sequence(vec![Value::String("pedro".to_owned())]),
+                                ),
+                            ]
+                            .into_iter()
+                            .collect(),
+                        ),
+                        Value::Mapping(
+                            [
+                                (
+                                    Value::String("effect".to_owned()),
+                                    Value::String("deny".to_owned()),
+                                ),
+                                (
+                                    Value::String("actions".to_owned()),
+                                    Value::Sequence(vec![Value::String("create".to_owned())]),
+                                ),
+                                (
+                                    Value::String("actors".to_owned()),
+                                    Value::Sequence(vec![Value::String("intern".to_owned())]),
+                                ),
+                            ]
+                            .into_iter()
+                            .collect(),
+                        ),
+                    ]),
+                ),
+            ]),
+        },
+        body: "Policy body".to_owned(),
+    };
+    write_primitive(&workspace, &Registry::builtins(), &policy_primitive)
+        .await
+        .expect("policy should be written");
+    let policy_engine = PolicyEngine::load(&workspace)
+        .await
+        .expect("policy engine should load");
+    assert_eq!(
+        policy_engine.evaluate(
+            &ActorId::new("pedro"),
+            PolicyAction::Create,
+            "decision",
+            &PolicyContext::default(),
+        ),
+        PolicyDecision::Allow
+    );
+    assert_eq!(
+        policy_engine.evaluate(
+            &ActorId::new("intern"),
+            PolicyAction::Create,
+            "decision",
+            &PolicyContext::default(),
+        ),
+        PolicyDecision::Deny
+    );
+
+    let graph = build_graph(&workspace)
+        .await
+        .expect("graph should build from workspace primitives");
+    let thread_node = NodeRef::new("thread", "kernel-thread-1");
+    assert!(
+        graph
+            .neighbors(&thread_node, NeighborDirection::Outbound)
+            .contains(&NodeRef::new("decision", "rust-for-workgraph-v4"))
+    );
+
+    let workspace_status = status(&workspace)
+        .await
+        .expect("orientation status should load");
+    assert_eq!(workspace_status.type_counts.get("thread"), Some(&1));
+    assert_eq!(workspace_status.type_counts.get("mission"), Some(&1));
+
+    let actor_brief = brief(&workspace, &ActorId::new("pedro"))
+        .await
+        .expect("orientation brief should load");
+    assert_eq!(actor_brief.assigned_threads.len(), 1);
+    assert_eq!(actor_brief.assigned_missions.len(), 1);
+
+    let checkpoint_primitive = checkpoint(
+        &workspace,
+        "Kernel crate implementation",
+        "Finalize tests and quality checks",
+    )
+    .await
+    .expect("checkpoint primitive should be saved");
+    assert_eq!(checkpoint_primitive.frontmatter.r#type, "checkpoint");
 
     verify_chain(temp_dir.path())
         .await
