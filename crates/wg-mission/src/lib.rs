@@ -308,7 +308,11 @@ fn mission_from_primitive(primitive: &StoredPrimitive) -> Result<Mission> {
 fn parse_string_list(value: &Value) -> Vec<String> {
     match value {
         Value::String(value) => vec![value.clone()],
-        Value::Sequence(values) => values.iter().filter_map(string_value).map(str::to_owned).collect(),
+        Value::Sequence(values) => values
+            .iter()
+            .filter_map(string_value)
+            .map(str::to_owned)
+            .collect(),
         Value::Tagged(tagged) => parse_string_list(&tagged.value),
         Value::Null | Value::Bool(_) | Value::Number(_) | Value::Mapping(_) => Vec::new(),
     }
@@ -318,9 +322,11 @@ fn string_value(value: &Value) -> Option<&str> {
     match value {
         Value::String(value) => Some(value.as_str()),
         Value::Tagged(tagged) => string_value(&tagged.value),
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::Sequence(_) | Value::Mapping(_) => {
-            None
-        }
+        Value::Null
+        | Value::Bool(_)
+        | Value::Number(_)
+        | Value::Sequence(_)
+        | Value::Mapping(_) => None,
     }
 }
 
@@ -416,9 +422,13 @@ mod tests {
             .await
             .expect("thread should be linked");
 
-        write_primitive(&workspace, &Registry::builtins(), &thread("t-1", "completed"))
-            .await
-            .expect("thread t-1 should write");
+        write_primitive(
+            &workspace,
+            &Registry::builtins(),
+            &thread("t-1", "completed"),
+        )
+        .await
+        .expect("thread t-1 should write");
         write_primitive(&workspace, &Registry::builtins(), &thread("t-2", "open"))
             .await
             .expect("thread t-2 should write");

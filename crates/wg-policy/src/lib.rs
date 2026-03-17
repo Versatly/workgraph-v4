@@ -290,7 +290,11 @@ fn parse_rules(value: &Value, scope: &[String]) -> Result<Vec<PolicyRule>> {
 fn parse_string_list(value: &Value) -> Vec<String> {
     match value {
         Value::String(value) => vec![value.clone()],
-        Value::Sequence(values) => values.iter().filter_map(string_value).map(str::to_owned).collect(),
+        Value::Sequence(values) => values
+            .iter()
+            .filter_map(string_value)
+            .map(str::to_owned)
+            .collect(),
         Value::Tagged(tagged) => parse_string_list(&tagged.value),
         Value::Null | Value::Bool(_) | Value::Number(_) | Value::Mapping(_) => Vec::new(),
     }
@@ -300,9 +304,11 @@ fn string_value(value: &Value) -> Option<&str> {
     match value {
         Value::String(value) => Some(value.as_str()),
         Value::Tagged(tagged) => string_value(&tagged.value),
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::Sequence(_) | Value::Mapping(_) => {
-            None
-        }
+        Value::Null
+        | Value::Bool(_)
+        | Value::Number(_)
+        | Value::Sequence(_)
+        | Value::Mapping(_) => None,
     }
 }
 
@@ -351,14 +357,11 @@ mod tests {
     use wg_store::{PrimitiveFrontmatter, StoredPrimitive, write_primitive};
     use wg_types::{ActorId, Registry};
 
-    use crate::{PolicyAction, PolicyContext, PolicyDecision, PolicyEngine, evaluate, load_policies};
+    use crate::{
+        PolicyAction, PolicyContext, PolicyDecision, PolicyEngine, evaluate, load_policies,
+    };
 
-    fn policy_primitive(
-        id: &str,
-        title: &str,
-        scope: Value,
-        rules: Value,
-    ) -> StoredPrimitive {
+    fn policy_primitive(id: &str, title: &str, scope: Value, rules: Value) -> StoredPrimitive {
         StoredPrimitive {
             frontmatter: PrimitiveFrontmatter {
                 r#type: "policy".to_owned(),
@@ -410,7 +413,12 @@ mod tests {
             ]))
             .expect("deny rule should serialize"),
         ]);
-        let policy = policy_primitive("decision-create-policy", "Decision create policy", scope, rules);
+        let policy = policy_primitive(
+            "decision-create-policy",
+            "Decision create policy",
+            scope,
+            rules,
+        );
 
         write_primitive(&workspace, &Registry::builtins(), &policy)
             .await
@@ -436,7 +444,12 @@ mod tests {
             PolicyDecision::Allow
         );
         assert_eq!(
-            engine.evaluate(&ActorId::new("ana"), PolicyAction::Create, "decision", &context),
+            engine.evaluate(
+                &ActorId::new("ana"),
+                PolicyAction::Create,
+                "decision",
+                &context
+            ),
             PolicyDecision::Deny
         );
         assert_eq!(
@@ -449,7 +462,12 @@ mod tests {
             PolicyDecision::Deny
         );
         assert_eq!(
-            engine.evaluate(&ActorId::new("ana"), PolicyAction::Read, "decision", &context),
+            engine.evaluate(
+                &ActorId::new("ana"),
+                PolicyAction::Read,
+                "decision",
+                &context
+            ),
             PolicyDecision::Allow
         );
     }
@@ -458,25 +476,27 @@ mod tests {
     async fn evaluate_function_loads_policies_on_demand() {
         let temp_dir = tempdir().expect("temporary directory should be created");
         let workspace = WorkspacePath::new(temp_dir.path());
-        let rules = Value::Sequence(vec![serde_yaml::to_value(serde_yaml::Mapping::from_iter([
-            (
-                Value::String("effect".to_owned()),
-                Value::String("deny".to_owned()),
-            ),
-            (
-                Value::String("actions".to_owned()),
-                Value::Sequence(vec![Value::String("delete".to_owned())]),
-            ),
-            (
-                Value::String("actors".to_owned()),
-                Value::Sequence(vec![Value::String("contractor".to_owned())]),
-            ),
-            (
-                Value::String("primitive_types".to_owned()),
-                Value::Sequence(vec![Value::String("project".to_owned())]),
-            ),
-        ]))
-        .expect("rule should serialize")]);
+        let rules = Value::Sequence(vec![
+            serde_yaml::to_value(serde_yaml::Mapping::from_iter([
+                (
+                    Value::String("effect".to_owned()),
+                    Value::String("deny".to_owned()),
+                ),
+                (
+                    Value::String("actions".to_owned()),
+                    Value::Sequence(vec![Value::String("delete".to_owned())]),
+                ),
+                (
+                    Value::String("actors".to_owned()),
+                    Value::Sequence(vec![Value::String("contractor".to_owned())]),
+                ),
+                (
+                    Value::String("primitive_types".to_owned()),
+                    Value::Sequence(vec![Value::String("project".to_owned())]),
+                ),
+            ]))
+            .expect("rule should serialize"),
+        ]);
         let policy = policy_primitive(
             "project-delete-policy",
             "Project delete policy",

@@ -8,7 +8,9 @@ use wg_error::Result;
 use wg_graph::{BrokenLink, build_graph};
 use wg_ledger::{LedgerCursor, LedgerReader};
 use wg_paths::WorkspacePath;
-use wg_store::{PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive, write_primitive};
+use wg_store::{
+    PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive, write_primitive,
+};
 use wg_types::{ActorId, FieldDefinition, LedgerEntry, PrimitiveType, Registry};
 
 use crate::{BriefItem, RecentActivity};
@@ -108,7 +110,8 @@ pub async fn brief(workspace: &WorkspacePath, actor: &ActorId) -> Result<ActorBr
         .rev()
         .filter(|entry| {
             entry.actor.as_str() == actor_id
-                || relevant_refs.contains(&format!("{}/{}", entry.primitive_type, entry.primitive_id))
+                || relevant_refs
+                    .contains(&format!("{}/{}", entry.primitive_type, entry.primitive_id))
         })
         .take(10)
         .map(entry_to_recent_activity)
@@ -116,7 +119,9 @@ pub async fn brief(workspace: &WorkspacePath, actor: &ActorId) -> Result<ActorBr
 
     let mut warnings = Vec::new();
     if assigned_threads.is_empty() && assigned_missions.is_empty() {
-        warnings.push(format!("Actor '{actor_id}' has no assigned threads or missions"));
+        warnings.push(format!(
+            "Actor '{actor_id}' has no assigned threads or missions"
+        ));
     }
     for broken in actor_status
         .broken_links
@@ -179,7 +184,10 @@ pub async fn checkpoint(
     read_primitive(workspace, "checkpoint", &id).await
 }
 
-async fn load_recent_activity(workspace: &WorkspacePath, limit: usize) -> Result<Vec<RecentActivity>> {
+async fn load_recent_activity(
+    workspace: &WorkspacePath,
+    limit: usize,
+) -> Result<Vec<RecentActivity>> {
     Ok(load_ledger_entries(workspace)
         .await?
         .into_iter()
@@ -240,9 +248,11 @@ fn string_value(value: &Value) -> Option<&str> {
     match value {
         Value::String(value) => Some(value.as_str()),
         Value::Tagged(tagged) => string_value(&tagged.value),
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::Sequence(_) | Value::Mapping(_) => {
-            None
-        }
+        Value::Null
+        | Value::Bool(_)
+        | Value::Number(_)
+        | Value::Sequence(_)
+        | Value::Mapping(_) => None,
     }
 }
 
@@ -258,7 +268,13 @@ fn checkpoint_registry() -> Registry {
                 FieldDefinition::new("title", "string", "Checkpoint title", true, false),
                 FieldDefinition::new("working_on", "string", "Current work item", true, false),
                 FieldDefinition::new("focus", "string", "Current focus", true, false),
-                FieldDefinition::new("created_at", "datetime", "Checkpoint timestamp", true, false),
+                FieldDefinition::new(
+                    "created_at",
+                    "datetime",
+                    "Checkpoint timestamp",
+                    true,
+                    false,
+                ),
             ],
         ));
     }

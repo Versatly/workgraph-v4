@@ -1067,6 +1067,17 @@ dependencies = [
 [[package]]
 name = "wg-graph"
 version = "0.1.0"
+dependencies = [
+ "serde_yaml",
+ "tempfile",
+ "tokio",
+ "wg-encoding",
+ "wg-error",
+ "wg-fs",
+ "wg-paths",
+ "wg-store",
+ "wg-types",
+]
 
 [[package]]
 name = "wg-ledger"
@@ -1094,6 +1105,16 @@ version = "0.1.0"
 [[package]]
 name = "wg-mission"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_yaml",
+ "tempfile",
+ "tokio",
+ "wg-error",
+ "wg-paths",
+ "wg-store",
+ "wg-types",
+]
 
 [[package]]
 name = "wg-net"
@@ -1107,8 +1128,18 @@ version = "0.1.0"
 name = "wg-orientation"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "serde",
  "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "tokio",
+ "wg-clock",
+ "wg-error",
+ "wg-graph",
+ "wg-ledger",
+ "wg-paths",
+ "wg-store",
  "wg-types",
 ]
 
@@ -1123,6 +1154,16 @@ version = "0.1.0"
 [[package]]
 name = "wg-policy"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_yaml",
+ "tempfile",
+ "tokio",
+ "wg-error",
+ "wg-paths",
+ "wg-store",
+ "wg-types",
+]
 
 [[package]]
 name = "wg-projections"
@@ -1158,6 +1199,17 @@ dependencies = [
 [[package]]
 name = "wg-thread"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_yaml",
+ "tempfile",
+ "tokio",
+ "wg-error",
+ "wg-paths",
+ "wg-store",
+ "wg-types",
+]
 
 [[package]]
 name = "wg-transport"
@@ -1350,11 +1402,18 @@ name = "workgraph-workspace"
 version = "0.1.0"
 dependencies = [
  "serde_json",
+ "serde_yaml",
  "tempfile",
  "tokio",
  "wg-cli",
+ "wg-graph",
  "wg-ledger",
+ "wg-mission",
+ "wg-orientation",
  "wg-paths",
+ "wg-policy",
+ "wg-store",
+ "wg-thread",
  "wg-types",
 ]
 

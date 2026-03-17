@@ -192,7 +192,7 @@ fn resolve_target(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use serde_yaml::Value;
     use tempfile::tempdir;
@@ -252,7 +252,10 @@ mod tests {
             "alpha",
             "Alpha",
             "Depends on [[decision/beta]] and [[gamma]].",
-            [("summary", Value::String("Related: [[project/gamma]]".to_owned()))],
+            [(
+                "summary",
+                Value::String("Related: [[project/gamma]]".to_owned()),
+            )],
         )
         .await;
         write(
@@ -303,24 +306,8 @@ mod tests {
             [],
         )
         .await;
-        write(
-            &workspace,
-            "decision",
-            "b",
-            "B",
-            "No outbound links.",
-            [],
-        )
-        .await;
-        write(
-            &workspace,
-            "decision",
-            "c",
-            "C",
-            "No outbound links.",
-            [],
-        )
-        .await;
+        write(&workspace, "decision", "b", "B", "No outbound links.", []).await;
+        write(&workspace, "decision", "c", "C", "No outbound links.", []).await;
 
         let graph = build_graph(&workspace)
             .await
@@ -454,8 +441,8 @@ mod tests {
             .collect::<BTreeSet<_>>();
         let index = super::index_nodes_by_id(&nodes);
 
-        let resolved = super::resolve_target("alpha", &nodes, &index)
-            .expect("unique id should resolve");
+        let resolved =
+            super::resolve_target("alpha", &nodes, &index).expect("unique id should resolve");
         assert_eq!(resolved, NodeRef::new("decision", "alpha"));
     }
 
@@ -470,5 +457,4 @@ mod tests {
             super::resolve_target("missing", &nodes, &index).expect_err("missing id should fail");
         assert!(error.contains("does not exist"));
     }
-
 }

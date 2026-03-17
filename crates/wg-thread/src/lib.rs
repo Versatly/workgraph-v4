@@ -291,7 +291,10 @@ pub async fn add_message(
     }
 
     let mut thread = load_thread(workspace, thread_id).await?;
-    if matches!(thread.status, ThreadStatus::Completed | ThreadStatus::Cancelled) {
+    if matches!(
+        thread.status,
+        ThreadStatus::Completed | ThreadStatus::Cancelled
+    ) {
         return Err(WorkgraphError::ValidationError(format!(
             "thread '{thread_id}' is terminal and cannot receive new messages"
         )));
@@ -363,7 +366,10 @@ fn thread_to_primitive(thread: &Thread) -> Result<StoredPrimitive> {
         Value::String(thread.status.as_str().to_owned()),
     );
     if let Some(actor) = &thread.assigned_actor {
-        extra_fields.insert("assigned_actor".to_owned(), Value::String(actor.to_string()));
+        extra_fields.insert(
+            "assigned_actor".to_owned(),
+            Value::String(actor.to_string()),
+        );
     }
     if let Some(parent_mission) = &thread.parent_mission {
         extra_fields.insert(
@@ -442,9 +448,11 @@ fn string_value(value: &Value) -> Option<&str> {
     match value {
         Value::String(value) => Some(value.as_str()),
         Value::Tagged(tagged) => string_value(&tagged.value),
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::Sequence(_) | Value::Mapping(_) => {
-            None
-        }
+        Value::Null
+        | Value::Bool(_)
+        | Value::Number(_)
+        | Value::Sequence(_)
+        | Value::Mapping(_) => None,
     }
 }
 
@@ -465,9 +473,14 @@ mod tests {
         let temp_dir = tempdir().expect("temporary directory should be created");
         let workspace = WorkspacePath::new(temp_dir.path());
 
-        create_thread(&workspace, "coord-1", "Coordinate launch", Some("mission-a"))
-            .await
-            .expect("thread should be created");
+        create_thread(
+            &workspace,
+            "coord-1",
+            "Coordinate launch",
+            Some("mission-a"),
+        )
+        .await
+        .expect("thread should be created");
         let opened = open_thread(&workspace, "coord-1")
             .await
             .expect("thread should open");
@@ -477,7 +490,10 @@ mod tests {
             .await
             .expect("thread should be claimed");
         assert_eq!(claimed.status, ThreadStatus::Claimed);
-        assert_eq!(claimed.assigned_actor.as_ref().map(ActorId::as_str), Some("pedro"));
+        assert_eq!(
+            claimed.assigned_actor.as_ref().map(ActorId::as_str),
+            Some("pedro")
+        );
 
         let completed = complete_thread(&workspace, "coord-1")
             .await

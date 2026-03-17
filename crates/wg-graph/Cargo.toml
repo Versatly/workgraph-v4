@@ -15,3 +15,6 @@ wg-fs = { path = "../wg-fs" }
 wg-paths = { path = "../wg-paths" }
 wg-store = { path = "../wg-store" }
 wg-types = { path = "../wg-types" }
+
+[dev-dependencies]
+tempfile.workspace = true
