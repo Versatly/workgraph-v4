@@ -1,8 +1,10 @@
-use anyhow::Result;
-use clap::Parser;
-use wg_cli::{Cli, run};
+#![forbid(unsafe_code)]
 
-fn main() -> Result<()> {
-    let cli = Cli::parse();
-    run(cli)
+//! WorkGraph v4 executable entrypoint.
+
+/// Runs the WorkGraph CLI.
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let _ = tracing_subscriber::fmt::try_init();
+    wg_cli::run_from_env().await
 }

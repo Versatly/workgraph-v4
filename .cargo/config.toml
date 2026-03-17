@@ -1,5 +1,4 @@
-[build]
-target-dir = "target"
-
-[term]
-color = "always"
+[alias]
+ci-clippy = "clippy --workspace --all-targets --all-features -- -D warnings"
+ci-fmt = "fmt --all --check"
+ci-test = "test --workspace"

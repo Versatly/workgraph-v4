@@ -4,13 +4,15 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+authors.workspace = true
 
 [dependencies]
-serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-chrono.workspace = true
+tokio.workspace = true
+wg-clock = { path = "../wg-clock" }
 wg-error = { path = "../wg-error" }
+wg-fs = { path = "../wg-fs" }
 wg-paths = { path = "../wg-paths" }
 wg-types = { path = "../wg-types" }
 

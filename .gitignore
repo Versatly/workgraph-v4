@@ -1,6 +1,5 @@
 /target
-/.workgraph
-**/.DS_Store
-**/*.swp
-.idea/
-.vscode/
+/.idea
+/.vscode
+/.DS_Store
+*.log

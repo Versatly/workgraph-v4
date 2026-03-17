@@ -2,24 +2,40 @@ name: Release
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - "v*"
 
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
+            artifact: workgraph-linux
           - os: macos-latest
-            target: x86_64-apple-darwin
+            artifact: workgraph-macos
           - os: windows-latest
-            target: x86_64-pc-windows-msvc
+            artifact: workgraph-windows
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --bin workgraph
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          toolchain: 1.85.0
-          target: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release --target ${{ matrix.target }}
+          name: ${{ matrix.artifact }}
+          path: |
+            target/release/workgraph
+            target/release/workgraph.exe
