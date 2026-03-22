@@ -23,6 +23,20 @@ pub enum ThreadStatus {
 }
 
 impl ThreadStatus {
+    /// Returns the stable serialized value used in frontmatter and JSON.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Draft => "draft",
+            Self::Ready => "ready",
+            Self::Active => "active",
+            Self::Waiting => "waiting",
+            Self::Blocked => "blocked",
+            Self::Done => "done",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
     /// Returns whether a transition to `next` is allowed.
     ///
     /// Self-transitions are allowed to support idempotent writes.
@@ -39,11 +53,11 @@ impl ThreadStatus {
                     )
                     | (
                         Self::Waiting,
-                        Self::Active | Self::Blocked | Self::Cancelled
+                        Self::Active | Self::Blocked | Self::Done | Self::Cancelled
                     )
                     | (
                         Self::Blocked,
-                        Self::Active | Self::Waiting | Self::Cancelled
+                        Self::Ready | Self::Active | Self::Waiting | Self::Cancelled
                     )
             )
     }
@@ -80,6 +94,19 @@ pub enum RunStatus {
 }
 
 impl RunStatus {
+    /// Returns the stable serialized value used in frontmatter and JSON.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::Running => "running",
+            Self::Succeeded => "succeeded",
+            Self::Failed => "failed",
+            Self::TimedOut => "timed_out",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
     /// Returns whether a transition to `next` is allowed.
     ///
     /// Self-transitions are allowed to support idempotent writes.
@@ -93,8 +120,8 @@ impl RunStatus {
                         Self::Running,
                         Self::Succeeded | Self::Failed | Self::TimedOut | Self::Cancelled
                     )
-                    | (Self::Failed, Self::Queued | Self::Cancelled)
-                    | (Self::TimedOut, Self::Queued | Self::Cancelled)
+                    | (Self::Failed, Self::Queued)
+                    | (Self::TimedOut, Self::Queued)
             )
     }
 

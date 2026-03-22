@@ -1,9 +1,6 @@
 //! Orientation-building services that assemble reusable workspace briefs.
 
-use std::collections::BTreeMap;
-
-use anyhow::Context;
-use wg_orientation::{BriefItem, BriefSection, ContextLens, RecentActivity, WorkspaceBrief};
+use wg_orientation::{BriefItem, BriefSection, ContextLens, WorkspaceBrief, WorkspaceStatus};
 use wg_store::{StoredPrimitive, list_primitives};
 
 use crate::app::AppContext;
@@ -18,18 +15,9 @@ pub async fn build_workspace_brief(
     lens: ContextLens,
 ) -> anyhow::Result<WorkspaceBrief> {
     let config = app.load_config().await?;
-    let registry = app.load_registry().await?;
-    let entries = app.read_ledger_entries().await?;
-    let mut type_counts = BTreeMap::new();
-
-    for primitive_type in registry.list_types() {
-        let primitives = list_primitives(app.workspace(), &primitive_type.name)
-            .await
-            .with_context(|| format!("failed to list primitive type '{}'", primitive_type.name))?;
-        type_counts.insert(primitive_type.name.clone(), primitives.len());
-    }
-
+    let workspace_status = wg_orientation::status(app.workspace()).await?;
     let mut sections = Vec::new();
+
     match lens {
         ContextLens::Workspace => {
             sections.push(section(
@@ -53,14 +41,20 @@ pub async fn build_workspace_brief(
                 list_items(app, "decision", 5).await?,
             ));
             sections.push(section(
-                "policies",
-                "Policies",
-                list_items(app, "policy", 5).await?,
+                "threads",
+                "Active threads",
+                list_items(app, "thread", 5).await?,
             ));
             sections.push(section(
-                "agents",
-                "Agents",
-                list_items(app, "agent", 5).await?,
+                "missions",
+                "Missions",
+                list_items(app, "mission", 5).await?,
+            ));
+            sections.push(section("runs", "Runs", list_items(app, "run", 5).await?));
+            sections.push(section(
+                "triggers",
+                "Triggers",
+                list_items(app, "trigger", 5).await?,
             ));
         }
         ContextLens::Delivery => {
@@ -75,9 +69,24 @@ pub async fn build_workspace_brief(
                 list_items(app, "project", 8).await?,
             ));
             sections.push(section(
+                "threads",
+                "Delivery threads",
+                list_items(app, "thread", 8).await?,
+            ));
+            sections.push(section(
+                "missions",
+                "Delivery missions",
+                list_items(app, "mission", 6).await?,
+            ));
+            sections.push(section(
+                "runs",
+                "Recent runs",
+                list_items(app, "run", 6).await?,
+            ));
+            sections.push(section(
                 "decisions",
-                "Delivery-relevant decisions",
-                list_items(app, "decision", 8).await?,
+                "Delivery decisions",
+                list_items(app, "decision", 6).await?,
             ));
         }
         ContextLens::Policy => {
@@ -97,8 +106,13 @@ pub async fn build_workspace_brief(
                 list_items(app, "lesson", 8).await?,
             ));
             sections.push(section(
+                "triggers",
+                "Triggers",
+                list_items(app, "trigger", 8).await?,
+            ));
+            sections.push(section(
                 "decisions",
-                "Decisions that may shape policy",
+                "Decisions",
                 list_items(app, "decision", 6).await?,
             ));
         }
@@ -109,14 +123,19 @@ pub async fn build_workspace_brief(
                 list_items(app, "agent", 8).await?,
             ));
             sections.push(section(
-                "patterns",
-                "Patterns useful for agents",
-                list_items(app, "pattern", 8).await?,
+                "threads",
+                "Assigned threads",
+                list_items(app, "thread", 8).await?,
             ));
             sections.push(section(
-                "lessons",
-                "Lessons useful for agents",
-                list_items(app, "lesson", 8).await?,
+                "runs",
+                "Assigned runs",
+                list_items(app, "run", 8).await?,
+            ));
+            sections.push(section(
+                "missions",
+                "Coordinated missions",
+                list_items(app, "mission", 6).await?,
             ));
             sections.push(section(
                 "policies",
@@ -127,17 +146,6 @@ pub async fn build_workspace_brief(
     }
 
     sections.retain(|section| !section.items.is_empty());
-    let recent_activity = entries
-        .into_iter()
-        .rev()
-        .take(5)
-        .map(|entry| RecentActivity {
-            ts: entry.ts.to_rfc3339(),
-            actor: entry.actor.to_string(),
-            op: format!("{:?}", entry.op).to_lowercase(),
-            reference: format!("{}/{}", entry.primitive_type, entry.primitive_id),
-        })
-        .collect::<Vec<_>>();
 
     Ok(WorkspaceBrief {
         lens,
@@ -145,10 +153,10 @@ pub async fn build_workspace_brief(
         workspace_name: config.workspace_name,
         workspace_root: config.root_dir,
         default_actor_id: config.default_actor_id.map(|actor| actor.to_string()),
-        type_counts,
+        type_counts: workspace_status.type_counts.clone(),
         sections,
-        recent_activity,
-        warnings: build_warnings(app).await?,
+        recent_activity: workspace_status.recent_activity.clone(),
+        warnings: build_warnings(app, &workspace_status).await?,
     })
 }
 
@@ -178,6 +186,9 @@ fn to_brief_item(primitive_type: &str, primitive: &StoredPrimitive) -> BriefItem
             .extra_fields
             .get("summary")
             .or_else(|| primitive.frontmatter.extra_fields.get("status"))
+            .or_else(|| primitive.frontmatter.extra_fields.get("mission_status"))
+            .or_else(|| primitive.frontmatter.extra_fields.get("assigned_actor"))
+            .or_else(|| primitive.frontmatter.extra_fields.get("actor_id"))
             .or_else(|| primitive.frontmatter.extra_fields.get("scope"))
             .map(value_to_summary)
             .filter(|value| !value.is_empty()),
@@ -199,7 +210,10 @@ fn section(key: &str, title: &str, items: Vec<BriefItem>) -> BriefSection {
     }
 }
 
-async fn build_warnings(app: &AppContext) -> anyhow::Result<Vec<String>> {
+async fn build_warnings(
+    app: &AppContext,
+    workspace_status: &WorkspaceStatus,
+) -> anyhow::Result<Vec<String>> {
     let mut warnings = Vec::new();
 
     if list_primitives(app.workspace(), "org").await?.is_empty() {
@@ -210,6 +224,20 @@ async fn build_warnings(app: &AppContext) -> anyhow::Result<Vec<String>> {
     }
     if list_primitives(app.workspace(), "agent").await?.is_empty() {
         warnings.push("No agents recorded yet".to_owned());
+    }
+
+    for gap in workspace_status.thread_evidence_gaps.iter().take(5) {
+        warnings.push(format!(
+            "Evidence gap: {} is missing {}",
+            gap.thread_reference,
+            gap.missing_criteria.join(", ")
+        ));
+    }
+    for issue in workspace_status.graph_issues.iter().take(5) {
+        warnings.push(format!(
+            "Graph issue: {} -> {} [{} via {}]",
+            issue.source_reference, issue.target_reference, issue.kind, issue.provenance
+        ));
     }
 
     Ok(warnings)

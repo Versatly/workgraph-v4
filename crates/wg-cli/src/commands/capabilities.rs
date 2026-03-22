@@ -11,5 +11,6 @@ pub fn handle() -> CapabilitiesOutput {
         recommended_format: catalog.recommended_format,
         workflows: catalog.workflows,
         commands: catalog.commands,
+        primitive_contracts: catalog.primitive_contracts,
     }
 }

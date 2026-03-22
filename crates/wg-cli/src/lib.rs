@@ -160,7 +160,7 @@ mod tests {
             .expect("init should succeed");
         let init_json: JsonValue =
             serde_json::from_str(&init_output).expect("init output should be valid JSON");
-        assert_eq!(init_json["schema_version"], "workgraph.cli.v1alpha1");
+        assert_eq!(init_json["schema_version"], "workgraph.cli.v1alpha2");
         assert_eq!(init_json["success"], true);
         assert_eq!(init_json["command"], "init");
         assert!(init_json["next_actions"].is_array());
@@ -231,6 +231,7 @@ mod tests {
             .expect("capabilities output should be valid JSON");
         assert_eq!(capabilities_json["command"], "capabilities");
         assert!(capabilities_json["result"]["workflows"].is_array());
+        assert!(capabilities_json["result"]["primitive_contracts"].is_array());
 
         let schema_output = execute(["workgraph", "--json", "schema", "create"], temp_dir.path())
             .await
@@ -239,5 +240,6 @@ mod tests {
             serde_json::from_str(&schema_output).expect("schema output should be valid JSON");
         assert_eq!(schema_json["command"], "schema");
         assert_eq!(schema_json["result"]["commands"][0]["name"], "create");
+        assert!(schema_json["result"]["primitive_contracts"].is_array());
     }
 }

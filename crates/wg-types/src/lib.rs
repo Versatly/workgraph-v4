@@ -4,6 +4,7 @@
 //! Shared serializable data models for WorkGraph primitives, status machines, and registry state.
 
 mod config;
+mod coordination;
 mod identity;
 mod ledger;
 mod registry;
@@ -13,6 +14,12 @@ mod tier_one;
 mod tier_two;
 
 pub use config::WorkgraphConfig;
+pub use coordination::{
+    CheckpointPrimitive, ConversationMessage, CoordinationAction, EventPattern, EventSourceKind,
+    EvidenceItem, GraphEdgeKind, GraphEdgeReference, GraphEdgeSource, LineageMode, MessageKind,
+    MissionPrimitive, MissionStatus, RunPrimitive, ThreadExitCriterion, ThreadPrimitive,
+    TriggerActionPlan, TriggerPrimitive, TriggerStatus,
+};
 pub use identity::{ActorId, NodeId, WorkspaceId};
 pub use ledger::{LedgerEntry, LedgerOp};
 pub use registry::{FieldDefinition, PrimitiveType, Registry};

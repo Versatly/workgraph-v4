@@ -1,91 +1,75 @@
 # WorkGraph v4
 
-**WorkGraph v4 is the Rust-native context graph and coordination daemon for AI-native companies.**
+WorkGraph is the durable context graph, trigger plane, and coordination substrate for AI-native organizations.
 
-It stores what other systems miss: the institutional context, decision traces, policies, and relationships that let humans and AI agents coordinate without losing the thread.
+It is not trying to replace Cursor, ChatGPT, Claude, OpenHands, OpenClaw, or other execution tools. It is the shared organizational system those tools should be able to consult and act through.
 
-## Phase 0 scope
+## Start Here
 
-This repository currently implements the Phase 0 foundation described in `AGENTS.md`:
+The canonical definition lives in `docs/`, not in scattered comments or one-off prompts:
 
-- A Rust workspace monorepo with layered crates
-- A markdown-native workspace layout for primitives such as `org`, `client`, and `decision`
-- A JSONL ledger with hash-chain verification
-- A clap-based CLI for workspace initialization, agent briefing, capability discovery, creation, querying, and inspection
-- Durable workspace metadata in `.workgraph/config.yaml`
-- Structured machine-readable command envelopes with next-action hints for autonomous agents
+- `docs/foundation.md` — what WorkGraph is, what it is not, and the product boundary
+- `docs/context-graph.md` — first-class node, edge, provenance, and event semantics
+- `docs/operating-model.md` — actor, mission, thread, run, trigger, checkpoint, and evidence semantics
+- `docs/roadmap.md` — the disciplined execution order from foundation lock through federation
+- `AGENTS.md` — contributor operating contract for future humans and agents
 
-Future phases will add adapters, triggers, transport, MCP, and API surfaces on top of this core.
+## What Exists In The Repo Today
 
-## Architecture
+The current workspace encodes the durable foundation rather than only describing it:
+
+- markdown-native primitive storage with YAML frontmatter
+- immutable ledger entries with hash-chain verification
+- first-class thread, mission, run, trigger, checkpoint, and actor-lineage contracts in `wg-types`
+- evidence-bearing thread persistence in `wg-thread`
+- mission and run persistence in `wg-mission` and `wg-dispatch`
+- typed graph edges in `wg-graph`, including assignment, containment, evidence, trigger, and reference edges
+- orientation and CLI surfaces that expose evidence gaps, graph issues, and coordination contracts
+
+This turn does not implement live trigger execution loops, webhook ingress, remote MCP, or API runtime surfaces yet. It establishes the durable contracts those surfaces must honor.
+
+## Product Boundary
+
+WorkGraph is:
+
+- the durable record of organizational context
+- the coordination system for missions, threads, runs, checkpoints, and handoffs
+- the trigger substrate that evaluates durable events into planned actions
+- the graph and ledger that future agents inherit
+
+WorkGraph is not:
+
+- a generic agent runtime
+- a generic workflow builder
+- a generic task tracker
+- a generic memory database
+- “just” an MCP server
+
+## Repository Shape
 
 ```text
 Layer 0  Foundation  -> wg-types, wg-error, wg-paths, wg-fs, wg-encoding, wg-clock
-Layer 1  Kernel      -> wg-store, wg-ledger, wg-registry, wg-thread, wg-mission, wg-graph
-Layer 2  Execution   -> dispatch, adapters, triggers, connectors
+Layer 1  Kernel      -> wg-store, wg-ledger, wg-registry, wg-thread, wg-mission, wg-graph, wg-policy, wg-orientation
+Layer 2  Execution   -> wg-dispatch, adapters, triggers, connectors
 Layer 3  Transport   -> transport, federation, networking, signaling
 Layer 4  Surface     -> CLI, MCP, API, projections, markdown views
-Layer 5  Integration -> Obsidian sync, OpenTelemetry
+Layer 5  Integration -> optional integrations
 ```
 
-The storage model is intentionally filesystem-first:
+Lower layers may not depend on higher layers.
 
-- each primitive is stored as a markdown file with YAML frontmatter
-- directories are organized by plural primitive type names such as `orgs/`, `clients/`, and `decisions/`
-- every mutation is recorded in `.workgraph/ledger.jsonl`
-
-## Quick start
+## Quick Start
 
 ```bash
-# Build the binary
 cargo build --release
-
-# Initialize a new workspace
 ./target/release/workgraph init
-
-# Get a quick agent-first orientation summary
-./target/release/workgraph brief
-
-# Discover structured agent capabilities
+./target/release/workgraph brief --lens workspace
+./target/release/workgraph status
 ./target/release/workgraph capabilities
 ./target/release/workgraph schema
-
-# Create primitives
-./target/release/workgraph create org --title "Versatly"
-./target/release/workgraph create client --title "Hale Pet Door"
-./target/release/workgraph create decision --title "Rust for WorkGraph v4"
-
-# Inspect the workspace
-./target/release/workgraph status
-./target/release/workgraph query org
-./target/release/workgraph show org/versatly
 ```
 
-## CLI commands
-
-The Phase 0 CLI currently supports:
-
-- `workgraph init`
-- `workgraph brief`
-- `workgraph capabilities`
-- `workgraph schema [command]`
-- `workgraph status`
-- `workgraph create <type> --title "..." [--field key=value]`
-- `workgraph query <type> [--filter key=value]`
-- `workgraph show <type>/<id>`
-- `--json` and `--format json|human` output selection
-
-In JSON mode, command responses now include a stable envelope with:
-
-- `schema_version`
-- `success`
-- `command`
-- `result`
-- `error`
-- `fix`
-- `next_actions`
-
-## Development
+## Quality Gate
 
 ```bash
 cargo fmt --all --check
@@ -93,11 +77,4 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace
 ```
 
-See `CONTRIBUTING.md` for workspace conventions and crate layering rules.
-
-## License
-
-Licensed under either of:
-
-- Apache-2.0
-- MIT
+See `CONTRIBUTING.md` for workflow rules and `AGENTS.md` for the contributor operating contract.

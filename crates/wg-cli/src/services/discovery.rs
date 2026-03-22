@@ -1,6 +1,7 @@
 //! Structured discovery metadata for agent-native CLI use.
 
 use serde::Serialize;
+use wg_types::{FieldDefinition, Registry};
 
 /// Structured capability and workflow discovery output for the WorkGraph CLI.
 #[derive(Debug, Clone, Serialize)]
@@ -11,6 +12,8 @@ pub struct CapabilitiesCatalog {
     pub workflows: Vec<WorkflowSkill>,
     /// Concrete command-level capabilities.
     pub commands: Vec<CommandSkill>,
+    /// First-class primitive contracts that agents should understand before writing.
+    pub primitive_contracts: Vec<PrimitiveContract>,
 }
 
 /// A grouped workflow oriented around a common agent objective.
@@ -52,6 +55,8 @@ pub struct CliSchema {
     pub envelope_fields: Vec<SchemaField>,
     /// Structured command definitions.
     pub commands: Vec<CommandSchema>,
+    /// Typed primitive contracts discoverable through the CLI.
+    pub primitive_contracts: Vec<PrimitiveContract>,
 }
 
 /// A field inside a structured result envelope or command definition.
@@ -65,6 +70,21 @@ pub struct SchemaField {
     pub description: String,
     /// Whether the field is always present.
     pub required: bool,
+}
+
+/// Structured description of a durable primitive contract.
+#[derive(Debug, Clone, Serialize)]
+pub struct PrimitiveContract {
+    /// Primitive type name.
+    pub name: String,
+    /// Human-readable purpose of the primitive.
+    pub description: String,
+    /// Required fields the primitive must carry.
+    pub required_fields: Vec<SchemaField>,
+    /// Optional fields the primitive may carry.
+    pub optional_fields: Vec<SchemaField>,
+    /// Additional semantic notes an agent should preserve.
+    pub notes: Vec<String>,
 }
 
 /// A structured description of one command's arguments and behavior.
@@ -100,7 +120,7 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
             WorkflowSkill {
                 key: "orientation".to_owned(),
                 title: "Workspace orientation".to_owned(),
-                description: "Enter a workspace, inspect its shape, and understand what matters first.".to_owned(),
+                description: "Enter a workspace, inspect the typed graph, and notice active work plus evidence gaps.".to_owned(),
                 commands: vec![
                     "workgraph --json init".to_owned(),
                     "workgraph --json brief".to_owned(),
@@ -111,10 +131,21 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
             WorkflowSkill {
                 key: "knowledge_capture".to_owned(),
                 title: "Context capture".to_owned(),
-                description: "Record shared company context as markdown primitives with provenance in the ledger.".to_owned(),
+                description: "Record durable company context and coordination state with provenance in the ledger.".to_owned(),
                 commands: vec![
                     "workgraph --json create <type> --title ...".to_owned(),
                     "workgraph --json show <type>/<id>".to_owned(),
+                ],
+                common: true,
+            },
+            WorkflowSkill {
+                key: "coordination".to_owned(),
+                title: "Coordination integrity".to_owned(),
+                description: "Inspect thread, mission, run, and trigger contracts before mutating active work.".to_owned(),
+                commands: vec![
+                    "workgraph --json status".to_owned(),
+                    "workgraph --json schema".to_owned(),
+                    "workgraph --json show thread/<id>".to_owned(),
                 ],
                 common: true,
             },
@@ -138,7 +169,7 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
             ),
             command_skill(
                 "brief",
-                "Produce a structured workspace orientation for agents and humans.",
+                "Produce a structured workspace orientation including typed coordination warnings.",
                 vec![
                     "workgraph --json brief".to_owned(),
                     "workgraph --json brief --lens delivery".to_owned(),
@@ -147,9 +178,9 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
             ),
             command_skill(
                 "status",
-                "Inspect primitive counts and the latest immutable ledger event.",
+                "Inspect primitive counts, graph issues, evidence gaps, and the latest immutable ledger event.",
                 vec!["workgraph --json status".to_owned()],
-                vec!["brief".to_owned(), "query".to_owned()],
+                vec!["brief".to_owned(), "query".to_owned(), "schema".to_owned()],
             ),
             command_skill(
                 "create",
@@ -165,23 +196,24 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
             ),
             command_skill(
                 "show",
-                "Load a single primitive by <type>/<id>.",
+                "Load a single primitive by <type>/<id> with coordination-aware rendering.",
                 vec!["workgraph --json show org/versatly".to_owned()],
                 vec!["query".to_owned(), "status".to_owned()],
             ),
             command_skill(
                 "capabilities",
-                "List structured agent workflows and CLI capabilities.",
+                "List structured agent workflows, CLI capabilities, and primitive contracts.",
                 vec!["workgraph --json capabilities".to_owned()],
                 vec!["schema".to_owned()],
             ),
             command_skill(
                 "schema",
-                "Describe JSON result envelopes and command argument contracts.",
+                "Describe JSON result envelopes, command contracts, and primitive contracts.",
                 vec!["workgraph --json schema".to_owned()],
                 vec!["capabilities".to_owned()],
             ),
         ],
+        primitive_contracts: primitive_contracts(),
     }
 }
 
@@ -197,7 +229,7 @@ pub fn cli_schema(schema_version: &str, requested_command: Option<&str>) -> CliS
         ),
         command_schema(
             "brief",
-            "Produce a structured workspace brief.",
+            "Produce a structured workspace brief with graph and coordination warnings.",
             vec![CommandArgument {
                 name: "--lens".to_owned(),
                 description: "Orientation lens: workspace, delivery, policy, or agents.".to_owned(),
@@ -207,7 +239,7 @@ pub fn cli_schema(schema_version: &str, requested_command: Option<&str>) -> CliS
         ),
         command_schema(
             "status",
-            "Show primitive counts and recent activity.",
+            "Show primitive counts, recent activity, graph issues, and evidence gaps.",
             vec![],
             "workgraph --json status",
         ),
@@ -252,7 +284,7 @@ pub fn cli_schema(schema_version: &str, requested_command: Option<&str>) -> CliS
         ),
         command_schema(
             "show",
-            "Show a single primitive by reference.",
+            "Show a single primitive by reference with typed coordination sections when relevant.",
             vec![CommandArgument {
                 name: "<type>/<id>".to_owned(),
                 description: "Primitive reference to display.".to_owned(),
@@ -268,7 +300,7 @@ pub fn cli_schema(schema_version: &str, requested_command: Option<&str>) -> CliS
         ),
         command_schema(
             "schema",
-            "Describe CLI command and output contracts.",
+            "Describe CLI command, output, and primitive contracts.",
             vec![CommandArgument {
                 name: "[command]".to_owned(),
                 description: "Optional command name to narrow the schema view.".to_owned(),
@@ -324,6 +356,7 @@ pub fn cli_schema(schema_version: &str, requested_command: Option<&str>) -> CliS
             ),
         ],
         commands,
+        primitive_contracts: primitive_contracts(),
     }
 }
 
@@ -362,5 +395,77 @@ fn command_schema(
         description: description.to_owned(),
         arguments,
         example: example.to_owned(),
+    }
+}
+
+fn primitive_contracts() -> Vec<PrimitiveContract> {
+    let registry = Registry::builtins();
+    [
+        (
+            "agent",
+            vec![
+                "Agents may declare parent and root actor lineage while leaving descendants opaque.",
+            ],
+        ),
+        (
+            "thread",
+            vec![
+                "Threads close only when required exit criteria are satisfied by recorded evidence.",
+                "Update and completion actions are durable plans, not auto-executed effects.",
+            ],
+        ),
+        (
+            "mission",
+            vec![
+                "Missions coordinate related threads and runs but are not generic task records.",
+            ],
+        ),
+        (
+            "run",
+            vec![
+                "Each run belongs to exactly one thread and may optionally reference a mission or parent run.",
+            ],
+        ),
+        (
+            "trigger",
+            vec![
+                "Triggers match event patterns and emit action plans without mutating state in this foundation pass.",
+            ],
+        ),
+        (
+            "checkpoint",
+            vec![
+                "Checkpoints preserve resumable working context for future humans or agents.",
+            ],
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(name, notes)| registry.get_type(name).map(|primitive_type| (primitive_type, notes)))
+    .map(|(primitive_type, notes)| PrimitiveContract {
+        name: primitive_type.name.clone(),
+        description: primitive_type.description.clone(),
+        required_fields: primitive_type
+            .fields
+            .iter()
+            .filter(|field| field.required)
+            .map(schema_field_from_definition)
+            .collect(),
+        optional_fields: primitive_type
+            .fields
+            .iter()
+            .filter(|field| !field.required)
+            .map(schema_field_from_definition)
+            .collect(),
+        notes: notes.into_iter().map(str::to_owned).collect(),
+    })
+    .collect()
+}
+
+fn schema_field_from_definition(definition: &FieldDefinition) -> SchemaField {
+    SchemaField {
+        name: definition.name.clone(),
+        field_type: definition.field_type.clone(),
+        description: definition.description.clone(),
+        required: definition.required,
     }
 }

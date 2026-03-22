@@ -2,6 +2,8 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+use wg_types::{GraphEdgeKind, GraphEdgeSource};
+
 /// Identifies a primitive node in the workspace graph.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeRef {
@@ -42,13 +44,17 @@ impl NodeRef {
     }
 }
 
-/// A directed edge between two graph nodes.
+/// A directed typed edge between two graph nodes.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Edge {
     /// Source primitive.
     pub source: NodeRef,
     /// Target primitive.
     pub target: NodeRef,
+    /// Semantic edge kind.
+    pub kind: GraphEdgeKind,
+    /// Provenance of the edge.
+    pub provenance: GraphEdgeSource,
 }
 
 /// Direction for neighbor traversal.
@@ -60,13 +66,17 @@ pub enum NeighborDirection {
     Outbound,
 }
 
-/// A broken wiki-link discovered during graph construction.
+/// A broken typed reference discovered during graph construction.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BrokenLink {
-    /// Primitive containing the unresolved link.
+    /// Primitive containing or declaring the unresolved reference.
     pub source: NodeRef,
-    /// Raw normalized link target from the markdown or YAML field.
+    /// Raw normalized target reference.
     pub target: String,
+    /// Intended semantic edge kind.
+    pub kind: GraphEdgeKind,
+    /// Provenance of the broken reference.
+    pub provenance: GraphEdgeSource,
     /// Human-readable reason the link could not be resolved.
     pub reason: String,
 }
@@ -173,7 +183,7 @@ impl GraphSnapshot {
             .collect()
     }
 
-    /// Returns links that point to non-existent or ambiguous targets.
+    /// Returns broken structured or wiki references.
     #[must_use]
     pub fn broken_links(&self) -> &[BrokenLink] {
         &self.broken_links

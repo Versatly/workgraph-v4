@@ -98,6 +98,31 @@ pub struct RecentActivity {
     pub reference: String,
 }
 
+/// A typed graph hygiene issue detected during graph construction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GraphIssue {
+    /// Primitive that declared the unresolved reference.
+    pub source_reference: String,
+    /// Unresolved target reference or target primitive reference.
+    pub target_reference: String,
+    /// Intended edge kind.
+    pub kind: String,
+    /// Provenance of the reference.
+    pub provenance: String,
+    /// Human-readable resolution failure.
+    pub reason: String,
+}
+
+/// Unsatisfied evidence contract for a thread.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ThreadEvidenceGap {
+    /// Thread reference in `type/id` form.
+    pub thread_reference: String,
+    /// Required exit criteria that remain unsatisfied.
+    #[serde(default)]
+    pub missing_criteria: Vec<String>,
+}
+
 /// A structured, reusable workspace brief suitable for humans, agents, and future MCP resources.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkspaceBrief {
