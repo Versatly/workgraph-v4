@@ -11,5 +11,6 @@ pub fn handle(command: Option<&str>) -> SchemaOutput {
         schema_version: schema.schema_version,
         envelope_fields: schema.envelope_fields,
         commands: schema.commands,
+        primitive_contracts: schema.primitive_contracts,
     }
 }

@@ -3,37 +3,45 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::Utc;
+use serde::de::DeserializeOwned;
 use serde_yaml::Value;
-use wg_error::Result;
-use wg_graph::{BrokenLink, build_graph};
+use wg_error::{Result, WorkgraphError};
+use wg_graph::build_graph;
 use wg_ledger::{LedgerCursor, LedgerReader};
 use wg_paths::WorkspacePath;
 use wg_store::{
     PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive, write_primitive,
 };
-use wg_types::{ActorId, FieldDefinition, LedgerEntry, PrimitiveType, Registry};
+use wg_types::{
+    ActorId, FieldDefinition, GraphEdgeKind, GraphEdgeSource, LedgerEntry, PrimitiveType, Registry,
+    ThreadPrimitive, ThreadStatus,
+};
 
-use crate::{BriefItem, RecentActivity};
+use crate::{BriefItem, GraphIssue, RecentActivity, ThreadEvidenceGap};
 
 /// Workspace orientation summary derived from real persisted data.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct WorkspaceStatus {
     /// Primitive counts by type.
     pub type_counts: BTreeMap<String, usize>,
     /// Most recent immutable ledger activity.
     pub recent_activity: Vec<RecentActivity>,
-    /// Broken wiki-links discovered by the graph engine.
-    pub broken_links: Vec<BrokenLink>,
+    /// Typed graph hygiene issues discovered by the graph engine.
+    pub graph_issues: Vec<GraphIssue>,
+    /// Threads with unsatisfied required exit criteria.
+    pub thread_evidence_gaps: Vec<ThreadEvidenceGap>,
 }
 
 /// Actor-specific orientation brief based on assignment and recent activity.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct ActorBrief {
     /// Target actor identifier.
     pub actor: String,
     /// Threads currently assigned to this actor.
     pub assigned_threads: Vec<BriefItem>,
-    /// Missions related to assigned threads.
+    /// Runs currently assigned to this actor.
+    pub assigned_runs: Vec<BriefItem>,
+    /// Missions related to assigned threads or runs.
     pub assigned_missions: Vec<BriefItem>,
     /// Recent activity relevant to this actor.
     pub recent_relevant_activity: Vec<RecentActivity>,
@@ -54,10 +62,23 @@ pub async fn status(workspace: &WorkspacePath) -> Result<WorkspaceStatus> {
         *type_counts.entry(node.primitive_type).or_insert(0) += 1;
     }
 
+    let graph_issues = graph
+        .broken_links()
+        .iter()
+        .map(|broken| GraphIssue {
+            source_reference: broken.source.reference(),
+            target_reference: broken.target.clone(),
+            kind: edge_kind_label(broken.kind).to_owned(),
+            provenance: edge_source_label(broken.provenance).to_owned(),
+            reason: broken.reason.clone(),
+        })
+        .collect();
+
     Ok(WorkspaceStatus {
         type_counts,
         recent_activity: load_recent_activity(workspace, 10).await?,
-        broken_links: graph.broken_links().to_vec(),
+        graph_issues,
+        thread_evidence_gaps: load_thread_evidence_gaps(workspace).await?,
     })
 }
 
@@ -68,44 +89,88 @@ pub async fn status(workspace: &WorkspacePath) -> Result<WorkspaceStatus> {
 /// Returns an error when store or ledger data cannot be loaded.
 pub async fn brief(workspace: &WorkspacePath, actor: &ActorId) -> Result<ActorBrief> {
     let actor_id = actor.as_str();
-    let actor_status = status(workspace).await?;
-    let thread_primitives = list_primitives(workspace, "thread").await?;
-    let assigned_threads = thread_primitives
+    let workspace_status = status(workspace).await?;
+    let threads = load_threads(workspace).await?;
+    let runs = load_runs(workspace).await?;
+    let missions = load_missions(workspace).await?;
+
+    let assigned_threads = threads
         .iter()
-        .filter(|primitive| {
-            primitive
-                .frontmatter
-                .extra_fields
-                .get("assigned_actor")
-                .and_then(string_value)
-                == Some(actor_id)
+        .filter(|thread| {
+            thread
+                .assigned_actor
+                .as_ref()
+                .is_some_and(|assigned| assigned.as_str() == actor_id)
         })
-        .map(|primitive| brief_item("thread", primitive))
+        .map(|thread| {
+            brief_item(
+                "thread",
+                &format!("thread/{}", thread.id),
+                &thread.title,
+                Some(thread.status.as_str().to_owned()),
+            )
+        })
         .collect::<Vec<_>>();
     let assigned_thread_ids = assigned_threads
         .iter()
-        .filter_map(|item| item.reference.as_ref())
-        .filter_map(|reference| reference.split_once('/').map(|(_, id)| id.to_owned()))
+        .filter_map(|item| item.reference.as_deref())
+        .filter_map(reference_id)
         .collect::<BTreeSet<_>>();
 
-    let mission_primitives = list_primitives(workspace, "mission").await?;
-    let assigned_missions = mission_primitives
+    let assigned_runs = runs
         .iter()
-        .filter(|primitive| {
-            parse_string_list(primitive.frontmatter.extra_fields.get("thread_ids"))
-                .iter()
-                .any(|thread_id| assigned_thread_ids.contains(thread_id))
+        .filter(|run| {
+            run.actor_id.as_str() == actor_id
+                || run
+                    .executor_id
+                    .as_ref()
+                    .is_some_and(|executor| executor.as_str() == actor_id)
         })
-        .map(|primitive| brief_item("mission", primitive))
+        .map(|run| {
+            brief_item(
+                "run",
+                &format!("run/{}", run.id),
+                &run.title,
+                Some(run.status.as_str().to_owned()),
+            )
+        })
+        .collect::<Vec<_>>();
+    let assigned_run_ids = assigned_runs
+        .iter()
+        .filter_map(|item| item.reference.as_deref())
+        .filter_map(reference_id)
+        .collect::<BTreeSet<_>>();
+
+    let assigned_missions = missions
+        .iter()
+        .filter(|mission| {
+            mission
+                .thread_ids
+                .iter()
+                .any(|thread_id| assigned_thread_ids.contains(thread_id.as_str()))
+                || mission
+                    .run_ids
+                    .iter()
+                    .any(|run_id| assigned_run_ids.contains(run_id.as_str()))
+        })
+        .map(|mission| {
+            brief_item(
+                "mission",
+                &format!("mission/{}", mission.id),
+                &mission.title,
+                Some(mission.status.as_str().to_owned()),
+            )
+        })
         .collect::<Vec<_>>();
 
     let relevant_refs = assigned_threads
         .iter()
+        .chain(&assigned_runs)
         .chain(&assigned_missions)
         .filter_map(|item| item.reference.clone())
         .collect::<BTreeSet<_>>();
-    let ledger_entries = load_ledger_entries(workspace).await?;
-    let recent_relevant_activity = ledger_entries
+    let recent_relevant_activity = load_ledger_entries(workspace)
+        .await?
         .into_iter()
         .rev()
         .filter(|entry| {
@@ -118,28 +183,39 @@ pub async fn brief(workspace: &WorkspacePath, actor: &ActorId) -> Result<ActorBr
         .collect::<Vec<_>>();
 
     let mut warnings = Vec::new();
-    if assigned_threads.is_empty() && assigned_missions.is_empty() {
+    if assigned_threads.is_empty() && assigned_runs.is_empty() && assigned_missions.is_empty() {
         warnings.push(format!(
-            "Actor '{actor_id}' has no assigned threads or missions"
+            "Actor '{actor_id}' has no assigned threads, runs, or missions"
         ));
     }
-    for broken in actor_status
-        .broken_links
-        .iter()
-        .filter(|broken| relevant_refs.contains(&broken.source.reference()))
-        .take(5)
-    {
+    for gap in workspace_status.thread_evidence_gaps.iter().filter(|gap| {
+        reference_id(&gap.thread_reference)
+            .is_some_and(|thread_id| assigned_thread_ids.contains(thread_id))
+    }) {
         warnings.push(format!(
-            "Broken link from '{}' to '{}' ({})",
-            broken.source.reference(),
-            broken.target,
-            broken.reason
+            "Thread '{}' is missing required evidence for: {}",
+            gap.thread_reference,
+            gap.missing_criteria.join(", ")
+        ));
+    }
+    for issue in workspace_status.graph_issues.iter().filter(|issue| {
+        relevant_refs.contains(&issue.source_reference)
+            || relevant_refs.contains(&issue.target_reference)
+    }) {
+        warnings.push(format!(
+            "Graph issue: {} -> {} [{} via {}] ({})",
+            issue.source_reference,
+            issue.target_reference,
+            issue.kind,
+            issue.provenance,
+            issue.reason
         ));
     }
 
     Ok(ActorBrief {
         actor: actor_id.to_owned(),
         assigned_threads,
+        assigned_runs,
         assigned_missions,
         recent_relevant_activity,
         warnings,
@@ -203,6 +279,44 @@ async fn load_ledger_entries(workspace: &WorkspacePath) -> Result<Vec<LedgerEntr
     Ok(entries)
 }
 
+async fn load_thread_evidence_gaps(workspace: &WorkspacePath) -> Result<Vec<ThreadEvidenceGap>> {
+    Ok(load_threads(workspace)
+        .await?
+        .into_iter()
+        .filter_map(|thread| {
+            let missing_criteria = missing_criteria(&thread);
+            (!missing_criteria.is_empty()).then(|| ThreadEvidenceGap {
+                thread_reference: format!("thread/{}", thread.id),
+                missing_criteria,
+            })
+        })
+        .collect())
+}
+
+async fn load_threads(workspace: &WorkspacePath) -> Result<Vec<ThreadPrimitive>> {
+    list_primitives(workspace, "thread")
+        .await?
+        .iter()
+        .map(thread_from_primitive)
+        .collect()
+}
+
+async fn load_missions(workspace: &WorkspacePath) -> Result<Vec<MissionSummary>> {
+    list_primitives(workspace, "mission")
+        .await?
+        .iter()
+        .map(mission_from_primitive)
+        .collect()
+}
+
+async fn load_runs(workspace: &WorkspacePath) -> Result<Vec<RunSummary>> {
+    list_primitives(workspace, "run")
+        .await?
+        .iter()
+        .map(run_from_primitive)
+        .collect()
+}
+
 fn entry_to_recent_activity(entry: LedgerEntry) -> RecentActivity {
     RecentActivity {
         ts: entry.ts.to_rfc3339(),
@@ -212,36 +326,173 @@ fn entry_to_recent_activity(entry: LedgerEntry) -> RecentActivity {
     }
 }
 
-fn brief_item(kind: &str, primitive: &StoredPrimitive) -> BriefItem {
+fn brief_item(kind: &str, reference: &str, title: &str, detail: Option<String>) -> BriefItem {
     BriefItem {
         kind: kind.to_owned(),
-        reference: Some(format!(
-            "{}/{}",
-            primitive.frontmatter.r#type, primitive.frontmatter.id
-        )),
-        title: primitive.frontmatter.title.clone(),
-        detail: primitive
-            .frontmatter
-            .extra_fields
-            .get("status")
-            .and_then(string_value)
-            .map(str::to_owned),
+        reference: Some(reference.to_owned()),
+        title: title.to_owned(),
+        detail,
     }
 }
 
-fn parse_string_list(value: Option<&Value>) -> Vec<String> {
-    match value {
-        Some(Value::String(value)) => vec![value.clone()],
-        Some(Value::Sequence(values)) => values
-            .iter()
-            .filter_map(string_value)
-            .map(str::to_owned)
-            .collect(),
-        Some(Value::Tagged(tagged)) => parse_string_list(Some(&tagged.value)),
-        Some(Value::Null | Value::Bool(_) | Value::Number(_) | Value::Mapping(_)) | None => {
-            Vec::new()
-        }
+fn reference_id(reference: &str) -> Option<&str> {
+    reference.split_once('/').map(|(_, id)| id)
+}
+
+fn missing_criteria(thread: &ThreadPrimitive) -> Vec<String> {
+    let satisfied = thread
+        .evidence
+        .iter()
+        .flat_map(|item| item.satisfies.iter().cloned())
+        .collect::<BTreeSet<_>>();
+
+    thread
+        .exit_criteria
+        .iter()
+        .filter(|criterion| criterion.required && !satisfied.contains(&criterion.id))
+        .map(|criterion| criterion.id.clone())
+        .collect()
+}
+
+fn thread_from_primitive(primitive: &StoredPrimitive) -> Result<ThreadPrimitive> {
+    if primitive.frontmatter.r#type != "thread" {
+        return Err(WorkgraphError::ValidationError(format!(
+            "expected thread primitive, found '{}'",
+            primitive.frontmatter.r#type
+        )));
     }
+
+    Ok(ThreadPrimitive {
+        id: primitive.frontmatter.id.clone(),
+        title: primitive.frontmatter.title.clone(),
+        status: primitive
+            .frontmatter
+            .extra_fields
+            .get("status")
+            .map_or(Ok(ThreadStatus::Draft), parse_yaml_value)?,
+        assigned_actor: primitive
+            .frontmatter
+            .extra_fields
+            .get("assigned_actor")
+            .and_then(string_value)
+            .map(ActorId::new),
+        parent_mission_id: primitive
+            .frontmatter
+            .extra_fields
+            .get("parent_mission_id")
+            .and_then(string_value)
+            .map(str::to_owned),
+        exit_criteria: primitive
+            .frontmatter
+            .extra_fields
+            .get("exit_criteria")
+            .map_or(Ok(Vec::new()), parse_yaml_value)?,
+        evidence: primitive
+            .frontmatter
+            .extra_fields
+            .get("evidence")
+            .map_or(Ok(Vec::new()), parse_yaml_value)?,
+        update_actions: primitive
+            .frontmatter
+            .extra_fields
+            .get("update_actions")
+            .map_or(Ok(Vec::new()), parse_yaml_value)?,
+        completion_actions: primitive
+            .frontmatter
+            .extra_fields
+            .get("completion_actions")
+            .map_or(Ok(Vec::new()), parse_yaml_value)?,
+        messages: Vec::new(),
+    })
+}
+
+fn mission_from_primitive(primitive: &StoredPrimitive) -> Result<MissionSummary> {
+    if primitive.frontmatter.r#type != "mission" {
+        return Err(WorkgraphError::ValidationError(format!(
+            "expected mission primitive, found '{}'",
+            primitive.frontmatter.r#type
+        )));
+    }
+
+    Ok(MissionSummary {
+        id: primitive.frontmatter.id.clone(),
+        title: primitive.frontmatter.title.clone(),
+        status: primitive
+            .frontmatter
+            .extra_fields
+            .get("status")
+            .map_or(Ok(wg_types::MissionStatus::Planned), parse_yaml_value)?,
+        thread_ids: primitive
+            .frontmatter
+            .extra_fields
+            .get("thread_ids")
+            .map_or(Ok(Vec::new()), parse_yaml_value)?,
+        run_ids: primitive
+            .frontmatter
+            .extra_fields
+            .get("run_ids")
+            .map_or(Ok(Vec::new()), parse_yaml_value)?,
+    })
+}
+
+fn run_from_primitive(primitive: &StoredPrimitive) -> Result<RunSummary> {
+    if primitive.frontmatter.r#type != "run" {
+        return Err(WorkgraphError::ValidationError(format!(
+            "expected run primitive, found '{}'",
+            primitive.frontmatter.r#type
+        )));
+    }
+
+    let actor_id = primitive
+        .frontmatter
+        .extra_fields
+        .get("actor_id")
+        .and_then(string_value)
+        .map(ActorId::new)
+        .ok_or_else(|| {
+            WorkgraphError::ValidationError(format!(
+                "run '{}' is missing required actor_id",
+                primitive.frontmatter.id
+            ))
+        })?;
+
+    let thread_id = primitive
+        .frontmatter
+        .extra_fields
+        .get("thread_id")
+        .and_then(string_value)
+        .map(str::to_owned)
+        .ok_or_else(|| {
+            WorkgraphError::ValidationError(format!(
+                "run '{}' is missing required thread_id",
+                primitive.frontmatter.id
+            ))
+        })?;
+
+    Ok(RunSummary {
+        id: primitive.frontmatter.id.clone(),
+        title: primitive.frontmatter.title.clone(),
+        status: primitive
+            .frontmatter
+            .extra_fields
+            .get("status")
+            .map_or(Ok(wg_types::RunStatus::Queued), parse_yaml_value)?,
+        actor_id,
+        executor_id: primitive
+            .frontmatter
+            .extra_fields
+            .get("executor_id")
+            .and_then(string_value)
+            .map(ActorId::new),
+        thread_id,
+    })
+}
+
+fn parse_yaml_value<T>(value: &Value) -> Result<T>
+where
+    T: DeserializeOwned,
+{
+    serde_yaml::from_value::<T>(value.clone()).map_err(encoding_error)
 }
 
 fn string_value(value: &Value) -> Option<&str> {
@@ -304,6 +555,50 @@ fn slugify(input: &str) -> String {
     }
 }
 
+fn edge_kind_label(kind: GraphEdgeKind) -> &'static str {
+    match kind {
+        GraphEdgeKind::Reference => "reference",
+        GraphEdgeKind::Relationship => "relationship",
+        GraphEdgeKind::Assignment => "assignment",
+        GraphEdgeKind::Containment => "containment",
+        GraphEdgeKind::Evidence => "evidence",
+        GraphEdgeKind::Trigger => "trigger",
+    }
+}
+
+fn edge_source_label(source: GraphEdgeSource) -> &'static str {
+    match source {
+        GraphEdgeSource::WikiLink => "wiki_link",
+        GraphEdgeSource::Field => "field",
+        GraphEdgeSource::RelationshipPrimitive => "relationship_primitive",
+        GraphEdgeSource::EvidenceRecord => "evidence_record",
+        GraphEdgeSource::TriggerRule => "trigger_rule",
+    }
+}
+
+fn encoding_error(error: impl std::fmt::Display) -> WorkgraphError {
+    WorkgraphError::EncodingError(error.to_string())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MissionSummary {
+    id: String,
+    title: String,
+    status: wg_types::MissionStatus,
+    thread_ids: Vec<String>,
+    run_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RunSummary {
+    id: String,
+    title: String,
+    status: wg_types::RunStatus,
+    actor_id: ActorId,
+    executor_id: Option<ActorId>,
+    thread_id: String,
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -315,7 +610,10 @@ mod tests {
     use wg_ledger::{LedgerEntryDraft, LedgerWriter};
     use wg_paths::WorkspacePath;
     use wg_store::{PrimitiveFrontmatter, StoredPrimitive, write_primitive};
-    use wg_types::{ActorId, LedgerOp, Registry};
+    use wg_types::{
+        ActorId, EventPattern, EventSourceKind, EvidenceItem, LedgerOp, Registry, RunStatus,
+        ThreadExitCriterion, ThreadStatus, TriggerActionPlan, TriggerStatus,
+    };
 
     use crate::{brief, checkpoint, status};
 
@@ -342,7 +640,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn status_reads_real_counts_recent_activity_and_broken_links() {
+    async fn status_reads_real_counts_recent_activity_and_contract_gaps() {
         let temp_dir = tempdir().expect("temporary directory should be created");
         let workspace = WorkspacePath::new(temp_dir.path());
         write_primitive(
@@ -358,6 +656,37 @@ mod tests {
         )
         .await
         .expect("decision should write");
+        write_primitive(
+            &workspace,
+            &Registry::builtins(),
+            &primitive(
+                "thread",
+                "thread-1",
+                "Thread 1",
+                "Thread body",
+                [
+                    (
+                        "status",
+                        serde_yaml::to_value(ThreadStatus::Active)
+                            .expect("thread status should serialize"),
+                    ),
+                    ("assigned_actor", Value::String("pedro".to_owned())),
+                    (
+                        "exit_criteria",
+                        serde_yaml::to_value(vec![ThreadExitCriterion {
+                            id: "criterion-1".to_owned(),
+                            title: "External verification".to_owned(),
+                            description: None,
+                            required: true,
+                            reference: Some("decision/alpha".to_owned()),
+                        }])
+                        .expect("exit criteria should serialize"),
+                    ),
+                ],
+            ),
+        )
+        .await
+        .expect("thread should write");
 
         let clock = MockClock::new(
             Utc.with_ymd_and_hms(2026, 3, 17, 10, 0, 0)
@@ -378,13 +707,25 @@ mod tests {
 
         let snapshot = status(&workspace).await.expect("status should load");
         assert_eq!(snapshot.type_counts.get("decision"), Some(&1));
+        assert_eq!(snapshot.type_counts.get("thread"), Some(&1));
         assert_eq!(snapshot.recent_activity.len(), 1);
         assert_eq!(snapshot.recent_activity[0].reference, "decision/alpha");
-        assert_eq!(snapshot.broken_links.len(), 1);
+        assert!(!snapshot.graph_issues.is_empty());
+        assert!(
+            snapshot
+                .graph_issues
+                .iter()
+                .any(|issue| issue.source_reference == "decision/alpha")
+        );
+        assert_eq!(snapshot.thread_evidence_gaps.len(), 1);
+        assert_eq!(
+            snapshot.thread_evidence_gaps[0].thread_reference,
+            "thread/thread-1"
+        );
     }
 
     #[tokio::test]
-    async fn brief_returns_actor_assignments_and_relevant_changes() {
+    async fn brief_returns_actor_assignments_runs_and_relevant_changes() {
         let temp_dir = tempdir().expect("temporary directory should be created");
         let workspace = WorkspacePath::new(temp_dir.path());
         write_primitive(
@@ -394,15 +735,64 @@ mod tests {
                 "thread",
                 "thread-1",
                 "Thread 1",
-                "## Conversation\n\n```yaml\n[]\n```\n",
+                "Thread body",
                 [
-                    ("status", Value::String("claimed".to_owned())),
+                    (
+                        "status",
+                        serde_yaml::to_value(ThreadStatus::Active)
+                            .expect("thread status should serialize"),
+                    ),
                     ("assigned_actor", Value::String("pedro".to_owned())),
+                    (
+                        "exit_criteria",
+                        serde_yaml::to_value(vec![ThreadExitCriterion {
+                            id: "criterion-1".to_owned(),
+                            title: "Verification".to_owned(),
+                            description: None,
+                            required: true,
+                            reference: None,
+                        }])
+                        .expect("exit criteria should serialize"),
+                    ),
+                    (
+                        "evidence",
+                        serde_yaml::to_value(vec![EvidenceItem {
+                            id: "evidence-1".to_owned(),
+                            title: "Verifier note".to_owned(),
+                            description: None,
+                            reference: Some("decision/alpha".to_owned()),
+                            satisfies: vec!["criterion-1".to_owned()],
+                            recorded_at: None,
+                            source: Some("manual".to_owned()),
+                        }])
+                        .expect("evidence should serialize"),
+                    ),
                 ],
             ),
         )
         .await
         .expect("thread should write");
+        write_primitive(
+            &workspace,
+            &Registry::builtins(),
+            &primitive(
+                "run",
+                "run-1",
+                "Run 1",
+                "Executor summary",
+                [
+                    (
+                        "status",
+                        serde_yaml::to_value(RunStatus::Running)
+                            .expect("run status should serialize"),
+                    ),
+                    ("actor_id", Value::String("pedro".to_owned())),
+                    ("thread_id", Value::String("thread-1".to_owned())),
+                ],
+            ),
+        )
+        .await
+        .expect("run should write");
         write_primitive(
             &workspace,
             &Registry::builtins(),
@@ -419,6 +809,47 @@ mod tests {
         )
         .await
         .expect("mission should write");
+        write_primitive(
+            &workspace,
+            &Registry::builtins(),
+            &primitive(
+                "trigger",
+                "trigger-1",
+                "Trigger 1",
+                "",
+                [
+                    (
+                        "status",
+                        serde_yaml::to_value(TriggerStatus::Active)
+                            .expect("trigger status should serialize"),
+                    ),
+                    (
+                        "event_pattern",
+                        serde_yaml::to_value(EventPattern {
+                            source: EventSourceKind::Ledger,
+                            event_name: None,
+                            ops: vec![LedgerOp::Done],
+                            primitive_types: vec!["thread".to_owned()],
+                            primitive_id: None,
+                            field_names: vec!["evidence".to_owned()],
+                            provider: None,
+                        })
+                        .expect("event pattern should serialize"),
+                    ),
+                    (
+                        "action_plans",
+                        serde_yaml::to_value(vec![TriggerActionPlan {
+                            kind: "rebrief_actor".to_owned(),
+                            target_reference: Some("thread/thread-1".to_owned()),
+                            instruction: "Refresh the brief".to_owned(),
+                        }])
+                        .expect("action plans should serialize"),
+                    ),
+                ],
+            ),
+        )
+        .await
+        .expect("trigger should write");
 
         let clock = MockClock::new(
             Utc.with_ymd_and_hms(2026, 3, 17, 10, 0, 0)
@@ -445,9 +876,9 @@ mod tests {
             .append(LedgerEntryDraft::new(
                 ActorId::new("pedro"),
                 LedgerOp::Update,
-                "thread",
-                "thread-1",
-                vec!["body".to_owned()],
+                "run",
+                "run-1",
+                vec!["status".to_owned()],
             ))
             .await
             .expect("second append should succeed");
@@ -456,10 +887,7 @@ mod tests {
             .await
             .expect("brief should load");
         assert_eq!(actor_brief.assigned_threads.len(), 1);
-        assert_eq!(
-            actor_brief.assigned_threads[0].reference.as_deref(),
-            Some("thread/thread-1")
-        );
+        assert_eq!(actor_brief.assigned_runs.len(), 1);
         assert_eq!(actor_brief.assigned_missions.len(), 1);
         assert!(!actor_brief.recent_relevant_activity.is_empty());
     }

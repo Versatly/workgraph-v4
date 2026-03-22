@@ -1033,8 +1033,14 @@ dependencies = [
 name = "wg-dispatch"
 version = "0.1.0"
 dependencies = [
- "wg-mission",
- "wg-thread",
+ "serde",
+ "serde_yaml",
+ "tempfile",
+ "tokio",
+ "wg-error",
+ "wg-paths",
+ "wg-store",
+ "wg-types",
 ]
 
 [[package]]
@@ -1219,7 +1225,16 @@ version = "0.1.0"
 name = "wg-trigger"
 version = "0.1.0"
 dependencies = [
- "wg-policy",
+ "serde",
+ "serde_yaml",
+ "tempfile",
+ "tokio",
+ "wg-clock",
+ "wg-error",
+ "wg-ledger",
+ "wg-paths",
+ "wg-store",
+ "wg-types",
 ]
 
 [[package]]

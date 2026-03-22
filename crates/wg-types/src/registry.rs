@@ -176,6 +176,27 @@ fn builtin_types() -> Vec<PrimitiveType> {
                 field("title", "string", "Agent display name", true, false),
                 field("runtime", "string", "Execution environment", false, false),
                 field(
+                    "parent_actor_id",
+                    "string",
+                    "Optional tracked parent actor",
+                    false,
+                    false,
+                ),
+                field(
+                    "root_actor_id",
+                    "string",
+                    "Optional root tracked actor",
+                    false,
+                    false,
+                ),
+                field(
+                    "lineage_mode",
+                    "string",
+                    "Whether descendants are tracked or opaque",
+                    false,
+                    false,
+                ),
+                field(
                     "capabilities",
                     "string[]",
                     "Advertised capabilities",
@@ -303,7 +324,7 @@ fn builtin_types() -> Vec<PrimitiveType> {
         builtin_type(
             "thread",
             "threads",
-            "Conversation and coordination thread metadata.",
+            "Evidence-bearing coordination thread.",
             vec![
                 field("id", "string", "Stable thread identifier", true, false),
                 field("title", "string", "Thread title", true, false),
@@ -313,6 +334,48 @@ fn builtin_types() -> Vec<PrimitiveType> {
                     "Thread lifecycle status",
                     false,
                     false,
+                ),
+                field(
+                    "assigned_actor",
+                    "string",
+                    "Assigned actor for the thread",
+                    false,
+                    false,
+                ),
+                field(
+                    "parent_mission_id",
+                    "string",
+                    "Parent mission identifier",
+                    false,
+                    false,
+                ),
+                field(
+                    "exit_criteria",
+                    "object[]",
+                    "Structured exit criteria for completion",
+                    false,
+                    true,
+                ),
+                field(
+                    "evidence",
+                    "object[]",
+                    "Evidence recorded against the thread",
+                    false,
+                    true,
+                ),
+                field(
+                    "update_actions",
+                    "object[]",
+                    "Planned actions while the thread remains active",
+                    false,
+                    true,
+                ),
+                field(
+                    "completion_actions",
+                    "object[]",
+                    "Planned actions once the thread completes",
+                    false,
+                    true,
                 ),
             ],
         ),
@@ -324,6 +387,41 @@ fn builtin_types() -> Vec<PrimitiveType> {
                 field("id", "string", "Stable run identifier", true, false),
                 field("title", "string", "Run title", true, false),
                 field("status", "run_status", "Run lifecycle status", false, false),
+                field(
+                    "actor_id",
+                    "string",
+                    "Logical actor responsible for the run",
+                    true,
+                    false,
+                ),
+                field(
+                    "executor_id",
+                    "string",
+                    "Concrete executor that performed the run",
+                    false,
+                    false,
+                ),
+                field(
+                    "thread_id",
+                    "string",
+                    "Owning thread identifier",
+                    true,
+                    false,
+                ),
+                field(
+                    "mission_id",
+                    "string",
+                    "Related mission identifier",
+                    false,
+                    false,
+                ),
+                field(
+                    "parent_run_id",
+                    "string",
+                    "Parent delegated run identifier",
+                    false,
+                    false,
+                ),
             ],
         ),
         builtin_type(
@@ -333,7 +431,28 @@ fn builtin_types() -> Vec<PrimitiveType> {
             vec![
                 field("id", "string", "Stable mission identifier", true, false),
                 field("title", "string", "Mission title", true, false),
-                field("status", "string", "Mission lifecycle status", false, false),
+                field(
+                    "status",
+                    "mission_status",
+                    "Mission lifecycle status",
+                    false,
+                    false,
+                ),
+                field(
+                    "thread_ids",
+                    "string[]",
+                    "Child thread identifiers",
+                    false,
+                    true,
+                ),
+                field("run_ids", "string[]", "Child run identifiers", false, true),
+                field(
+                    "body",
+                    "string",
+                    "Mission objective markdown body",
+                    true,
+                    false,
+                ),
             ],
         ),
         builtin_type(
@@ -344,10 +463,49 @@ fn builtin_types() -> Vec<PrimitiveType> {
                 field("id", "string", "Stable trigger identifier", true, false),
                 field("title", "string", "Trigger title", true, false),
                 field(
-                    "event",
-                    "string",
-                    "Subscribed ledger event pattern",
+                    "status",
+                    "trigger_status",
+                    "Trigger lifecycle status",
                     false,
+                    false,
+                ),
+                field(
+                    "event_pattern",
+                    "object",
+                    "Structured trigger event matching contract",
+                    true,
+                    false,
+                ),
+                field(
+                    "action_plans",
+                    "object[]",
+                    "Durable action plans emitted by the trigger",
+                    false,
+                    true,
+                ),
+            ],
+        ),
+        builtin_type(
+            "checkpoint",
+            "checkpoints",
+            "Durable saved working context.",
+            vec![
+                field("id", "string", "Stable checkpoint identifier", true, false),
+                field("title", "string", "Checkpoint title", true, false),
+                field("working_on", "string", "Current work item", true, false),
+                field("focus", "string", "Current focus", true, false),
+                field(
+                    "actor_id",
+                    "string",
+                    "Owning actor identifier",
+                    false,
+                    false,
+                ),
+                field(
+                    "created_at",
+                    "datetime",
+                    "Checkpoint creation timestamp",
+                    true,
                     false,
                 ),
             ],
@@ -409,7 +567,7 @@ mod tests {
     fn builtin_registry_contains_all_required_types() {
         let registry = Registry::builtins();
 
-        assert_eq!(registry.types.len(), 16);
+        assert_eq!(registry.types.len(), 17);
         assert_eq!(
             registry
                 .get_type("person")
@@ -426,6 +584,7 @@ mod tests {
         );
         assert!(registry.get_type("thread").is_some());
         assert!(registry.get_type("trigger").is_some());
+        assert!(registry.get_type("checkpoint").is_some());
     }
 
     #[test]
@@ -435,6 +594,6 @@ mod tests {
         let decoded: Registry = serde_json::from_str(&json).expect("registry should deserialize");
 
         assert_eq!(decoded, registry);
-        assert_eq!(decoded.list_types().len(), 16);
+        assert_eq!(decoded.list_types().len(), 17);
     }
 }

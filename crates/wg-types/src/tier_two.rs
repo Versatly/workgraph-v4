@@ -1,6 +1,6 @@
 //! Tier 2 cached company context primitives.
 
-use crate::{CachedSnapshot, ExternalRef, NodeId};
+use crate::{CachedSnapshot, ExternalRef, LineageMode, NodeId};
 use serde::{Deserialize, Serialize};
 
 /// Captures top-level organization context and external links.
@@ -88,6 +88,15 @@ pub struct Agent {
     /// The human or team responsible for the agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
+    /// Optional tracked parent actor above this agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_actor_id: Option<String>,
+    /// Optional root tracked actor for delegated lineages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root_actor_id: Option<String>,
+    /// Whether descendants are fully tracked or intentionally opaque.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lineage_mode: Option<LineageMode>,
     /// The network node currently associated with the agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub node_id: Option<NodeId>,
@@ -156,7 +165,7 @@ pub struct Project {
 #[cfg(test)]
 mod tests {
     use super::{Agent, Client, Org, Person, Project, Team};
-    use crate::{CachedSnapshot, ExternalRef, NodeId};
+    use crate::{CachedSnapshot, ExternalRef, LineageMode, NodeId};
     use chrono::{TimeZone, Utc};
     use std::collections::BTreeMap;
 
@@ -226,6 +235,9 @@ mod tests {
             description: Some("Background coding agent".into()),
             runtime: Some("cursor".into()),
             owner: Some("platform".into()),
+            parent_actor_id: Some("pedro".into()),
+            root_actor_id: Some("pedro".into()),
+            lineage_mode: Some(LineageMode::Opaque),
             node_id: Some(NodeId::new("node-a")),
             capabilities: vec!["coding".into(), "review".into()],
             tags: vec!["ai".into()],

@@ -25,7 +25,7 @@ async fn init_create_query_and_verify_ledger_chain() {
         .expect("workspace initialization should succeed");
     let init_json: serde_json::Value =
         serde_json::from_str(&init_output).expect("init output should be valid JSON");
-    assert_eq!(init_json["schema_version"], "workgraph.cli.v1alpha1");
+    assert_eq!(init_json["schema_version"], "workgraph.cli.v1alpha2");
     assert_eq!(init_json["success"], true);
     assert_eq!(init_json["command"], "init");
     assert_eq!(
@@ -142,6 +142,7 @@ async fn init_create_query_and_verify_ledger_chain() {
         .expect("capabilities output should be valid JSON");
     assert_eq!(capabilities_json["command"], "capabilities");
     assert!(capabilities_json["result"]["commands"].is_array());
+    assert!(capabilities_json["result"]["primitive_contracts"].is_array());
 
     let schema_output = execute(["workgraph", "--json", "schema", "create"], temp_dir.path())
         .await
@@ -150,6 +151,7 @@ async fn init_create_query_and_verify_ledger_chain() {
         serde_json::from_str(&schema_output).expect("schema output should be valid JSON");
     assert_eq!(schema_json["command"], "schema");
     assert_eq!(schema_json["result"]["commands"][0]["name"], "create");
+    assert!(schema_json["result"]["primitive_contracts"].is_array());
 
     let workspace = WorkspacePath::new(temp_dir.path());
 

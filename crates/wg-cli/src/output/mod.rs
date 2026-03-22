@@ -7,12 +7,12 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 use serde_json::Value as JsonValue;
-use wg_orientation::WorkspaceBrief;
+use wg_orientation::{GraphIssue, RecentActivity, ThreadEvidenceGap, WorkspaceBrief};
 use wg_store::StoredPrimitive;
 use wg_types::{LedgerEntry, WorkgraphConfig};
 
 /// Stable schema version for the JSON agent contract emitted by the CLI.
-pub const AGENT_SCHEMA_VERSION: &str = "workgraph.cli.v1alpha1";
+pub const AGENT_SCHEMA_VERSION: &str = "workgraph.cli.v1alpha2";
 
 /// A structured command result suitable for either human or JSON rendering.
 #[derive(Debug, Serialize)]
@@ -60,8 +60,14 @@ pub struct StatusOutput {
     pub workspace_root: String,
     /// Primitive counts for each registered type.
     pub type_counts: BTreeMap<String, usize>,
+    /// Recent immutable ledger activity summarized for orientation.
+    pub recent_activity: Vec<RecentActivity>,
     /// The most recent immutable ledger entry, when present.
     pub last_entry: Option<LedgerEntry>,
+    /// Typed graph hygiene issues discovered by the graph builder.
+    pub graph_issues: Vec<GraphIssue>,
+    /// Threads that cannot yet complete because required evidence is missing.
+    pub thread_evidence_gaps: Vec<ThreadEvidenceGap>,
 }
 
 /// Output model produced by the `capabilities` command.
@@ -73,6 +79,8 @@ pub struct CapabilitiesOutput {
     pub workflows: Vec<super::services::discovery::WorkflowSkill>,
     /// Command-level structured capabilities.
     pub commands: Vec<super::services::discovery::CommandSkill>,
+    /// First-class primitive contracts that agents should understand before writing.
+    pub primitive_contracts: Vec<super::services::discovery::PrimitiveContract>,
 }
 
 /// Output model produced by the `schema` command.
@@ -84,6 +92,8 @@ pub struct SchemaOutput {
     pub envelope_fields: Vec<super::services::discovery::SchemaField>,
     /// Structured command definitions.
     pub commands: Vec<super::services::discovery::CommandSchema>,
+    /// Typed primitive contracts discoverable through the CLI.
+    pub primitive_contracts: Vec<super::services::discovery::PrimitiveContract>,
 }
 
 /// Output model produced by the `create` command.

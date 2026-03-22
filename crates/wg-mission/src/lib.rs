@@ -2,65 +2,27 @@
 #![deny(missing_docs)]
 
 //! Mission orchestration for WorkGraph.
-//!
-//! Missions are persisted as `mission` primitives with lifecycle metadata in
-//! frontmatter and objective markdown in the body.
 
-use std::collections::BTreeMap;
-use std::str::FromStr;
-
-use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use wg_error::{Result, WorkgraphError};
 use wg_paths::WorkspacePath;
-use wg_store::{PrimitiveFrontmatter, StoredPrimitive, read_primitive, write_primitive};
-use wg_types::Registry;
+use wg_store::{
+    PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive, write_primitive,
+};
+use wg_types::{MissionPrimitive, Registry, ThreadStatus};
+
+pub use wg_types::MissionStatus;
 
 const MISSION_TYPE: &str = "mission";
 
-/// Tracks mission lifecycle state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MissionStatus {
-    /// Mission exists but is not started.
-    #[default]
-    Planned,
-    /// Mission is actively being executed.
-    Active,
-    /// Mission is complete.
-    Completed,
-}
+/// Typed mission model persisted by this crate.
+pub type Mission = MissionPrimitive;
 
-impl MissionStatus {
-    /// Returns the storage string for this mission status.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Planned => "planned",
-            Self::Active => "active",
-            Self::Completed => "completed",
-        }
-    }
-}
-
-impl FromStr for MissionStatus {
-    type Err = String;
-
-    fn from_str(input: &str) -> std::result::Result<Self, Self::Err> {
-        match input {
-            "planned" => Ok(Self::Planned),
-            "active" => Ok(Self::Active),
-            "completed" => Ok(Self::Completed),
-            _ => Err(format!("unsupported mission status '{input}'")),
-        }
-    }
-}
-
-/// Minimal compatibility plan type used by placeholder dispatch crate.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+/// Minimal compatibility plan type retained for placeholder flows.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MissionPlan {
-    /// Human-readable name for the mission.
-    pub name: String,
+    /// Stable mission identifier.
+    pub id: String,
     /// Current lifecycle status.
     pub status: MissionStatus,
 }
@@ -72,21 +34,6 @@ impl MissionPlan {
         self.status = MissionStatus::Active;
         self
     }
-}
-
-/// Domain model for a persisted mission primitive.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Mission {
-    /// Stable mission identifier.
-    pub id: String,
-    /// Mission title.
-    pub title: String,
-    /// Mission lifecycle status.
-    pub status: MissionStatus,
-    /// Mission objective written in markdown.
-    pub objective: String,
-    /// Child thread identifiers.
-    pub child_threads: Vec<String>,
 }
 
 /// Progress summary for a mission.
@@ -119,16 +66,45 @@ pub async fn create_mission(
             "mission title must not be empty".to_owned(),
         ));
     }
+    if objective.trim().is_empty() {
+        return Err(WorkgraphError::ValidationError(
+            "mission objective must not be empty".to_owned(),
+        ));
+    }
 
-    let mission = Mission {
+    let mission = MissionPrimitive {
         id: id.to_owned(),
         title: title.to_owned(),
         status: MissionStatus::Planned,
         objective: objective.to_owned(),
-        child_threads: Vec::new(),
+        thread_ids: Vec::new(),
+        run_ids: Vec::new(),
     };
     save_mission(workspace, &mission).await?;
     Ok(mission)
+}
+
+/// Loads a persisted mission by identifier.
+///
+/// # Errors
+///
+/// Returns an error when the mission cannot be loaded or decoded.
+pub async fn load_mission(workspace: &WorkspacePath, mission_id: &str) -> Result<Mission> {
+    let primitive = read_primitive(workspace, MISSION_TYPE, mission_id).await?;
+    mission_from_primitive(&primitive)
+}
+
+/// Lists all persisted missions.
+///
+/// # Errors
+///
+/// Returns an error when mission primitives cannot be loaded or decoded.
+pub async fn list_missions(workspace: &WorkspacePath) -> Result<Vec<Mission>> {
+    list_primitives(workspace, MISSION_TYPE)
+        .await?
+        .iter()
+        .map(mission_from_primitive)
+        .collect()
 }
 
 /// Marks a mission active.
@@ -139,15 +115,37 @@ pub async fn create_mission(
 pub async fn activate_mission(workspace: &WorkspacePath, mission_id: &str) -> Result<Mission> {
     let mut mission = load_mission(workspace, mission_id).await?;
     match mission.status {
-        MissionStatus::Planned => mission.status = MissionStatus::Active,
+        MissionStatus::Planned | MissionStatus::Blocked => mission.status = MissionStatus::Active,
         MissionStatus::Active => {}
-        MissionStatus::Completed => {
+        MissionStatus::Completed | MissionStatus::Cancelled => {
             return Err(WorkgraphError::ValidationError(format!(
-                "mission '{mission_id}' is already completed"
+                "mission '{mission_id}' cannot be activated from status '{}'",
+                mission.status.as_str()
             )));
         }
     }
+    save_mission(workspace, &mission).await?;
+    Ok(mission)
+}
 
+/// Marks a mission blocked.
+///
+/// # Errors
+///
+/// Returns an error when the transition is invalid or persistence fails.
+pub async fn block_mission(workspace: &WorkspacePath, mission_id: &str) -> Result<Mission> {
+    let mut mission = load_mission(workspace, mission_id).await?;
+    match mission.status {
+        MissionStatus::Planned | MissionStatus::Active | MissionStatus::Blocked => {
+            mission.status = MissionStatus::Blocked;
+        }
+        MissionStatus::Completed | MissionStatus::Cancelled => {
+            return Err(WorkgraphError::ValidationError(format!(
+                "mission '{mission_id}' cannot be blocked from status '{}'",
+                mission.status.as_str()
+            )));
+        }
+    }
     save_mission(workspace, &mission).await?;
     Ok(mission)
 }
@@ -160,10 +158,17 @@ pub async fn activate_mission(workspace: &WorkspacePath, mission_id: &str) -> Re
 pub async fn complete_mission(workspace: &WorkspacePath, mission_id: &str) -> Result<Mission> {
     let mut mission = load_mission(workspace, mission_id).await?;
     match mission.status {
-        MissionStatus::Planned | MissionStatus::Active => mission.status = MissionStatus::Completed,
+        MissionStatus::Planned | MissionStatus::Active | MissionStatus::Blocked => {
+            mission.status = MissionStatus::Completed;
+        }
         MissionStatus::Completed => {}
+        MissionStatus::Cancelled => {
+            return Err(WorkgraphError::ValidationError(format!(
+                "mission '{mission_id}' cannot be completed from status '{}'",
+                mission.status.as_str()
+            )));
+        }
     }
-
     save_mission(workspace, &mission).await?;
     Ok(mission)
 }
@@ -172,7 +177,7 @@ pub async fn complete_mission(workspace: &WorkspacePath, mission_id: &str) -> Re
 ///
 /// # Errors
 ///
-/// Returns an error when persistence fails.
+/// Returns an error when the thread identifier is invalid or persistence fails.
 pub async fn add_thread_to_mission(
     workspace: &WorkspacePath,
     mission_id: &str,
@@ -183,10 +188,32 @@ pub async fn add_thread_to_mission(
             "thread id must not be empty".to_owned(),
         ));
     }
-
     let mut mission = load_mission(workspace, mission_id).await?;
-    if !mission.child_threads.iter().any(|id| id == thread_id) {
-        mission.child_threads.push(thread_id.to_owned());
+    if !mission.thread_ids.iter().any(|id| id == thread_id) {
+        mission.thread_ids.push(thread_id.to_owned());
+    }
+    save_mission(workspace, &mission).await?;
+    Ok(mission)
+}
+
+/// Adds a run to a mission.
+///
+/// # Errors
+///
+/// Returns an error when the run identifier is invalid or persistence fails.
+pub async fn add_run_to_mission(
+    workspace: &WorkspacePath,
+    mission_id: &str,
+    run_id: &str,
+) -> Result<Mission> {
+    if run_id.trim().is_empty() {
+        return Err(WorkgraphError::ValidationError(
+            "run id must not be empty".to_owned(),
+        ));
+    }
+    let mut mission = load_mission(workspace, mission_id).await?;
+    if !mission.run_ids.iter().any(|id| id == run_id) {
+        mission.run_ids.push(run_id.to_owned());
     }
     save_mission(workspace, &mission).await?;
     Ok(mission)
@@ -194,8 +221,7 @@ pub async fn add_thread_to_mission(
 
 /// Computes mission progress from the stored thread primitives.
 ///
-/// Missing thread primitives are counted in the total but not the completed
-/// count.
+/// Missing thread primitives are counted in the total but not the completed count.
 ///
 /// # Errors
 ///
@@ -208,16 +234,15 @@ pub async fn mission_progress(
     let mission = load_mission(workspace, mission_id).await?;
     let mut completed = 0;
 
-    for thread_id in &mission.child_threads {
+    for thread_id in &mission.thread_ids {
         match read_primitive(workspace, "thread", thread_id).await {
             Ok(thread) => {
-                if thread
+                let status = thread
                     .frontmatter
                     .extra_fields
                     .get("status")
-                    .and_then(string_value)
-                    == Some("completed")
-                {
+                    .map_or(Ok(ThreadStatus::Draft), parse_yaml_value)?;
+                if status == ThreadStatus::Done {
                     completed += 1;
                 }
             }
@@ -229,41 +254,36 @@ pub async fn mission_progress(
 
     Ok(MissionProgress {
         completed_threads: completed,
-        total_threads: mission.child_threads.len(),
+        total_threads: mission.thread_ids.len(),
     })
 }
 
-async fn load_mission(workspace: &WorkspacePath, mission_id: &str) -> Result<Mission> {
-    let primitive = read_primitive(workspace, MISSION_TYPE, mission_id).await?;
-    mission_from_primitive(&primitive)
-}
-
 async fn save_mission(workspace: &WorkspacePath, mission: &Mission) -> Result<()> {
-    let primitive = mission_to_primitive(mission);
+    let primitive = mission_to_primitive(mission)?;
     write_primitive(workspace, &Registry::builtins(), &primitive).await?;
     Ok(())
 }
 
-fn mission_to_primitive(mission: &Mission) -> StoredPrimitive {
-    let mut extra_fields = BTreeMap::new();
+fn mission_to_primitive(mission: &Mission) -> Result<StoredPrimitive> {
+    let mut extra_fields = std::collections::BTreeMap::new();
     extra_fields.insert(
         "status".to_owned(),
-        Value::String(mission.status.as_str().to_owned()),
+        serde_yaml::to_value(mission.status).map_err(encoding_error)?,
     );
-    if !mission.child_threads.is_empty() {
+    if !mission.thread_ids.is_empty() {
         extra_fields.insert(
             "thread_ids".to_owned(),
-            Value::Sequence(
-                mission
-                    .child_threads
-                    .iter()
-                    .map(|thread| Value::String(thread.clone()))
-                    .collect(),
-            ),
+            serde_yaml::to_value(&mission.thread_ids).map_err(encoding_error)?,
+        );
+    }
+    if !mission.run_ids.is_empty() {
+        extra_fields.insert(
+            "run_ids".to_owned(),
+            serde_yaml::to_value(&mission.run_ids).map_err(encoding_error)?,
         );
     }
 
-    StoredPrimitive {
+    Ok(StoredPrimitive {
         frontmatter: PrimitiveFrontmatter {
             r#type: MISSION_TYPE.to_owned(),
             id: mission.id.clone(),
@@ -271,7 +291,7 @@ fn mission_to_primitive(mission: &Mission) -> StoredPrimitive {
             extra_fields,
         },
         body: mission.objective.clone(),
-    }
+    })
 }
 
 fn mission_from_primitive(primitive: &StoredPrimitive) -> Result<Mission> {
@@ -282,70 +302,61 @@ fn mission_from_primitive(primitive: &StoredPrimitive) -> Result<Mission> {
         )));
     }
 
-    let status = primitive
-        .frontmatter
-        .extra_fields
-        .get("status")
-        .and_then(string_value)
-        .map_or(Ok(MissionStatus::Planned), |value| {
-            MissionStatus::from_str(value).map_err(WorkgraphError::ValidationError)
-        })?;
-    let child_threads = primitive
-        .frontmatter
-        .extra_fields
-        .get("thread_ids")
-        .map_or_else(Vec::new, parse_string_list);
+    if primitive.body.trim().is_empty() {
+        return Err(WorkgraphError::ValidationError(format!(
+            "mission '{}' must include a non-empty objective body",
+            primitive.frontmatter.id
+        )));
+    }
 
-    Ok(Mission {
+    Ok(MissionPrimitive {
         id: primitive.frontmatter.id.clone(),
         title: primitive.frontmatter.title.clone(),
-        status,
+        status: primitive
+            .frontmatter
+            .extra_fields
+            .get("status")
+            .map_or(Ok(MissionStatus::Planned), parse_yaml_value)?,
         objective: primitive.body.clone(),
-        child_threads,
+        thread_ids: primitive
+            .frontmatter
+            .extra_fields
+            .get("thread_ids")
+            .map_or(Ok(Vec::new()), parse_yaml_value)?,
+        run_ids: primitive
+            .frontmatter
+            .extra_fields
+            .get("run_ids")
+            .map_or(Ok(Vec::new()), parse_yaml_value)?,
     })
 }
 
-fn parse_string_list(value: &Value) -> Vec<String> {
-    match value {
-        Value::String(value) => vec![value.clone()],
-        Value::Sequence(values) => values
-            .iter()
-            .filter_map(string_value)
-            .map(str::to_owned)
-            .collect(),
-        Value::Tagged(tagged) => parse_string_list(&tagged.value),
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::Mapping(_) => Vec::new(),
-    }
+fn parse_yaml_value<T>(value: &Value) -> Result<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    serde_yaml::from_value::<T>(value.clone()).map_err(encoding_error)
 }
 
-fn string_value(value: &Value) -> Option<&str> {
-    match value {
-        Value::String(value) => Some(value.as_str()),
-        Value::Tagged(tagged) => string_value(&tagged.value),
-        Value::Null
-        | Value::Bool(_)
-        | Value::Number(_)
-        | Value::Sequence(_)
-        | Value::Mapping(_) => None,
-    }
+fn encoding_error(error: impl std::fmt::Display) -> WorkgraphError {
+    WorkgraphError::EncodingError(error.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
 
-    use serde_yaml::Value;
     use tempfile::tempdir;
     use wg_paths::WorkspacePath;
     use wg_store::{PrimitiveFrontmatter, StoredPrimitive, read_primitive, write_primitive};
-    use wg_types::Registry;
+    use wg_types::{Registry, ThreadStatus};
 
     use crate::{
-        MissionStatus, activate_mission, add_thread_to_mission, complete_mission, create_mission,
-        mission_progress,
+        MissionStatus, activate_mission, add_run_to_mission, add_thread_to_mission,
+        complete_mission, create_mission, mission_progress,
     };
 
-    fn thread(id: &str, status: &str) -> StoredPrimitive {
+    fn thread(id: &str, status: ThreadStatus) -> StoredPrimitive {
         StoredPrimitive {
             frontmatter: PrimitiveFrontmatter {
                 r#type: "thread".to_owned(),
@@ -353,7 +364,7 @@ mod tests {
                 title: format!("Thread {id}"),
                 extra_fields: BTreeMap::from([(
                     "status".to_owned(),
-                    Value::String(status.to_owned()),
+                    serde_yaml::to_value(status).expect("status should serialize"),
                 )]),
             },
             body: "## Conversation\n\n```yaml\n[]\n```\n".to_owned(),
@@ -361,29 +372,32 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn mission_lifecycle_and_thread_linking_roundtrip() {
+    async fn mission_lifecycle_and_links_roundtrip() {
         let temp_dir = tempdir().expect("temporary directory should be created");
         let workspace = WorkspacePath::new(temp_dir.path());
 
-        let created = create_mission(
+        create_mission(
             &workspace,
             "launch",
-            "Launch coordination",
-            "## Objective\nShip v1 safely.\n",
+            "Launch mission",
+            "Ship the launch safely.",
         )
         .await
         .expect("mission should be created");
-        assert_eq!(created.status, MissionStatus::Planned);
-
-        let activated = activate_mission(&workspace, "launch")
+        let active = activate_mission(&workspace, "launch")
             .await
             .expect("mission should activate");
-        assert_eq!(activated.status, MissionStatus::Active);
+        assert_eq!(active.status, MissionStatus::Active);
 
         let linked = add_thread_to_mission(&workspace, "launch", "thread-1")
             .await
             .expect("thread should be linked");
-        assert_eq!(linked.child_threads, vec!["thread-1"]);
+        assert_eq!(linked.thread_ids, vec!["thread-1"]);
+
+        let with_run = add_run_to_mission(&workspace, "launch", "run-1")
+            .await
+            .expect("run should be linked");
+        assert_eq!(with_run.run_ids, vec!["run-1"]);
 
         let completed = complete_mission(&workspace, "launch")
             .await
@@ -398,14 +412,13 @@ mod tests {
                 .frontmatter
                 .extra_fields
                 .get("status")
-                .expect("status should exist"),
-            &Value::String("completed".to_owned())
+                .expect("status field should be present"),
+            &serde_yaml::to_value(MissionStatus::Completed).expect("status should serialize")
         );
-        assert!(stored.body.contains("Ship v1 safely"));
     }
 
     #[tokio::test]
-    async fn mission_progress_counts_completed_threads_from_store() {
+    async fn mission_progress_counts_done_threads_from_store() {
         let temp_dir = tempdir().expect("temporary directory should be created");
         let workspace = WorkspacePath::new(temp_dir.path());
 
@@ -425,18 +438,33 @@ mod tests {
         write_primitive(
             &workspace,
             &Registry::builtins(),
-            &thread("t-1", "completed"),
+            &thread("t-1", ThreadStatus::Done),
         )
         .await
         .expect("thread t-1 should write");
-        write_primitive(&workspace, &Registry::builtins(), &thread("t-2", "open"))
-            .await
-            .expect("thread t-2 should write");
+        write_primitive(
+            &workspace,
+            &Registry::builtins(),
+            &thread("t-2", ThreadStatus::Active),
+        )
+        .await
+        .expect("thread t-2 should write");
 
         let progress = mission_progress(&workspace, "quality")
             .await
             .expect("mission progress should compute");
         assert_eq!(progress.completed_threads, 1);
         assert_eq!(progress.total_threads, 3);
+    }
+
+    #[tokio::test]
+    async fn mission_requires_non_empty_objective() {
+        let temp_dir = tempdir().expect("temporary directory should be created");
+        let workspace = WorkspacePath::new(temp_dir.path());
+
+        let error = create_mission(&workspace, "bad", "Bad mission", "   ")
+            .await
+            .expect_err("empty objective should fail");
+        assert!(error.to_string().contains("objective"));
     }
 }

@@ -1,36 +1,25 @@
 //! Implementation of the `workgraph status` command.
 
-use std::collections::BTreeMap;
-
-use anyhow::Context;
-use wg_store::list_primitives;
-
 use crate::app::AppContext;
 use crate::output::StatusOutput;
 
-/// Collects primitive counts and the most recent ledger entry for the workspace.
+/// Collects primitive counts, graph issues, and evidence gaps for the workspace.
 ///
 /// # Errors
 ///
-/// Returns an error when workspace metadata or primitives cannot be read.
+/// Returns an error when workspace metadata, ledger, or orientation data cannot be read.
 pub async fn handle(app: &AppContext) -> anyhow::Result<StatusOutput> {
     let config = app.load_config().await?;
-    let registry = app.load_registry().await?;
-    let mut counts = BTreeMap::new();
-
-    for primitive_type in registry.list_types() {
-        let primitives = list_primitives(app.workspace(), &primitive_type.name)
-            .await
-            .with_context(|| format!("failed to list primitive type '{}'", primitive_type.name))?;
-        counts.insert(primitive_type.name.clone(), primitives.len());
-    }
-
+    let workspace_status = wg_orientation::status(app.workspace()).await?;
     let entries = app.read_ledger_entries().await?;
 
     Ok(StatusOutput {
         config,
         workspace_root: app.root().display().to_string(),
-        type_counts: counts,
+        type_counts: workspace_status.type_counts,
+        recent_activity: workspace_status.recent_activity,
         last_entry: entries.last().cloned(),
+        graph_issues: workspace_status.graph_issues,
+        thread_evidence_gaps: workspace_status.thread_evidence_gaps,
     })
 }

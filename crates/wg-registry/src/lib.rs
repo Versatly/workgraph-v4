@@ -98,7 +98,7 @@ mod tests {
         let registry = RuntimeRegistry::with_builtins();
         let listed = registry.list_types();
 
-        assert_eq!(listed.len(), 16);
+        assert_eq!(listed.len(), 17);
         assert_eq!(
             registry
                 .get_type("person")
@@ -107,6 +107,7 @@ mod tests {
             "people"
         );
         assert!(registry.get_type("run").is_some());
+        assert!(registry.get_type("checkpoint").is_some());
         assert!(listed.windows(2).all(|pair| pair[0].name <= pair[1].name));
     }
 
