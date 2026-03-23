@@ -15,6 +15,8 @@ pub struct LedgerEntryDraft {
     pub primitive_id: String,
     /// The fields changed by the mutation, when known.
     pub fields_changed: Vec<String>,
+    /// Optional human-readable note describing the mutation.
+    pub note: Option<String>,
 }
 
 impl LedgerEntryDraft {
@@ -33,7 +35,15 @@ impl LedgerEntryDraft {
             primitive_type: primitive_type.into(),
             primitive_id: primitive_id.into(),
             fields_changed,
+            note: None,
         }
+    }
+
+    /// Attaches an optional descriptive note to the draft.
+    #[must_use]
+    pub fn with_note(mut self, note: impl Into<String>) -> Self {
+        self.note = Some(note.into());
+        self
     }
 }
 

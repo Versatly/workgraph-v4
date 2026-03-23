@@ -10,14 +10,16 @@ use serde_yaml::Value;
 use wg_error::{Result, WorkgraphError};
 use wg_paths::WorkspacePath;
 use wg_store::{
-    PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive, write_primitive,
+    AuditedWriteRequest, PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive,
+    write_primitive_audited_now,
 };
 use wg_types::{
-    ActorId, ConversationMessage, CoordinationAction, EvidenceItem, MessageKind, Registry,
-    ThreadExitCriterion, ThreadPrimitive, ThreadStatus,
+    ActorId, ConversationMessage, CoordinationAction, EvidenceItem, LedgerOp, MessageKind,
+    Registry, ThreadExitCriterion, ThreadPrimitive, ThreadStatus,
 };
 
 const THREAD_TYPE: &str = "thread";
+const SYSTEM_ACTOR: &str = "system:workgraph";
 
 /// Typed thread model persisted by this crate.
 pub type Thread = ThreadPrimitive;
@@ -98,7 +100,13 @@ pub async fn create_thread(
         completion_actions: Vec::new(),
         messages: Vec::new(),
     };
-    save_thread(workspace, &thread).await?;
+    save_thread_with_audit(
+        workspace,
+        &thread,
+        AuditedWriteRequest::new(system_actor(), LedgerOp::Create)
+            .with_note(format!("Created thread '{}'", thread.title)),
+    )
+    .await?;
     Ok(thread)
 }
 
@@ -142,7 +150,13 @@ pub async fn open_thread(workspace: &WorkspacePath, thread_id: &str) -> Result<T
             )));
         }
     }
-    save_thread(workspace, &thread).await?;
+    save_thread_with_audit(
+        workspace,
+        &thread,
+        AuditedWriteRequest::new(system_actor(), LedgerOp::Reopen)
+            .with_note(format!("Opened thread '{thread_id}'")),
+    )
+    .await?;
     Ok(thread)
 }
 
@@ -169,7 +183,7 @@ pub async fn claim_thread(
                     )));
                 }
             }
-            thread.assigned_actor = Some(actor);
+            thread.assigned_actor = Some(actor.clone());
             thread.status = ThreadStatus::Active;
         }
         ThreadStatus::Active => {
@@ -192,7 +206,13 @@ pub async fn claim_thread(
         }
     }
 
-    save_thread(workspace, &thread).await?;
+    save_thread_with_audit(
+        workspace,
+        &thread,
+        AuditedWriteRequest::new(actor.clone(), LedgerOp::Claim)
+            .with_note(format!("Claimed thread '{thread_id}'")),
+    )
+    .await?;
     Ok(thread)
 }
 
@@ -223,8 +243,17 @@ pub async fn add_exit_criterion(
             criterion.id
         )));
     }
+    let criterion_id = criterion.id.clone();
     thread.exit_criteria.push(criterion);
-    save_thread(workspace, &thread).await?;
+    save_thread_with_audit(
+        workspace,
+        &thread,
+        AuditedWriteRequest::new(system_actor(), LedgerOp::Update).with_note(format!(
+            "Added exit criterion '{}' to thread '{thread_id}'",
+            criterion_id
+        )),
+    )
+    .await?;
     Ok(thread)
 }
 
@@ -270,8 +299,17 @@ pub async fn add_evidence(
     if evidence.recorded_at.is_none() {
         evidence.recorded_at = Some(Utc::now());
     }
+    let evidence_id = evidence.id.clone();
     thread.evidence.push(evidence);
-    save_thread(workspace, &thread).await?;
+    save_thread_with_audit(
+        workspace,
+        &thread,
+        AuditedWriteRequest::new(system_actor(), LedgerOp::Update).with_note(format!(
+            "Added evidence '{}' to thread '{thread_id}'",
+            evidence_id
+        )),
+    )
+    .await?;
     Ok(thread)
 }
 
@@ -348,7 +386,13 @@ pub async fn complete_thread(workspace: &WorkspacePath, thread_id: &str) -> Resu
         }
     }
 
-    save_thread(workspace, &thread).await?;
+    save_thread_with_audit(
+        workspace,
+        &thread,
+        AuditedWriteRequest::new(system_actor(), LedgerOp::Done)
+            .with_note(format!("Completed thread '{thread_id}'")),
+    )
+    .await?;
     Ok(thread)
 }
 
@@ -377,6 +421,7 @@ pub async fn add_message(
         )));
     }
 
+    let message_actor = actor.clone();
     thread.messages.push(ConversationMessage {
         ts: Utc::now(),
         kind: infer_message_kind(&actor),
@@ -384,7 +429,13 @@ pub async fn add_message(
         text: text.to_owned(),
     });
 
-    save_thread(workspace, &thread).await?;
+    save_thread_with_audit(
+        workspace,
+        &thread,
+        AuditedWriteRequest::new(message_actor, LedgerOp::Update)
+            .with_note(format!("Added message to thread '{thread_id}'")),
+    )
+    .await?;
     Ok(thread)
 }
 
@@ -410,14 +461,27 @@ async fn add_action(
             action.id
         )));
     }
+    let action_id = action.id.clone();
     actions.push(action);
-    save_thread(workspace, &thread).await?;
+    save_thread_with_audit(
+        workspace,
+        &thread,
+        AuditedWriteRequest::new(system_actor(), LedgerOp::Update).with_note(format!(
+            "Added action '{}' to thread '{thread_id}'",
+            action_id
+        )),
+    )
+    .await?;
     Ok(thread)
 }
 
-async fn save_thread(workspace: &WorkspacePath, thread: &Thread) -> Result<()> {
+async fn save_thread_with_audit(
+    workspace: &WorkspacePath,
+    thread: &Thread,
+    audit: AuditedWriteRequest,
+) -> Result<()> {
     let primitive = thread_to_primitive(thread)?;
-    write_primitive(workspace, &Registry::builtins(), &primitive).await?;
+    write_primitive_audited_now(workspace, &Registry::builtins(), &primitive, audit).await?;
     Ok(())
 }
 
@@ -659,6 +723,10 @@ fn infer_message_kind(actor: &ActorId) -> MessageKind {
     }
 }
 
+fn system_actor() -> ActorId {
+    ActorId::new(SYSTEM_ACTOR)
+}
+
 fn encoding_error(error: impl std::fmt::Display) -> WorkgraphError {
     WorkgraphError::EncodingError(error.to_string())
 }
@@ -671,8 +739,10 @@ enum ActionList {
 #[cfg(test)]
 mod tests {
     use tempfile::tempdir;
+    use wg_ledger::LedgerReader;
     use wg_paths::WorkspacePath;
     use wg_store::read_primitive;
+    use wg_types::LedgerOp;
     use wg_types::{ActorId, CoordinationAction, EvidenceItem, ThreadExitCriterion, ThreadStatus};
 
     use crate::{
@@ -719,6 +789,15 @@ mod tests {
                 .expect("status field should be present"),
             &serde_yaml::to_value(ThreadStatus::Active).expect("status should serialize"),
         );
+
+        let (entries, _) = LedgerReader::new(temp_dir.path().to_path_buf())
+            .read_from(Default::default())
+            .await
+            .expect("ledger should be readable");
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0].op, LedgerOp::Create);
+        assert_eq!(entries[1].op, LedgerOp::Reopen);
+        assert_eq!(entries[2].op, LedgerOp::Claim);
     }
 
     #[tokio::test]

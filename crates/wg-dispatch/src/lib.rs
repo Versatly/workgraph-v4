@@ -7,11 +7,13 @@ use serde_yaml::Value;
 use wg_error::{Result, WorkgraphError};
 use wg_paths::WorkspacePath;
 use wg_store::{
-    PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive, write_primitive,
+    AuditedWriteRequest, PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive,
+    write_primitive_audited_now,
 };
-use wg_types::{ActorId, Registry, RunPrimitive, RunStatus};
+use wg_types::{ActorId, LedgerOp, Registry, RunPrimitive, RunStatus};
 
 const RUN_TYPE: &str = "run";
+const SYSTEM_ACTOR: &str = "system:workgraph";
 
 /// Typed run model persisted by this crate.
 pub type Run = RunPrimitive;
@@ -86,7 +88,13 @@ pub async fn create_run(
         parent_run_id: request.parent_run_id,
         summary: request.summary,
     };
-    save_run(workspace, &run).await?;
+    save_run_with_audit(
+        workspace,
+        &run,
+        AuditedWriteRequest::new(system_actor(), LedgerOp::Create)
+            .with_note(format!("Created run '{}'", run.id)),
+    )
+    .await?;
     Ok(run)
 }
 
@@ -119,7 +127,7 @@ pub async fn list_runs(workspace: &WorkspacePath) -> Result<Vec<Run>> {
 ///
 /// Returns an error when the transition is invalid or persistence fails.
 pub async fn start_run(workspace: &WorkspacePath, run_id: &str) -> Result<Run> {
-    transition_run(workspace, run_id, RunStatus::Running, None).await
+    transition_run(workspace, run_id, RunStatus::Running, LedgerOp::Start, None).await
 }
 
 /// Marks a run succeeded.
@@ -132,7 +140,14 @@ pub async fn complete_run(
     run_id: &str,
     summary: Option<&str>,
 ) -> Result<Run> {
-    transition_run(workspace, run_id, RunStatus::Succeeded, summary).await
+    transition_run(
+        workspace,
+        run_id,
+        RunStatus::Succeeded,
+        LedgerOp::Done,
+        summary,
+    )
+    .await
 }
 
 /// Marks a run failed.
@@ -145,7 +160,14 @@ pub async fn fail_run(
     run_id: &str,
     summary: Option<&str>,
 ) -> Result<Run> {
-    transition_run(workspace, run_id, RunStatus::Failed, summary).await
+    transition_run(
+        workspace,
+        run_id,
+        RunStatus::Failed,
+        LedgerOp::Update,
+        summary,
+    )
+    .await
 }
 
 /// Marks a run cancelled.
@@ -158,13 +180,21 @@ pub async fn cancel_run(
     run_id: &str,
     summary: Option<&str>,
 ) -> Result<Run> {
-    transition_run(workspace, run_id, RunStatus::Cancelled, summary).await
+    transition_run(
+        workspace,
+        run_id,
+        RunStatus::Cancelled,
+        LedgerOp::Cancel,
+        summary,
+    )
+    .await
 }
 
 async fn transition_run(
     workspace: &WorkspacePath,
     run_id: &str,
     next: RunStatus,
+    op: LedgerOp,
     summary: Option<&str>,
 ) -> Result<Run> {
     let mut run = load_run(workspace, run_id).await?;
@@ -175,13 +205,26 @@ async fn transition_run(
     if let Some(summary) = summary {
         run.summary = Some(summary.to_owned());
     }
-    save_run(workspace, &run).await?;
+    save_run_with_audit(
+        workspace,
+        &run,
+        AuditedWriteRequest::new(system_actor(), op).with_note(format!(
+            "Transitioned run '{}' to '{}'",
+            run.id,
+            run.status.as_str()
+        )),
+    )
+    .await?;
     Ok(run)
 }
 
-async fn save_run(workspace: &WorkspacePath, run: &Run) -> Result<()> {
+async fn save_run_with_audit(
+    workspace: &WorkspacePath,
+    run: &Run,
+    audit: AuditedWriteRequest,
+) -> Result<()> {
     let primitive = run_to_primitive(run)?;
-    write_primitive(workspace, &Registry::builtins(), &primitive).await?;
+    write_primitive_audited_now(workspace, &Registry::builtins(), &primitive, audit).await?;
     Ok(())
 }
 
@@ -311,12 +354,17 @@ fn encoding_error(error: impl std::fmt::Display) -> WorkgraphError {
     WorkgraphError::EncodingError(error.to_string())
 }
 
+fn system_actor() -> ActorId {
+    ActorId::new(SYSTEM_ACTOR)
+}
+
 #[cfg(test)]
 mod tests {
     use tempfile::tempdir;
+    use wg_ledger::LedgerReader;
     use wg_paths::WorkspacePath;
     use wg_store::read_primitive;
-    use wg_types::{ActorId, RunStatus};
+    use wg_types::{ActorId, LedgerOp, RunStatus};
 
     use crate::{
         cancel_run, complete_run, create_run, fail_run, load_run, prepare_dispatch, start_run,
@@ -368,6 +416,15 @@ mod tests {
             .await
             .expect("run should roundtrip");
         assert_eq!(loaded.summary.as_deref(), Some("Completed successfully"));
+
+        let (entries, _) = LedgerReader::new(temp_dir.path().to_path_buf())
+            .read_from(Default::default())
+            .await
+            .expect("ledger should be readable");
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0].op, LedgerOp::Create);
+        assert_eq!(entries[1].op, LedgerOp::Start);
+        assert_eq!(entries[2].op, LedgerOp::Done);
     }
 
     #[tokio::test]

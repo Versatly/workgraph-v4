@@ -41,6 +41,7 @@ Specifically:
 - typed graph edges with provenance
 - immutable ledger-backed history
 - evidence-aware coordination
+- policy-gated mutation surfaces for durable writes
 - trigger evaluation over durable events
 - cross-agent continuity through missions, threads, runs, checkpoints, and action plans
 

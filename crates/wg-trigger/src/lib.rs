@@ -7,14 +7,16 @@ use serde_yaml::Value;
 use wg_error::{Result, WorkgraphError};
 use wg_paths::WorkspacePath;
 use wg_store::{
-    PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive, write_primitive,
+    AuditedWriteRequest, PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive,
+    write_primitive_audited_now,
 };
 use wg_types::{
-    EventPattern, EventSourceKind, LedgerEntry, Registry, TriggerActionPlan, TriggerPrimitive,
-    TriggerStatus,
+    ActorId, EventPattern, EventSourceKind, LedgerEntry, LedgerOp, Registry, TriggerActionPlan,
+    TriggerPrimitive, TriggerStatus,
 };
 
 const TRIGGER_TYPE: &str = "trigger";
+const SYSTEM_ACTOR: &str = "system:workgraph";
 
 /// Typed trigger model persisted by this crate.
 pub type Trigger = TriggerPrimitive;
@@ -38,7 +40,14 @@ pub struct MatchedTrigger {
 pub async fn save_trigger(workspace: &WorkspacePath, trigger: &Trigger) -> Result<()> {
     validate_trigger_definition(trigger)?;
     let primitive = trigger_to_primitive(trigger)?;
-    write_primitive(workspace, &Registry::builtins(), &primitive).await?;
+    write_primitive_audited_now(
+        workspace,
+        &Registry::builtins(),
+        &primitive,
+        AuditedWriteRequest::new(system_actor(), LedgerOp::Update)
+            .with_note(format!("Saved trigger '{}'", trigger.id)),
+    )
+    .await?;
     Ok(())
 }
 
@@ -253,11 +262,15 @@ fn encoding_error(error: impl std::fmt::Display) -> WorkgraphError {
     WorkgraphError::EncodingError(error.to_string())
 }
 
+fn system_actor() -> ActorId {
+    ActorId::new(SYSTEM_ACTOR)
+}
+
 #[cfg(test)]
 mod tests {
     use tempfile::tempdir;
     use wg_clock::MockClock;
-    use wg_ledger::{LedgerEntryDraft, LedgerWriter};
+    use wg_ledger::{LedgerEntryDraft, LedgerReader, LedgerWriter};
     use wg_paths::WorkspacePath;
     use wg_types::{
         ActorId, EventPattern, EventSourceKind, LedgerOp, TriggerActionPlan, TriggerPrimitive,
@@ -322,6 +335,13 @@ mod tests {
         save_trigger(&workspace, &ledger_trigger("trigger-1"))
             .await
             .expect("trigger should persist");
+
+        let (entries, _) = LedgerReader::new(temp_dir.path().to_path_buf())
+            .read_from(Default::default())
+            .await
+            .expect("ledger should be readable");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].op, LedgerOp::Update);
 
         let clock = MockClock::new(
             "2026-03-22T10:00:00Z"

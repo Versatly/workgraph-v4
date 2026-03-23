@@ -2,14 +2,16 @@
 
 use anyhow::{Context, bail};
 use wg_clock::RealClock;
-use wg_ledger::{LedgerEntryDraft, LedgerWriter};
-use wg_store::{PrimitiveFrontmatter, StoredPrimitive, write_primitive};
+use wg_policy::{PolicyAction, PolicyContext, PolicyDecision, evaluate as evaluate_policy};
+use wg_store::{
+    AuditedWriteRequest, PrimitiveFrontmatter, StoredPrimitive, write_primitive_audited,
+};
 use wg_types::{ActorId, LedgerOp};
 
 use crate::app::AppContext;
 use crate::args::KeyValueInput;
 use crate::output::CreateOutput;
-use crate::util::fields::{changed_fields, split_body_and_frontmatter};
+use crate::util::fields::split_body_and_frontmatter;
 use crate::util::slug::unique_slug;
 
 /// Creates a new primitive and appends a matching ledger entry.
@@ -47,21 +49,28 @@ pub async fn handle(
         body,
     };
 
-    let path = write_primitive(app.workspace(), &registry, &primitive)
-        .await
-        .with_context(|| format!("failed to create {primitive_type}/{id}"))?;
+    let policy_decision = evaluate_policy(
+        app.workspace(),
+        &actor,
+        PolicyAction::Create,
+        primitive_type,
+        &PolicyContext::default(),
+    )
+    .await
+    .with_context(|| format!("failed to evaluate policy for {primitive_type}/{id}"))?;
+    if policy_decision == PolicyDecision::Deny {
+        bail!("policy denied creation of {primitive_type}/{id} for actor '{actor}'");
+    }
 
-    let writer = LedgerWriter::new(app.root().to_path_buf(), RealClock::new());
-    let ledger_entry = writer
-        .append(LedgerEntryDraft {
-            actor,
-            op: LedgerOp::Create,
-            primitive_type: primitive_type.to_owned(),
-            primitive_id: id.clone(),
-            fields_changed: changed_fields(&primitive),
-        })
-        .await
-        .with_context(|| format!("failed to append ledger entry for {primitive_type}/{id}"))?;
+    let (path, ledger_entry) = write_primitive_audited(
+        app.workspace(),
+        &registry,
+        &primitive,
+        AuditedWriteRequest::new(actor, LedgerOp::Create),
+        RealClock::new(),
+    )
+    .await
+    .with_context(|| format!("failed to create {primitive_type}/{id}"))?;
 
     Ok(CreateOutput {
         reference: format!("{primitive_type}/{id}"),

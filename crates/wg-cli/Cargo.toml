@@ -19,6 +19,7 @@ wg-fs = { path = "../wg-fs" }
 wg-ledger = { path = "../wg-ledger" }
 wg-orientation = { path = "../wg-orientation" }
 wg-paths = { path = "../wg-paths" }
+wg-policy = { path = "../wg-policy" }
 wg-registry = { path = "../wg-registry" }
 wg-store = { path = "../wg-store" }
 wg-error = { path = "../wg-error" }

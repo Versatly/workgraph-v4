@@ -3,14 +3,46 @@
 use std::path::Path;
 
 use tokio::fs;
+use wg_clock::{Clock, RealClock};
 use wg_encoding::{parse_frontmatter, write_frontmatter};
 use wg_error::{Result, WorkgraphError};
 use wg_fs::{atomic_write, ensure_dir, list_md_files};
+use wg_ledger::{LedgerEntryDraft, LedgerWriter};
 use wg_paths::{StorePath, WorkspacePath};
-use wg_types::Registry;
+use wg_types::{ActorId, LedgerEntry, LedgerOp, Registry};
 
 use crate::document::{PrimitiveFrontmatter, StoredPrimitive};
 use crate::validate::{validate_loaded_primitive, validate_primitive};
+
+/// Metadata required to persist a primitive write into the immutable ledger.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuditedWriteRequest {
+    /// Actor responsible for the mutation.
+    pub actor: ActorId,
+    /// Operation captured in the ledger.
+    pub op: LedgerOp,
+    /// Optional human-readable note describing the mutation.
+    pub note: Option<String>,
+}
+
+impl AuditedWriteRequest {
+    /// Creates a new audited write request.
+    #[must_use]
+    pub fn new(actor: ActorId, op: LedgerOp) -> Self {
+        Self {
+            actor,
+            op,
+            note: None,
+        }
+    }
+
+    /// Attaches a descriptive note to the audited write.
+    #[must_use]
+    pub fn with_note(mut self, note: impl Into<String>) -> Self {
+        self.note = Some(note.into());
+        self
+    }
+}
 
 /// Reads a single primitive from the markdown store by type and identifier.
 ///
@@ -56,6 +88,55 @@ pub async fn write_primitive(
 
     atomic_write(path.as_path(), document.as_bytes()).await?;
     Ok(path)
+}
+
+/// Validates, writes, and appends a corresponding immutable ledger entry.
+///
+/// # Errors
+///
+/// Returns an error when primitive validation, persistence, or ledger append
+/// fails.
+pub async fn write_primitive_audited<C>(
+    workspace: &WorkspacePath,
+    registry: &Registry,
+    primitive: &StoredPrimitive,
+    audit: AuditedWriteRequest,
+    clock: C,
+) -> Result<(StorePath, LedgerEntry)>
+where
+    C: Clock,
+{
+    let path = write_primitive(workspace, registry, primitive).await?;
+    let fields_changed = changed_fields(primitive);
+    let mut draft = LedgerEntryDraft::new(
+        audit.actor,
+        audit.op,
+        primitive.frontmatter.r#type.clone(),
+        primitive.frontmatter.id.clone(),
+        fields_changed,
+    );
+    if let Some(note) = audit.note {
+        draft = draft.with_note(note);
+    }
+
+    let writer = LedgerWriter::new(workspace.as_path().to_path_buf(), clock);
+    let ledger_entry = writer.append(draft).await?;
+    Ok((path, ledger_entry))
+}
+
+/// Validates, writes, and appends a corresponding immutable ledger entry using the real clock.
+///
+/// # Errors
+///
+/// Returns an error when primitive validation, persistence, or ledger append
+/// fails.
+pub async fn write_primitive_audited_now(
+    workspace: &WorkspacePath,
+    registry: &Registry,
+    primitive: &StoredPrimitive,
+    audit: AuditedWriteRequest,
+) -> Result<(StorePath, LedgerEntry)> {
+    write_primitive_audited(workspace, registry, primitive, audit, RealClock::new()).await
 }
 
 /// Lists all stored primitives for a given type.
@@ -135,6 +216,17 @@ pub(crate) async fn load_primitive_file(
     })
 }
 
+fn changed_fields(primitive: &StoredPrimitive) -> Vec<String> {
+    let mut fields = vec!["id".to_owned(), "title".to_owned(), "type".to_owned()];
+    fields.extend(primitive.frontmatter.extra_fields.keys().cloned());
+    if !primitive.body.trim().is_empty() {
+        fields.push("body".to_owned());
+    }
+    fields.sort();
+    fields.dedup();
+    fields
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -142,8 +234,9 @@ mod tests {
     use serde_yaml::Value;
     use tempfile::tempdir;
     use tokio::fs;
+    use wg_ledger::verify_chain;
     use wg_paths::WorkspacePath;
-    use wg_types::{FieldDefinition, PrimitiveType, Registry};
+    use wg_types::{ActorId, FieldDefinition, LedgerOp, PrimitiveType, Registry};
 
     use crate::document::{PrimitiveFrontmatter, StoredPrimitive};
 
@@ -283,5 +376,34 @@ mod tests {
             .expect("missing directories should behave like empty stores");
 
         assert!(primitives.is_empty());
+    }
+
+    #[tokio::test]
+    async fn audited_write_appends_ledger_entry_and_verifies_chain() {
+        let temp_dir = tempdir().expect("temporary directory should be created");
+        let workspace = WorkspacePath::new(temp_dir.path());
+        let registry = decision_registry();
+        let primitive = decision_primitive("audited", "Audited decision", "proposed", []);
+
+        let (_, ledger_entry) = super::write_primitive_audited_now(
+            &workspace,
+            &registry,
+            &primitive,
+            super::AuditedWriteRequest::new(ActorId::new("pedro"), LedgerOp::Create)
+                .with_note("Created during test"),
+        )
+        .await
+        .expect("audited write should succeed");
+
+        assert_eq!(ledger_entry.actor.as_str(), "pedro");
+        assert_eq!(ledger_entry.op, LedgerOp::Create);
+        assert_eq!(ledger_entry.primitive_type, "decision");
+        assert_eq!(ledger_entry.primitive_id, "audited");
+        assert!(ledger_entry.fields_changed.contains(&"status".to_owned()));
+        assert_eq!(ledger_entry.note.as_deref(), Some("Created during test"));
+
+        verify_chain(temp_dir.path())
+            .await
+            .expect("audited write should keep the ledger chain valid");
     }
 }
