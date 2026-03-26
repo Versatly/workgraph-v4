@@ -5,25 +5,23 @@
 
 use std::collections::BTreeSet;
 
-use serde_yaml::Value;
-use wg_error::{Result, WorkgraphError};
+use wg_error::Result;
 use wg_paths::WorkspacePath;
-use wg_store::{
-    AuditedWriteRequest, PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive,
-    write_primitive_audited_now,
-};
-use wg_types::{
-    ActorId, ConversationMessage, CoordinationAction, EvidenceItem, MessageKind, Registry,
-    ThreadExitCriterion, ThreadPrimitive, ThreadStatus,
-};
+use wg_store::{AuditedWriteRequest, list_primitives, read_primitive};
+use wg_types::{ActorId, CoordinationAction, EvidenceItem, ThreadExitCriterion, ThreadPrimitive};
 
+mod codec;
 mod mutation;
+mod mutation_support;
+mod render;
 
 const THREAD_TYPE: &str = "thread";
 const SYSTEM_ACTOR: &str = "system:workgraph";
 
 /// Typed thread model persisted by this crate.
 pub type Thread = ThreadPrimitive;
+
+use codec::{thread_from_primitive, thread_to_primitive};
 
 pub use mutation::ThreadMutationService;
 
@@ -247,254 +245,14 @@ async fn save_thread_with_audit(
     audit: AuditedWriteRequest,
 ) -> Result<()> {
     let primitive = thread_to_primitive(thread)?;
-    write_primitive_audited_now(workspace, &Registry::builtins(), &primitive, audit).await?;
+    wg_store::write_primitive_audited_now(
+        workspace,
+        &wg_types::Registry::builtins(),
+        &primitive,
+        audit,
+    )
+    .await?;
     Ok(())
-}
-
-fn thread_to_primitive(thread: &Thread) -> Result<StoredPrimitive> {
-    let mut extra_fields = std::collections::BTreeMap::new();
-    extra_fields.insert(
-        "status".to_owned(),
-        serde_yaml::to_value(thread.status).map_err(encoding_error)?,
-    );
-    if let Some(actor) = &thread.assigned_actor {
-        extra_fields.insert(
-            "assigned_actor".to_owned(),
-            Value::String(actor.to_string()),
-        );
-    }
-    if let Some(parent_mission_id) = &thread.parent_mission_id {
-        extra_fields.insert(
-            "parent_mission_id".to_owned(),
-            Value::String(parent_mission_id.clone()),
-        );
-    }
-    if !thread.exit_criteria.is_empty() {
-        extra_fields.insert(
-            "exit_criteria".to_owned(),
-            serde_yaml::to_value(&thread.exit_criteria).map_err(encoding_error)?,
-        );
-    }
-    if !thread.evidence.is_empty() {
-        extra_fields.insert(
-            "evidence".to_owned(),
-            serde_yaml::to_value(&thread.evidence).map_err(encoding_error)?,
-        );
-    }
-    if !thread.update_actions.is_empty() {
-        extra_fields.insert(
-            "update_actions".to_owned(),
-            serde_yaml::to_value(&thread.update_actions).map_err(encoding_error)?,
-        );
-    }
-    if !thread.completion_actions.is_empty() {
-        extra_fields.insert(
-            "completion_actions".to_owned(),
-            serde_yaml::to_value(&thread.completion_actions).map_err(encoding_error)?,
-        );
-    }
-
-    Ok(StoredPrimitive {
-        frontmatter: PrimitiveFrontmatter {
-            r#type: THREAD_TYPE.to_owned(),
-            id: thread.id.clone(),
-            title: thread.title.clone(),
-            extra_fields,
-        },
-        body: render_thread_body(thread)?,
-    })
-}
-
-fn thread_from_primitive(primitive: &StoredPrimitive) -> Result<Thread> {
-    if primitive.frontmatter.r#type != THREAD_TYPE {
-        return Err(WorkgraphError::ValidationError(format!(
-            "expected thread primitive, found '{}'",
-            primitive.frontmatter.r#type
-        )));
-    }
-
-    Ok(ThreadPrimitive {
-        id: primitive.frontmatter.id.clone(),
-        title: primitive.frontmatter.title.clone(),
-        status: primitive
-            .frontmatter
-            .extra_fields
-            .get("status")
-            .map_or(Ok(ThreadStatus::Draft), parse_yaml_value)?,
-        assigned_actor: primitive
-            .frontmatter
-            .extra_fields
-            .get("assigned_actor")
-            .and_then(string_value)
-            .map(ActorId::new),
-        parent_mission_id: primitive
-            .frontmatter
-            .extra_fields
-            .get("parent_mission_id")
-            .and_then(string_value)
-            .map(str::to_owned),
-        exit_criteria: primitive
-            .frontmatter
-            .extra_fields
-            .get("exit_criteria")
-            .map_or(Ok(Vec::new()), parse_yaml_value)?,
-        evidence: primitive
-            .frontmatter
-            .extra_fields
-            .get("evidence")
-            .map_or(Ok(Vec::new()), parse_yaml_value)?,
-        update_actions: primitive
-            .frontmatter
-            .extra_fields
-            .get("update_actions")
-            .map_or(Ok(Vec::new()), parse_yaml_value)?,
-        completion_actions: primitive
-            .frontmatter
-            .extra_fields
-            .get("completion_actions")
-            .map_or(Ok(Vec::new()), parse_yaml_value)?,
-        messages: parse_conversation_messages(&primitive.body)?,
-    })
-}
-
-fn render_thread_body(thread: &Thread) -> Result<String> {
-    let mut rendered = String::new();
-
-    rendered.push_str("## Exit Criteria\n");
-    if thread.exit_criteria.is_empty() {
-        rendered.push_str("None recorded.\n");
-    } else {
-        for criterion in &thread.exit_criteria {
-            let required = if criterion.required {
-                "required"
-            } else {
-                "optional"
-            };
-            rendered.push_str(&format!(
-                "- {} [{}] ({})\n",
-                criterion.title, criterion.id, required
-            ));
-            if let Some(description) = &criterion.description {
-                rendered.push_str(&format!("  {}\n", description.trim()));
-            }
-            if let Some(reference) = &criterion.reference {
-                rendered.push_str(&format!("  reference: {}\n", reference));
-            }
-        }
-    }
-
-    rendered.push_str("\n## Evidence\n");
-    if thread.evidence.is_empty() {
-        rendered.push_str("None recorded.\n");
-    } else {
-        for evidence in &thread.evidence {
-            rendered.push_str(&format!("- {} ({})\n", evidence.title, evidence.id));
-            if !evidence.satisfies.is_empty() {
-                rendered.push_str(&format!("  satisfies: {}\n", evidence.satisfies.join(", ")));
-            }
-            if let Some(reference) = &evidence.reference {
-                rendered.push_str(&format!("  reference: {}\n", reference));
-            }
-            if let Some(source) = &evidence.source {
-                rendered.push_str(&format!("  source: {}\n", source));
-            }
-        }
-    }
-
-    rendered.push_str("\n## Update Actions\n");
-    render_actions(&mut rendered, &thread.update_actions);
-    rendered.push_str("\n## Completion Actions\n");
-    render_actions(&mut rendered, &thread.completion_actions);
-
-    let yaml = serde_yaml::to_string(&thread.messages).map_err(encoding_error)?;
-    let yaml = yaml
-        .strip_prefix("---\n")
-        .or_else(|| yaml.strip_prefix("---\r\n"))
-        .unwrap_or(yaml.as_str());
-    let trailing_newline = if yaml.ends_with('\n') { "" } else { "\n" };
-    rendered.push_str("\n## Conversation\n\n```yaml\n");
-    rendered.push_str(yaml);
-    rendered.push_str(trailing_newline);
-    rendered.push_str("```\n");
-
-    Ok(rendered)
-}
-
-fn render_actions(rendered: &mut String, actions: &[CoordinationAction]) {
-    if actions.is_empty() {
-        rendered.push_str("None planned.\n");
-        return;
-    }
-
-    for action in actions {
-        rendered.push_str(&format!(
-            "- {} ({}) [{}]\n",
-            action.title, action.id, action.kind
-        ));
-        if let Some(target_reference) = &action.target_reference {
-            rendered.push_str(&format!("  target: {}\n", target_reference));
-        }
-        if let Some(description) = &action.description {
-            rendered.push_str(&format!("  {}\n", description.trim()));
-        }
-    }
-}
-
-fn parse_conversation_messages(body: &str) -> Result<Vec<ConversationMessage>> {
-    let Some(opening) = body.find("```yaml") else {
-        return Ok(Vec::new());
-    };
-
-    let after_opening = &body[opening + "```yaml".len()..];
-    let after_newline = after_opening.strip_prefix('\n').unwrap_or(after_opening);
-    let Some(closing) = after_newline.find("\n```") else {
-        return Err(WorkgraphError::ValidationError(
-            "thread conversation body is missing closing ``` fence".to_owned(),
-        ));
-    };
-    let yaml = &after_newline[..closing];
-
-    if yaml.trim().is_empty() {
-        return Ok(Vec::new());
-    }
-
-    serde_yaml::from_str::<Vec<ConversationMessage>>(yaml).map_err(encoding_error)
-}
-
-fn parse_yaml_value<T>(value: &Value) -> Result<T>
-where
-    T: serde::de::DeserializeOwned,
-{
-    serde_yaml::from_value::<T>(value.clone()).map_err(encoding_error)
-}
-
-fn string_value(value: &Value) -> Option<&str> {
-    match value {
-        Value::String(value) => Some(value.as_str()),
-        Value::Tagged(tagged) => string_value(&tagged.value),
-        Value::Null
-        | Value::Bool(_)
-        | Value::Number(_)
-        | Value::Sequence(_)
-        | Value::Mapping(_) => None,
-    }
-}
-
-fn infer_message_kind(actor: &ActorId) -> MessageKind {
-    let value = actor.as_str();
-    if value.starts_with("agent:") || value.starts_with("agent/") {
-        MessageKind::Agent
-    } else {
-        MessageKind::Human
-    }
-}
-
-fn system_actor() -> ActorId {
-    ActorId::new(SYSTEM_ACTOR)
-}
-
-fn encoding_error(error: impl std::fmt::Display) -> WorkgraphError {
-    WorkgraphError::EncodingError(error.to_string())
 }
 
 #[cfg(test)]

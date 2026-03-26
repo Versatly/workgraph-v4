@@ -3,17 +3,15 @@ use std::collections::BTreeSet;
 use chrono::Utc;
 use wg_error::{Result, WorkgraphError};
 use wg_paths::WorkspacePath;
-use wg_policy::{PolicyAction, PolicyContext, PolicyDecision, evaluate as evaluate_policy};
 use wg_store::AuditedWriteRequest;
 use wg_types::{
     ActorId, ConversationMessage, CoordinationAction, EvidenceItem, LedgerOp, ThreadExitCriterion,
     ThreadStatus,
 };
 
-use crate::{
-    THREAD_TYPE, Thread, infer_message_kind, load_thread, save_thread_with_audit, system_actor,
-    unsatisfied_exit_criteria,
-};
+use crate::mutation_support::persist_thread;
+use crate::render::infer_message_kind;
+use crate::{SYSTEM_ACTOR, Thread, load_thread, unsatisfied_exit_criteria};
 
 /// Domain mutation service for evidence-bearing thread lifecycle changes.
 ///
@@ -66,7 +64,8 @@ impl<'a> ThreadMutationService<'a> {
             completion_actions: Vec::new(),
             messages: Vec::new(),
         };
-        self.persist(
+        persist_thread(
+            self.workspace,
             &thread,
             AuditedWriteRequest::new(system_actor(), LedgerOp::Create)
                 .with_note(format!("Created thread '{}'", thread.title)),
@@ -92,7 +91,8 @@ impl<'a> ThreadMutationService<'a> {
                 )));
             }
         }
-        self.persist(
+        persist_thread(
+            self.workspace,
             &thread,
             AuditedWriteRequest::new(system_actor(), LedgerOp::Reopen)
                 .with_note(format!("Opened thread '{thread_id}'")),
@@ -143,7 +143,8 @@ impl<'a> ThreadMutationService<'a> {
             }
         }
 
-        self.persist(
+        persist_thread(
+            self.workspace,
             &thread,
             AuditedWriteRequest::new(actor.clone(), LedgerOp::Claim)
                 .with_note(format!("Claimed thread '{thread_id}'")),
@@ -181,7 +182,8 @@ impl<'a> ThreadMutationService<'a> {
         }
         let criterion_id = criterion.id.clone();
         thread.exit_criteria.push(criterion);
-        self.persist(
+        persist_thread(
+            self.workspace,
             &thread,
             AuditedWriteRequest::new(system_actor(), LedgerOp::Update).with_note(format!(
                 "Added exit criterion '{}' to thread '{thread_id}'",
@@ -232,7 +234,8 @@ impl<'a> ThreadMutationService<'a> {
         }
         let evidence_id = evidence.id.clone();
         thread.evidence.push(evidence);
-        self.persist(
+        persist_thread(
+            self.workspace,
             &thread,
             AuditedWriteRequest::new(system_actor(), LedgerOp::Update).with_note(format!(
                 "Added evidence '{}' to thread '{thread_id}'",
@@ -301,7 +304,8 @@ impl<'a> ThreadMutationService<'a> {
             }
         }
 
-        self.persist(
+        persist_thread(
+            self.workspace,
             &thread,
             AuditedWriteRequest::new(system_actor(), LedgerOp::Done)
                 .with_note(format!("Completed thread '{thread_id}'")),
@@ -338,7 +342,8 @@ impl<'a> ThreadMutationService<'a> {
             text: text.to_owned(),
         });
 
-        self.persist(
+        persist_thread(
+            self.workspace,
             &thread,
             AuditedWriteRequest::new(message_actor, LedgerOp::Update)
                 .with_note(format!("Added message to thread '{thread_id}'")),
@@ -371,7 +376,8 @@ impl<'a> ThreadMutationService<'a> {
         }
         let action_id = action.id.clone();
         actions.push(action);
-        self.persist(
+        persist_thread(
+            self.workspace,
             &thread,
             AuditedWriteRequest::new(system_actor(), LedgerOp::Update).with_note(format!(
                 "Added action '{}' to thread '{thread_id}'",
@@ -381,65 +387,13 @@ impl<'a> ThreadMutationService<'a> {
         .await?;
         Ok(thread)
     }
-
-    async fn persist(self, thread: &Thread, audit: AuditedWriteRequest) -> Result<()> {
-        self.authorize(thread.id.as_str(), &audit).await?;
-        save_thread_with_audit(self.workspace, thread, audit.clone()).await?;
-        self.after_mutation(thread, &audit).await
-    }
-
-    async fn authorize(self, thread_id: &str, audit: &AuditedWriteRequest) -> Result<()> {
-        let action = policy_action_for(audit.op);
-        let decision = evaluate_policy(
-            self.workspace,
-            &audit.actor,
-            action,
-            THREAD_TYPE,
-            &PolicyContext::default(),
-        )
-        .await?;
-        if decision == PolicyDecision::Deny {
-            return Err(WorkgraphError::ValidationError(format!(
-                "policy denied {} of {THREAD_TYPE}/{thread_id} for actor '{}'",
-                policy_action_label(action),
-                audit.actor
-            )));
-        }
-        Ok(())
-    }
-
-    async fn after_mutation(self, _thread: &Thread, _audit: &AuditedWriteRequest) -> Result<()> {
-        // Reserved for future trigger-aware follow-up hooks.
-        Ok(())
-    }
-}
-
-fn policy_action_for(op: LedgerOp) -> PolicyAction {
-    match op {
-        LedgerOp::Create => PolicyAction::Create,
-        LedgerOp::Update
-        | LedgerOp::Delete
-        | LedgerOp::Claim
-        | LedgerOp::Release
-        | LedgerOp::Start
-        | LedgerOp::Done
-        | LedgerOp::Cancel
-        | LedgerOp::Reopen
-        | LedgerOp::Assign
-        | LedgerOp::Unassign => PolicyAction::Update,
-    }
-}
-
-fn policy_action_label(action: PolicyAction) -> &'static str {
-    match action {
-        PolicyAction::Create => "create",
-        PolicyAction::Read => "read",
-        PolicyAction::Update => "update",
-        PolicyAction::Delete => "delete",
-    }
 }
 
 enum ActionList {
     Update,
     Completion,
+}
+
+fn system_actor() -> ActorId {
+    ActorId::new(SYSTEM_ACTOR)
 }

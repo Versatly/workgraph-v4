@@ -1,18 +1,16 @@
 //! Runtime orientation functions backed by store, ledger, and graph data.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
-use wg_dispatch::Run;
 use wg_error::Result;
-use wg_graph::build_graph;
-use wg_ledger::{LedgerCursor, LedgerReader};
-use wg_mission::Mission;
 use wg_paths::WorkspacePath;
 use wg_store::StoredPrimitive;
-use wg_thread::Thread;
-use wg_types::{ActorId, GraphEdgeKind, GraphEdgeSource, LedgerEntry};
+use wg_types::ActorId;
 
-use crate::{BriefItem, CheckpointMutationService, GraphIssue, RecentActivity, ThreadEvidenceGap};
+use crate::{
+    BriefItem, CheckpointMutationService, GraphIssue, RecentActivity, ThreadEvidenceGap,
+    brief_runtime, status_runtime,
+};
 
 /// Workspace orientation summary derived from real persisted data.
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
@@ -50,31 +48,7 @@ pub struct ActorBrief {
 ///
 /// Returns an error when graph, store, or ledger data cannot be loaded.
 pub async fn status(workspace: &WorkspacePath) -> Result<WorkspaceStatus> {
-    let graph = build_graph(workspace).await?;
-    let mut type_counts = BTreeMap::new();
-
-    for node in graph.nodes() {
-        *type_counts.entry(node.primitive_type).or_insert(0) += 1;
-    }
-
-    let graph_issues = graph
-        .broken_links()
-        .iter()
-        .map(|broken| GraphIssue {
-            source_reference: broken.source.reference(),
-            target_reference: broken.target.clone(),
-            kind: edge_kind_label(broken.kind).to_owned(),
-            provenance: edge_source_label(broken.provenance).to_owned(),
-            reason: broken.reason.clone(),
-        })
-        .collect();
-
-    Ok(WorkspaceStatus {
-        type_counts,
-        recent_activity: load_recent_activity(workspace, 10).await?,
-        graph_issues,
-        thread_evidence_gaps: load_thread_evidence_gaps(workspace).await?,
-    })
+    status_runtime::status(workspace).await
 }
 
 /// Builds an actor-scoped brief showing assignments and relevant changes.
@@ -83,138 +57,7 @@ pub async fn status(workspace: &WorkspacePath) -> Result<WorkspaceStatus> {
 ///
 /// Returns an error when store or ledger data cannot be loaded.
 pub async fn brief(workspace: &WorkspacePath, actor: &ActorId) -> Result<ActorBrief> {
-    let actor_id = actor.as_str();
-    let workspace_status = status(workspace).await?;
-    let threads = load_threads(workspace).await?;
-    let runs = load_runs(workspace).await?;
-    let missions = load_missions(workspace).await?;
-
-    let assigned_threads = threads
-        .iter()
-        .filter(|thread| {
-            thread
-                .assigned_actor
-                .as_ref()
-                .is_some_and(|assigned| assigned.as_str() == actor_id)
-        })
-        .map(|thread| {
-            brief_item(
-                "thread",
-                &format!("thread/{}", thread.id),
-                &thread.title,
-                Some(thread.status.as_str().to_owned()),
-            )
-        })
-        .collect::<Vec<_>>();
-    let assigned_thread_ids = assigned_threads
-        .iter()
-        .filter_map(|item| item.reference.as_deref())
-        .filter_map(reference_id)
-        .collect::<BTreeSet<_>>();
-
-    let assigned_runs = runs
-        .iter()
-        .filter(|run| {
-            run.actor_id.as_str() == actor_id
-                || run
-                    .executor_id
-                    .as_ref()
-                    .is_some_and(|executor| executor.as_str() == actor_id)
-        })
-        .map(|run| {
-            brief_item(
-                "run",
-                &format!("run/{}", run.id),
-                &run.title,
-                Some(run.status.as_str().to_owned()),
-            )
-        })
-        .collect::<Vec<_>>();
-    let assigned_run_ids = assigned_runs
-        .iter()
-        .filter_map(|item| item.reference.as_deref())
-        .filter_map(reference_id)
-        .collect::<BTreeSet<_>>();
-
-    let assigned_missions = missions
-        .iter()
-        .filter(|mission| {
-            mission
-                .thread_ids
-                .iter()
-                .any(|thread_id| assigned_thread_ids.contains(thread_id.as_str()))
-                || mission
-                    .run_ids
-                    .iter()
-                    .any(|run_id| assigned_run_ids.contains(run_id.as_str()))
-        })
-        .map(|mission| {
-            brief_item(
-                "mission",
-                &format!("mission/{}", mission.id),
-                &mission.title,
-                Some(mission.status.as_str().to_owned()),
-            )
-        })
-        .collect::<Vec<_>>();
-
-    let relevant_refs = assigned_threads
-        .iter()
-        .chain(&assigned_runs)
-        .chain(&assigned_missions)
-        .filter_map(|item| item.reference.clone())
-        .collect::<BTreeSet<_>>();
-    let recent_relevant_activity = load_ledger_entries(workspace)
-        .await?
-        .into_iter()
-        .rev()
-        .filter(|entry| {
-            entry.actor.as_str() == actor_id
-                || relevant_refs
-                    .contains(&format!("{}/{}", entry.primitive_type, entry.primitive_id))
-        })
-        .take(10)
-        .map(entry_to_recent_activity)
-        .collect::<Vec<_>>();
-
-    let mut warnings = Vec::new();
-    if assigned_threads.is_empty() && assigned_runs.is_empty() && assigned_missions.is_empty() {
-        warnings.push(format!(
-            "Actor '{actor_id}' has no assigned threads, runs, or missions"
-        ));
-    }
-    for gap in workspace_status.thread_evidence_gaps.iter().filter(|gap| {
-        reference_id(&gap.thread_reference)
-            .is_some_and(|thread_id| assigned_thread_ids.contains(thread_id))
-    }) {
-        warnings.push(format!(
-            "Thread '{}' is missing required evidence for: {}",
-            gap.thread_reference,
-            gap.missing_criteria.join(", ")
-        ));
-    }
-    for issue in workspace_status.graph_issues.iter().filter(|issue| {
-        relevant_refs.contains(&issue.source_reference)
-            || relevant_refs.contains(&issue.target_reference)
-    }) {
-        warnings.push(format!(
-            "Graph issue: {} -> {} [{} via {}] ({})",
-            issue.source_reference,
-            issue.target_reference,
-            issue.kind,
-            issue.provenance,
-            issue.reason
-        ));
-    }
-
-    Ok(ActorBrief {
-        actor: actor_id.to_owned(),
-        assigned_threads,
-        assigned_runs,
-        assigned_missions,
-        recent_relevant_activity,
-        warnings,
-    })
+    brief_runtime::brief(workspace, actor).await
 }
 
 /// Saves a checkpoint primitive for current work focus.
@@ -230,98 +73,6 @@ pub async fn checkpoint(
     CheckpointMutationService::new(workspace)
         .checkpoint(working_on, focus)
         .await
-}
-
-async fn load_recent_activity(
-    workspace: &WorkspacePath,
-    limit: usize,
-) -> Result<Vec<RecentActivity>> {
-    Ok(load_ledger_entries(workspace)
-        .await?
-        .into_iter()
-        .rev()
-        .take(limit)
-        .map(entry_to_recent_activity)
-        .collect())
-}
-
-async fn load_ledger_entries(workspace: &WorkspacePath) -> Result<Vec<LedgerEntry>> {
-    let reader = LedgerReader::new(workspace.as_path().to_path_buf());
-    let (entries, _) = reader.read_from(LedgerCursor::default()).await?;
-    Ok(entries)
-}
-
-async fn load_thread_evidence_gaps(workspace: &WorkspacePath) -> Result<Vec<ThreadEvidenceGap>> {
-    Ok(load_threads(workspace)
-        .await?
-        .into_iter()
-        .filter_map(|thread| {
-            let missing_criteria = missing_criteria(&thread);
-            (!missing_criteria.is_empty()).then(|| ThreadEvidenceGap {
-                thread_reference: format!("thread/{}", thread.id),
-                missing_criteria,
-            })
-        })
-        .collect())
-}
-
-async fn load_threads(workspace: &WorkspacePath) -> Result<Vec<Thread>> {
-    wg_thread::list_threads(workspace).await
-}
-
-async fn load_missions(workspace: &WorkspacePath) -> Result<Vec<Mission>> {
-    wg_mission::list_missions(workspace).await
-}
-
-async fn load_runs(workspace: &WorkspacePath) -> Result<Vec<Run>> {
-    wg_dispatch::list_runs(workspace).await
-}
-
-fn entry_to_recent_activity(entry: LedgerEntry) -> RecentActivity {
-    RecentActivity {
-        ts: entry.ts.to_rfc3339(),
-        actor: entry.actor.to_string(),
-        op: format!("{:?}", entry.op).to_lowercase(),
-        reference: format!("{}/{}", entry.primitive_type, entry.primitive_id),
-    }
-}
-
-fn brief_item(kind: &str, reference: &str, title: &str, detail: Option<String>) -> BriefItem {
-    BriefItem {
-        kind: kind.to_owned(),
-        reference: Some(reference.to_owned()),
-        title: title.to_owned(),
-        detail,
-    }
-}
-
-fn reference_id(reference: &str) -> Option<&str> {
-    reference.split_once('/').map(|(_, id)| id)
-}
-
-fn missing_criteria(thread: &Thread) -> Vec<String> {
-    wg_thread::unsatisfied_exit_criteria(thread)
-}
-
-fn edge_kind_label(kind: GraphEdgeKind) -> &'static str {
-    match kind {
-        GraphEdgeKind::Reference => "reference",
-        GraphEdgeKind::Relationship => "relationship",
-        GraphEdgeKind::Assignment => "assignment",
-        GraphEdgeKind::Containment => "containment",
-        GraphEdgeKind::Evidence => "evidence",
-        GraphEdgeKind::Trigger => "trigger",
-    }
-}
-
-fn edge_source_label(source: GraphEdgeSource) -> &'static str {
-    match source {
-        GraphEdgeSource::WikiLink => "wiki_link",
-        GraphEdgeSource::Field => "field",
-        GraphEdgeSource::RelationshipPrimitive => "relationship_primitive",
-        GraphEdgeSource::EvidenceRecord => "evidence_record",
-        GraphEdgeSource::TriggerRule => "trigger_rule",
-    }
 }
 
 #[cfg(test)]
