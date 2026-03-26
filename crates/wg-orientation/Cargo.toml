@@ -16,6 +16,8 @@ wg-graph = { path = "../wg-graph" }
 wg-ledger = { path = "../wg-ledger" }
 wg-mission = { path = "../wg-mission" }
 wg-paths = { path = "../wg-paths" }
+wg-policy = { path = "../wg-policy" }
+wg-store = { path = "../wg-store" }
 wg-thread = { path = "../wg-thread" }
 wg-types = { path = "../wg-types" }
 

@@ -13,8 +13,8 @@ use wg_store::{
     write_primitive_audited_now,
 };
 use wg_types::{
-    ActorId, ConversationMessage, CoordinationAction, EvidenceItem, LedgerOp, MessageKind,
-    Registry, ThreadExitCriterion, ThreadPrimitive, ThreadStatus,
+    ActorId, ConversationMessage, CoordinationAction, EvidenceItem, MessageKind, Registry,
+    ThreadExitCriterion, ThreadPrimitive, ThreadStatus,
 };
 
 mod mutation;

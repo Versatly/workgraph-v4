@@ -10,7 +10,7 @@ use wg_store::{
     AuditedWriteRequest, PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive,
     write_primitive_audited_now,
 };
-use wg_types::{ActorId, LedgerOp, Registry, RunPrimitive, RunStatus};
+use wg_types::{ActorId, Registry, RunPrimitive, RunStatus};
 
 mod mutation;
 

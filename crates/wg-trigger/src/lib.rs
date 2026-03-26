@@ -11,14 +11,13 @@ use wg_store::{
     write_primitive_audited_now,
 };
 use wg_types::{
-    ActorId, EventPattern, EventSourceKind, LedgerEntry, LedgerOp, Registry, TriggerActionPlan,
-    TriggerPrimitive, TriggerStatus,
+    EventPattern, EventSourceKind, LedgerEntry, Registry, TriggerActionPlan, TriggerPrimitive,
+    TriggerStatus,
 };
 
 mod mutation;
 
 const TRIGGER_TYPE: &str = "trigger";
-const SYSTEM_ACTOR: &str = "system:workgraph";
 
 /// Typed trigger model persisted by this crate.
 pub type Trigger = TriggerPrimitive;
@@ -268,10 +267,6 @@ fn encoding_error(error: impl std::fmt::Display) -> WorkgraphError {
     WorkgraphError::EncodingError(error.to_string())
 }
 
-fn system_actor() -> ActorId {
-    ActorId::new(SYSTEM_ACTOR)
-}
-
 #[cfg(test)]
 mod tests {
     use tempfile::tempdir;
@@ -347,7 +342,7 @@ mod tests {
             .await
             .expect("ledger should be readable");
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].op, LedgerOp::Update);
+        assert_eq!(entries[0].op, LedgerOp::Create);
 
         let clock = MockClock::new(
             "2026-03-22T10:00:00Z"

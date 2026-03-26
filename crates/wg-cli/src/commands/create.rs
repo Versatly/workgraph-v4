@@ -52,7 +52,7 @@ pub async fn handle(
 
     Ok(CreateOutput {
         reference: format!("{primitive_type}/{id}"),
-        path: path.as_path().display().to_string(),
+        path,
         primitive,
         ledger_entry,
     })
