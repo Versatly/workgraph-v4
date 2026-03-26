@@ -3,18 +3,21 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::Utc;
-use serde::de::DeserializeOwned;
 use serde_yaml::Value;
-use wg_error::{Result, WorkgraphError};
+use wg_dispatch::Run;
+use wg_error::Result;
 use wg_graph::build_graph;
 use wg_ledger::{LedgerCursor, LedgerReader};
+use wg_mission::Mission;
 use wg_paths::WorkspacePath;
 use wg_store::{
-    PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive, write_primitive,
+    AuditedWriteRequest, PrimitiveFrontmatter, StoredPrimitive, read_primitive,
+    write_primitive_audited_now,
 };
+use wg_thread::Thread;
 use wg_types::{
-    ActorId, FieldDefinition, GraphEdgeKind, GraphEdgeSource, LedgerEntry, PrimitiveType, Registry,
-    ThreadPrimitive, ThreadStatus,
+    ActorId, FieldDefinition, GraphEdgeKind, GraphEdgeSource, LedgerEntry, LedgerOp, PrimitiveType,
+    Registry,
 };
 
 use crate::{BriefItem, GraphIssue, RecentActivity, ThreadEvidenceGap};
@@ -256,7 +259,14 @@ pub async fn checkpoint(
         body: format!("## Working on\n{working_on}\n\n## Focus\n{focus}\n"),
     };
 
-    write_primitive(workspace, &checkpoint_registry(), &primitive).await?;
+    write_primitive_audited_now(
+        workspace,
+        &checkpoint_registry(),
+        &primitive,
+        AuditedWriteRequest::new(ActorId::new("system:workgraph"), LedgerOp::Create)
+            .with_note(format!("Saved checkpoint '{}'", id)),
+    )
+    .await?;
     read_primitive(workspace, "checkpoint", &id).await
 }
 
@@ -293,28 +303,16 @@ async fn load_thread_evidence_gaps(workspace: &WorkspacePath) -> Result<Vec<Thre
         .collect())
 }
 
-async fn load_threads(workspace: &WorkspacePath) -> Result<Vec<ThreadPrimitive>> {
-    list_primitives(workspace, "thread")
-        .await?
-        .iter()
-        .map(thread_from_primitive)
-        .collect()
+async fn load_threads(workspace: &WorkspacePath) -> Result<Vec<Thread>> {
+    wg_thread::list_threads(workspace).await
 }
 
-async fn load_missions(workspace: &WorkspacePath) -> Result<Vec<MissionSummary>> {
-    list_primitives(workspace, "mission")
-        .await?
-        .iter()
-        .map(mission_from_primitive)
-        .collect()
+async fn load_missions(workspace: &WorkspacePath) -> Result<Vec<Mission>> {
+    wg_mission::list_missions(workspace).await
 }
 
-async fn load_runs(workspace: &WorkspacePath) -> Result<Vec<RunSummary>> {
-    list_primitives(workspace, "run")
-        .await?
-        .iter()
-        .map(run_from_primitive)
-        .collect()
+async fn load_runs(workspace: &WorkspacePath) -> Result<Vec<Run>> {
+    wg_dispatch::list_runs(workspace).await
 }
 
 fn entry_to_recent_activity(entry: LedgerEntry) -> RecentActivity {
@@ -339,172 +337,8 @@ fn reference_id(reference: &str) -> Option<&str> {
     reference.split_once('/').map(|(_, id)| id)
 }
 
-fn missing_criteria(thread: &ThreadPrimitive) -> Vec<String> {
-    let satisfied = thread
-        .evidence
-        .iter()
-        .flat_map(|item| item.satisfies.iter().cloned())
-        .collect::<BTreeSet<_>>();
-
-    thread
-        .exit_criteria
-        .iter()
-        .filter(|criterion| criterion.required && !satisfied.contains(&criterion.id))
-        .map(|criterion| criterion.id.clone())
-        .collect()
-}
-
-fn thread_from_primitive(primitive: &StoredPrimitive) -> Result<ThreadPrimitive> {
-    if primitive.frontmatter.r#type != "thread" {
-        return Err(WorkgraphError::ValidationError(format!(
-            "expected thread primitive, found '{}'",
-            primitive.frontmatter.r#type
-        )));
-    }
-
-    Ok(ThreadPrimitive {
-        id: primitive.frontmatter.id.clone(),
-        title: primitive.frontmatter.title.clone(),
-        status: primitive
-            .frontmatter
-            .extra_fields
-            .get("status")
-            .map_or(Ok(ThreadStatus::Draft), parse_yaml_value)?,
-        assigned_actor: primitive
-            .frontmatter
-            .extra_fields
-            .get("assigned_actor")
-            .and_then(string_value)
-            .map(ActorId::new),
-        parent_mission_id: primitive
-            .frontmatter
-            .extra_fields
-            .get("parent_mission_id")
-            .and_then(string_value)
-            .map(str::to_owned),
-        exit_criteria: primitive
-            .frontmatter
-            .extra_fields
-            .get("exit_criteria")
-            .map_or(Ok(Vec::new()), parse_yaml_value)?,
-        evidence: primitive
-            .frontmatter
-            .extra_fields
-            .get("evidence")
-            .map_or(Ok(Vec::new()), parse_yaml_value)?,
-        update_actions: primitive
-            .frontmatter
-            .extra_fields
-            .get("update_actions")
-            .map_or(Ok(Vec::new()), parse_yaml_value)?,
-        completion_actions: primitive
-            .frontmatter
-            .extra_fields
-            .get("completion_actions")
-            .map_or(Ok(Vec::new()), parse_yaml_value)?,
-        messages: Vec::new(),
-    })
-}
-
-fn mission_from_primitive(primitive: &StoredPrimitive) -> Result<MissionSummary> {
-    if primitive.frontmatter.r#type != "mission" {
-        return Err(WorkgraphError::ValidationError(format!(
-            "expected mission primitive, found '{}'",
-            primitive.frontmatter.r#type
-        )));
-    }
-
-    Ok(MissionSummary {
-        id: primitive.frontmatter.id.clone(),
-        title: primitive.frontmatter.title.clone(),
-        status: primitive
-            .frontmatter
-            .extra_fields
-            .get("status")
-            .map_or(Ok(wg_types::MissionStatus::Planned), parse_yaml_value)?,
-        thread_ids: primitive
-            .frontmatter
-            .extra_fields
-            .get("thread_ids")
-            .map_or(Ok(Vec::new()), parse_yaml_value)?,
-        run_ids: primitive
-            .frontmatter
-            .extra_fields
-            .get("run_ids")
-            .map_or(Ok(Vec::new()), parse_yaml_value)?,
-    })
-}
-
-fn run_from_primitive(primitive: &StoredPrimitive) -> Result<RunSummary> {
-    if primitive.frontmatter.r#type != "run" {
-        return Err(WorkgraphError::ValidationError(format!(
-            "expected run primitive, found '{}'",
-            primitive.frontmatter.r#type
-        )));
-    }
-
-    let actor_id = primitive
-        .frontmatter
-        .extra_fields
-        .get("actor_id")
-        .and_then(string_value)
-        .map(ActorId::new)
-        .ok_or_else(|| {
-            WorkgraphError::ValidationError(format!(
-                "run '{}' is missing required actor_id",
-                primitive.frontmatter.id
-            ))
-        })?;
-
-    let thread_id = primitive
-        .frontmatter
-        .extra_fields
-        .get("thread_id")
-        .and_then(string_value)
-        .map(str::to_owned)
-        .ok_or_else(|| {
-            WorkgraphError::ValidationError(format!(
-                "run '{}' is missing required thread_id",
-                primitive.frontmatter.id
-            ))
-        })?;
-
-    Ok(RunSummary {
-        id: primitive.frontmatter.id.clone(),
-        title: primitive.frontmatter.title.clone(),
-        status: primitive
-            .frontmatter
-            .extra_fields
-            .get("status")
-            .map_or(Ok(wg_types::RunStatus::Queued), parse_yaml_value)?,
-        actor_id,
-        executor_id: primitive
-            .frontmatter
-            .extra_fields
-            .get("executor_id")
-            .and_then(string_value)
-            .map(ActorId::new),
-        thread_id,
-    })
-}
-
-fn parse_yaml_value<T>(value: &Value) -> Result<T>
-where
-    T: DeserializeOwned,
-{
-    serde_yaml::from_value::<T>(value.clone()).map_err(encoding_error)
-}
-
-fn string_value(value: &Value) -> Option<&str> {
-    match value {
-        Value::String(value) => Some(value.as_str()),
-        Value::Tagged(tagged) => string_value(&tagged.value),
-        Value::Null
-        | Value::Bool(_)
-        | Value::Number(_)
-        | Value::Sequence(_)
-        | Value::Mapping(_) => None,
-    }
+fn missing_criteria(thread: &Thread) -> Vec<String> {
+    wg_thread::unsatisfied_exit_criteria(thread)
 }
 
 fn checkpoint_registry() -> Registry {
@@ -574,29 +408,6 @@ fn edge_source_label(source: GraphEdgeSource) -> &'static str {
         GraphEdgeSource::EvidenceRecord => "evidence_record",
         GraphEdgeSource::TriggerRule => "trigger_rule",
     }
-}
-
-fn encoding_error(error: impl std::fmt::Display) -> WorkgraphError {
-    WorkgraphError::EncodingError(error.to_string())
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct MissionSummary {
-    id: String,
-    title: String,
-    status: wg_types::MissionStatus,
-    thread_ids: Vec<String>,
-    run_ids: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct RunSummary {
-    id: String,
-    title: String,
-    status: wg_types::RunStatus,
-    actor_id: ActorId,
-    executor_id: Option<ActorId>,
-    thread_id: String,
 }
 
 #[cfg(test)]

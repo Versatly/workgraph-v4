@@ -143,6 +143,13 @@ async fn init_create_query_and_verify_ledger_chain() {
     assert_eq!(capabilities_json["command"], "capabilities");
     assert!(capabilities_json["result"]["commands"].is_array());
     assert!(capabilities_json["result"]["primitive_contracts"].is_array());
+    assert_eq!(
+        capabilities_json["result"]["primitive_contracts"]
+            .as_array()
+            .expect("primitive contracts should be an array")
+            .len(),
+        Registry::builtins().list_types().len()
+    );
 
     let schema_output = execute(["workgraph", "--json", "schema", "create"], temp_dir.path())
         .await
@@ -152,6 +159,13 @@ async fn init_create_query_and_verify_ledger_chain() {
     assert_eq!(schema_json["command"], "schema");
     assert_eq!(schema_json["result"]["commands"][0]["name"], "create");
     assert!(schema_json["result"]["primitive_contracts"].is_array());
+    assert_eq!(
+        schema_json["result"]["primitive_contracts"]
+            .as_array()
+            .expect("primitive contracts should be an array")
+            .len(),
+        Registry::builtins().list_types().len()
+    );
 
     let workspace = WorkspacePath::new(temp_dir.path());
 
@@ -299,6 +313,12 @@ async fn init_create_query_and_verify_ledger_chain() {
         .expect("orientation brief should load");
     assert_eq!(actor_brief.assigned_threads.len(), 1);
     assert_eq!(actor_brief.assigned_missions.len(), 1);
+    assert!(
+        actor_brief
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Graph issue"))
+    );
 
     let checkpoint_primitive = checkpoint(
         &workspace,
@@ -308,6 +328,10 @@ async fn init_create_query_and_verify_ledger_chain() {
     .await
     .expect("checkpoint primitive should be saved");
     assert_eq!(checkpoint_primitive.frontmatter.r#type, "checkpoint");
+    let actor_thread = wg_thread::load_thread(&workspace, "kernel-thread-1")
+        .await
+        .expect("thread should still be readable");
+    assert_eq!(actor_thread.messages.len(), 1);
 
     verify_chain(temp_dir.path())
         .await

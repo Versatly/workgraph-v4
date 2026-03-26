@@ -3,7 +3,6 @@
 use std::collections::BTreeMap;
 
 use serde_yaml::Value;
-use wg_store::StoredPrimitive;
 
 use crate::args::KeyValueInput;
 
@@ -60,16 +59,4 @@ pub fn parse_scalar_value(input: &str) -> Value {
         "false" => Value::Bool(false),
         _ => Value::String(input.to_owned()),
     }
-}
-
-/// Returns a deterministic, sorted list of changed field names for a newly created primitive.
-#[must_use]
-pub fn changed_fields(primitive: &StoredPrimitive) -> Vec<String> {
-    let mut fields = vec!["id".to_owned(), "title".to_owned(), "type".to_owned()];
-    fields.extend(primitive.frontmatter.extra_fields.keys().cloned());
-    if !primitive.body.is_empty() {
-        fields.push("body".to_owned());
-    }
-    fields.sort();
-    fields
 }

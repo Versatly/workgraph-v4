@@ -132,6 +132,7 @@ fn emit_structured_edges(
     broken_links: &mut BTreeSet<BrokenLink>,
 ) {
     match primitive.frontmatter.r#type.as_str() {
+        "agent" => emit_agent_edges(source, primitive, nodes, id_index, edges, broken_links),
         "relationship" => {
             emit_relationship_edges(source, primitive, nodes, id_index, edges, broken_links)
         }
@@ -140,6 +141,37 @@ fn emit_structured_edges(
         "run" => emit_run_edges(source, primitive, nodes, id_index, edges, broken_links),
         "trigger" => emit_trigger_edges(source, primitive, nodes, id_index, edges, broken_links),
         _ => {}
+    }
+}
+
+fn emit_agent_edges(
+    source: &NodeRef,
+    primitive: &StoredPrimitive,
+    nodes: &BTreeSet<NodeRef>,
+    id_index: &BTreeMap<String, Vec<NodeRef>>,
+    edges: &mut BTreeSet<Edge>,
+    broken_links: &mut BTreeSet<BrokenLink>,
+) {
+    for field_name in ["parent_actor_id", "root_actor_id"] {
+        if let Some(actor_reference) = primitive
+            .frontmatter
+            .extra_fields
+            .get(field_name)
+            .and_then(string_value)
+        {
+            resolve_and_record_edge(
+                source,
+                source,
+                actor_reference,
+                None,
+                GraphEdgeKind::Assignment,
+                GraphEdgeSource::Field,
+                nodes,
+                id_index,
+                edges,
+                broken_links,
+            );
+        }
     }
 }
 

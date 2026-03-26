@@ -20,13 +20,16 @@ The current workspace encodes the durable foundation rather than only describing
 
 - markdown-native primitive storage with YAML frontmatter
 - immutable ledger entries with hash-chain verification
+- audited kernel writes for threads, missions, runs, triggers, checkpoints, and CLI-created primitives
 - first-class thread, mission, run, trigger, checkpoint, and actor-lineage contracts in `wg-types`
 - evidence-bearing thread persistence in `wg-thread`
 - mission and run persistence in `wg-mission` and `wg-dispatch`
-- typed graph edges in `wg-graph`, including assignment, containment, evidence, trigger, and reference edges
-- orientation and CLI surfaces that expose evidence gaps, graph issues, and coordination contracts
+- typed graph edges in `wg-graph`, including assignment, containment, evidence, trigger, reference, and actor-lineage edges derived from agent metadata
+- orientation and CLI surfaces that expose evidence gaps, graph issues, coordination contracts, and full primitive discovery metadata
 
 This turn does not implement live trigger execution loops, webhook ingress, remote MCP, or API runtime surfaces yet. It establishes the durable contracts those surfaces must honor.
+
+CLI creation paths now evaluate persisted policy primitives before writing. Trigger action plans remain durable planned follow-up actions rather than auto-executed effects in this foundation pass.
 
 ## Product Boundary
 

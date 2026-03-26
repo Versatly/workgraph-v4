@@ -29,6 +29,9 @@ The graph uses semantic edge kinds. Wiki-links are only one source.
 - `evidence` — evidence support edges from threads to supporting records
 - `trigger` — trigger-rule edges to relevant targets or action targets
 
+Agent lineage references such as `parent_actor_id` and `root_actor_id` are part of the durable
+assignment/lineage surface and should appear in graph-derived orientation outputs when present.
+
 ## Edge Provenance
 
 Every edge records provenance so the system can distinguish soft references from stronger structured facts.
@@ -67,6 +70,9 @@ They are not themselves the graph, but they are durable signals that:
 - future automation planes react to
 
 The graph holds state. The ledger records state change. Both matter.
+
+Durable primitive mutation paths should emit ledger events consistently so status, trigger
+evaluation, and auditability observe the same state transitions.
 
 ## Query Expectations
 

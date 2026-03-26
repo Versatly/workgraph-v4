@@ -12,6 +12,9 @@ mod query;
 mod validate;
 
 pub use document::{FieldFilter, PrimitiveFrontmatter, StoredPrimitive};
-pub use io::{list_primitives, read_primitive, write_primitive};
+pub use io::{
+    AuditedWriteRequest, list_primitives, read_primitive, write_primitive, write_primitive_audited,
+    write_primitive_audited_now,
+};
 pub use query::query_primitives;
 pub use validate::validate_primitive;

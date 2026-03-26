@@ -52,7 +52,7 @@ where
             fields_changed: draft.fields_changed,
             hash: String::new(),
             prev_hash,
-            note: None,
+            note: draft.note,
         };
         entry.hash = compute_entry_hash(&entry)?;
 

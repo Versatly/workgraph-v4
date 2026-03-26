@@ -400,65 +400,58 @@ fn command_schema(
 
 fn primitive_contracts() -> Vec<PrimitiveContract> {
     let registry = Registry::builtins();
-    [
-        (
-            "agent",
-            vec![
-                "Agents may declare parent and root actor lineage while leaving descendants opaque.",
-            ],
-        ),
-        (
-            "thread",
-            vec![
-                "Threads close only when required exit criteria are satisfied by recorded evidence.",
-                "Update and completion actions are durable plans, not auto-executed effects.",
-            ],
-        ),
-        (
-            "mission",
-            vec![
-                "Missions coordinate related threads and runs but are not generic task records.",
-            ],
-        ),
-        (
-            "run",
-            vec![
-                "Each run belongs to exactly one thread and may optionally reference a mission or parent run.",
-            ],
-        ),
-        (
-            "trigger",
-            vec![
-                "Triggers match event patterns and emit action plans without mutating state in this foundation pass.",
-            ],
-        ),
-        (
-            "checkpoint",
-            vec![
-                "Checkpoints preserve resumable working context for future humans or agents.",
-            ],
-        ),
-    ]
-    .into_iter()
-    .filter_map(|(name, notes)| registry.get_type(name).map(|primitive_type| (primitive_type, notes)))
-    .map(|(primitive_type, notes)| PrimitiveContract {
-        name: primitive_type.name.clone(),
-        description: primitive_type.description.clone(),
-        required_fields: primitive_type
-            .fields
-            .iter()
-            .filter(|field| field.required)
-            .map(schema_field_from_definition)
-            .collect(),
-        optional_fields: primitive_type
-            .fields
-            .iter()
-            .filter(|field| !field.required)
-            .map(schema_field_from_definition)
-            .collect(),
-        notes: notes.into_iter().map(str::to_owned).collect(),
-    })
-    .collect()
+    registry
+        .list_types()
+        .iter()
+        .map(|primitive_type| PrimitiveContract {
+            name: primitive_type.name.clone(),
+            description: primitive_type.description.clone(),
+            required_fields: primitive_type
+                .fields
+                .iter()
+                .filter(|field| field.required)
+                .map(schema_field_from_definition)
+                .collect(),
+            optional_fields: primitive_type
+                .fields
+                .iter()
+                .filter(|field| !field.required)
+                .map(schema_field_from_definition)
+                .collect(),
+            notes: primitive_notes(&primitive_type.name),
+        })
+        .collect()
+}
+
+fn primitive_notes(name: &str) -> Vec<String> {
+    match name {
+        "agent" => vec![
+            "Agents may declare parent and root actor lineage while leaving descendants opaque."
+                .to_owned(),
+        ],
+        "thread" => vec![
+            "Threads close only when required exit criteria are satisfied by recorded evidence."
+                .to_owned(),
+            "Update and completion actions are durable plans, not auto-executed effects."
+                .to_owned(),
+        ],
+        "mission" => vec![
+            "Missions coordinate related threads and runs but are not generic task records."
+                .to_owned(),
+        ],
+        "run" => vec![
+            "Each run belongs to exactly one thread and may optionally reference a mission or parent run."
+                .to_owned(),
+        ],
+        "trigger" => vec![
+            "Triggers match event patterns and emit action plans without mutating state in this foundation pass."
+                .to_owned(),
+        ],
+        "checkpoint" => vec![
+            "Checkpoints preserve resumable working context for future humans or agents.".to_owned(),
+        ],
+        _ => Vec::new(),
+    }
 }
 
 fn schema_field_from_definition(definition: &FieldDefinition) -> SchemaField {

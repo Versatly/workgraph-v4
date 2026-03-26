@@ -55,6 +55,8 @@ This foundation pass supports event source contracts for:
 
 Concrete matching is implemented for ledger events in this pass. The other sources are part of the schema contract but not yet live runtime surfaces.
 
+Kernel and CLI mutation paths append durable ledger entries for persisted coordination changes so trigger evaluation can observe real thread, mission, run, trigger, and checkpoint state transitions.
+
 ### Checkpoint
 
 A checkpoint is a durable saved working context that helps future humans or agents resume work without reconstructing local state from scratch.
@@ -80,5 +82,7 @@ Durable delegation should preserve:
 - what actor lineage produced the result
 - what evidence came back
 - what follow-up actions remain
+
+Agent lineage fields such as `parent_actor_id` and `root_actor_id` are durable graph-visible coordination facts, even when descendant execution remains operationally opaque.
 
 Future transport, MCP, API, and trigger layers must preserve these semantics instead of collapsing them into generic task execution.

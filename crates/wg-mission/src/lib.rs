@@ -7,13 +7,15 @@ use serde_yaml::Value;
 use wg_error::{Result, WorkgraphError};
 use wg_paths::WorkspacePath;
 use wg_store::{
-    PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive, write_primitive,
+    AuditedWriteRequest, PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive,
+    write_primitive_audited_now,
 };
-use wg_types::{MissionPrimitive, Registry, ThreadStatus};
+use wg_types::{ActorId, LedgerOp, MissionPrimitive, Registry, ThreadStatus};
 
 pub use wg_types::MissionStatus;
 
 const MISSION_TYPE: &str = "mission";
+const SYSTEM_ACTOR: &str = "system:workgraph";
 
 /// Typed mission model persisted by this crate.
 pub type Mission = MissionPrimitive;
@@ -80,7 +82,13 @@ pub async fn create_mission(
         thread_ids: Vec::new(),
         run_ids: Vec::new(),
     };
-    save_mission(workspace, &mission).await?;
+    save_mission_with_audit(
+        workspace,
+        &mission,
+        AuditedWriteRequest::new(system_actor(), LedgerOp::Create)
+            .with_note(format!("Created mission '{}'", mission.id)),
+    )
+    .await?;
     Ok(mission)
 }
 
@@ -124,7 +132,13 @@ pub async fn activate_mission(workspace: &WorkspacePath, mission_id: &str) -> Re
             )));
         }
     }
-    save_mission(workspace, &mission).await?;
+    save_mission_with_audit(
+        workspace,
+        &mission,
+        AuditedWriteRequest::new(system_actor(), LedgerOp::Start)
+            .with_note(format!("Activated mission '{}'", mission.id)),
+    )
+    .await?;
     Ok(mission)
 }
 
@@ -146,7 +160,13 @@ pub async fn block_mission(workspace: &WorkspacePath, mission_id: &str) -> Resul
             )));
         }
     }
-    save_mission(workspace, &mission).await?;
+    save_mission_with_audit(
+        workspace,
+        &mission,
+        AuditedWriteRequest::new(system_actor(), LedgerOp::Update)
+            .with_note(format!("Blocked mission '{}'", mission.id)),
+    )
+    .await?;
     Ok(mission)
 }
 
@@ -169,7 +189,13 @@ pub async fn complete_mission(workspace: &WorkspacePath, mission_id: &str) -> Re
             )));
         }
     }
-    save_mission(workspace, &mission).await?;
+    save_mission_with_audit(
+        workspace,
+        &mission,
+        AuditedWriteRequest::new(system_actor(), LedgerOp::Done)
+            .with_note(format!("Completed mission '{}'", mission.id)),
+    )
+    .await?;
     Ok(mission)
 }
 
@@ -192,7 +218,15 @@ pub async fn add_thread_to_mission(
     if !mission.thread_ids.iter().any(|id| id == thread_id) {
         mission.thread_ids.push(thread_id.to_owned());
     }
-    save_mission(workspace, &mission).await?;
+    save_mission_with_audit(
+        workspace,
+        &mission,
+        AuditedWriteRequest::new(system_actor(), LedgerOp::Update).with_note(format!(
+            "Attached thread '{}' to mission '{}'",
+            thread_id, mission.id
+        )),
+    )
+    .await?;
     Ok(mission)
 }
 
@@ -215,7 +249,15 @@ pub async fn add_run_to_mission(
     if !mission.run_ids.iter().any(|id| id == run_id) {
         mission.run_ids.push(run_id.to_owned());
     }
-    save_mission(workspace, &mission).await?;
+    save_mission_with_audit(
+        workspace,
+        &mission,
+        AuditedWriteRequest::new(system_actor(), LedgerOp::Update).with_note(format!(
+            "Attached run '{}' to mission '{}'",
+            run_id, mission.id
+        )),
+    )
+    .await?;
     Ok(mission)
 }
 
@@ -258,10 +300,18 @@ pub async fn mission_progress(
     })
 }
 
-async fn save_mission(workspace: &WorkspacePath, mission: &Mission) -> Result<()> {
+async fn save_mission_with_audit(
+    workspace: &WorkspacePath,
+    mission: &Mission,
+    audit: AuditedWriteRequest,
+) -> Result<()> {
     let primitive = mission_to_primitive(mission)?;
-    write_primitive(workspace, &Registry::builtins(), &primitive).await?;
+    write_primitive_audited_now(workspace, &Registry::builtins(), &primitive, audit).await?;
     Ok(())
+}
+
+fn system_actor() -> ActorId {
+    ActorId::new(SYSTEM_ACTOR)
 }
 
 fn mission_to_primitive(mission: &Mission) -> Result<StoredPrimitive> {
@@ -347,9 +397,10 @@ mod tests {
     use std::collections::BTreeMap;
 
     use tempfile::tempdir;
+    use wg_ledger::LedgerReader;
     use wg_paths::WorkspacePath;
     use wg_store::{PrimitiveFrontmatter, StoredPrimitive, read_primitive, write_primitive};
-    use wg_types::{Registry, ThreadStatus};
+    use wg_types::{LedgerOp, Registry, ThreadStatus};
 
     use crate::{
         MissionStatus, activate_mission, add_run_to_mission, add_thread_to_mission,
@@ -415,6 +466,17 @@ mod tests {
                 .expect("status field should be present"),
             &serde_yaml::to_value(MissionStatus::Completed).expect("status should serialize")
         );
+
+        let (entries, _) = LedgerReader::new(temp_dir.path().to_path_buf())
+            .read_from(Default::default())
+            .await
+            .expect("ledger should be readable");
+        assert_eq!(entries.len(), 5);
+        assert_eq!(entries[0].op, LedgerOp::Create);
+        assert_eq!(entries[1].op, LedgerOp::Start);
+        assert_eq!(entries[2].op, LedgerOp::Update);
+        assert_eq!(entries[3].op, LedgerOp::Update);
+        assert_eq!(entries[4].op, LedgerOp::Done);
     }
 
     #[tokio::test]

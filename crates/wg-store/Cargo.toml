@@ -10,9 +10,11 @@ authors.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true
 tokio.workspace = true
+wg-clock = { path = "../wg-clock" }
 wg-encoding = { path = "../wg-encoding" }
 wg-error = { path = "../wg-error" }
 wg-fs = { path = "../wg-fs" }
+wg-ledger = { path = "../wg-ledger" }
 wg-paths = { path = "../wg-paths" }
 wg-types = { path = "../wg-types" }
 

@@ -18,3 +18,4 @@ wg-types = { path = "../wg-types" }
 [dev-dependencies]
 tempfile.workspace = true
 tokio.workspace = true
+wg-ledger = { path = "../wg-ledger" }
