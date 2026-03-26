@@ -2,25 +2,17 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use chrono::Utc;
-use serde_yaml::Value;
 use wg_dispatch::Run;
 use wg_error::Result;
 use wg_graph::build_graph;
 use wg_ledger::{LedgerCursor, LedgerReader};
 use wg_mission::Mission;
 use wg_paths::WorkspacePath;
-use wg_store::{
-    AuditedWriteRequest, PrimitiveFrontmatter, StoredPrimitive, read_primitive,
-    write_primitive_audited_now,
-};
+use wg_store::StoredPrimitive;
 use wg_thread::Thread;
-use wg_types::{
-    ActorId, FieldDefinition, GraphEdgeKind, GraphEdgeSource, LedgerEntry, LedgerOp, PrimitiveType,
-    Registry,
-};
+use wg_types::{ActorId, GraphEdgeKind, GraphEdgeSource, LedgerEntry};
 
-use crate::{BriefItem, GraphIssue, RecentActivity, ThreadEvidenceGap};
+use crate::{BriefItem, CheckpointMutationService, GraphIssue, RecentActivity, ThreadEvidenceGap};
 
 /// Workspace orientation summary derived from real persisted data.
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
@@ -235,39 +227,9 @@ pub async fn checkpoint(
     working_on: &str,
     focus: &str,
 ) -> Result<StoredPrimitive> {
-    let id = format!(
-        "{}-{}",
-        slugify(working_on),
-        Utc::now().format("%Y%m%d%H%M%S")
-    );
-    let title = format!("Checkpoint: {}", working_on.trim());
-    let created_at = Utc::now().to_rfc3339();
-    let primitive = StoredPrimitive {
-        frontmatter: PrimitiveFrontmatter {
-            r#type: "checkpoint".to_owned(),
-            id: id.clone(),
-            title,
-            extra_fields: BTreeMap::from([
-                (
-                    "working_on".to_owned(),
-                    Value::String(working_on.trim().to_owned()),
-                ),
-                ("focus".to_owned(), Value::String(focus.trim().to_owned())),
-                ("created_at".to_owned(), Value::String(created_at)),
-            ]),
-        },
-        body: format!("## Working on\n{working_on}\n\n## Focus\n{focus}\n"),
-    };
-
-    write_primitive_audited_now(
-        workspace,
-        &checkpoint_registry(),
-        &primitive,
-        AuditedWriteRequest::new(ActorId::new("system:workgraph"), LedgerOp::Create)
-            .with_note(format!("Saved checkpoint '{}'", id)),
-    )
-    .await?;
-    read_primitive(workspace, "checkpoint", &id).await
+    CheckpointMutationService::new(workspace)
+        .checkpoint(working_on, focus)
+        .await
 }
 
 async fn load_recent_activity(
@@ -339,54 +301,6 @@ fn reference_id(reference: &str) -> Option<&str> {
 
 fn missing_criteria(thread: &Thread) -> Vec<String> {
     wg_thread::unsatisfied_exit_criteria(thread)
-}
-
-fn checkpoint_registry() -> Registry {
-    let mut registry = Registry::builtins();
-    if registry.get_type("checkpoint").is_none() {
-        registry.types.push(PrimitiveType::new(
-            "checkpoint",
-            "checkpoints",
-            "Saved orientation checkpoint",
-            vec![
-                FieldDefinition::new("id", "string", "Stable checkpoint identifier", true, false),
-                FieldDefinition::new("title", "string", "Checkpoint title", true, false),
-                FieldDefinition::new("working_on", "string", "Current work item", true, false),
-                FieldDefinition::new("focus", "string", "Current focus", true, false),
-                FieldDefinition::new(
-                    "created_at",
-                    "datetime",
-                    "Checkpoint timestamp",
-                    true,
-                    false,
-                ),
-            ],
-        ));
-    }
-    registry
-}
-
-fn slugify(input: &str) -> String {
-    let mut slug = String::new();
-    let mut previous_dash = false;
-
-    for character in input.chars() {
-        let lower = character.to_ascii_lowercase();
-        if lower.is_ascii_alphanumeric() {
-            slug.push(lower);
-            previous_dash = false;
-        } else if !previous_dash {
-            slug.push('-');
-            previous_dash = true;
-        }
-    }
-
-    let trimmed = slug.trim_matches('-');
-    if trimmed.is_empty() {
-        "checkpoint".to_owned()
-    } else {
-        trimmed.to_owned()
-    }
 }
 
 fn edge_kind_label(kind: GraphEdgeKind) -> &'static str {

@@ -5,7 +5,6 @@
 
 use std::collections::BTreeSet;
 
-use chrono::Utc;
 use serde_yaml::Value;
 use wg_error::{Result, WorkgraphError};
 use wg_paths::WorkspacePath;
@@ -18,11 +17,15 @@ use wg_types::{
     Registry, ThreadExitCriterion, ThreadPrimitive, ThreadStatus,
 };
 
+mod mutation;
+
 const THREAD_TYPE: &str = "thread";
 const SYSTEM_ACTOR: &str = "system:workgraph";
 
 /// Typed thread model persisted by this crate.
 pub type Thread = ThreadPrimitive;
+
+pub use mutation::ThreadMutationService;
 
 /// Identifies a thread in compatibility APIs used by placeholder crates.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
@@ -77,37 +80,9 @@ pub async fn create_thread(
     title: &str,
     parent_mission_id: Option<&str>,
 ) -> Result<Thread> {
-    if id.trim().is_empty() {
-        return Err(WorkgraphError::ValidationError(
-            "thread id must not be empty".to_owned(),
-        ));
-    }
-    if title.trim().is_empty() {
-        return Err(WorkgraphError::ValidationError(
-            "thread title must not be empty".to_owned(),
-        ));
-    }
-
-    let thread = ThreadPrimitive {
-        id: id.to_owned(),
-        title: title.to_owned(),
-        status: ThreadStatus::Draft,
-        assigned_actor: None,
-        parent_mission_id: parent_mission_id.map(str::to_owned),
-        exit_criteria: Vec::new(),
-        evidence: Vec::new(),
-        update_actions: Vec::new(),
-        completion_actions: Vec::new(),
-        messages: Vec::new(),
-    };
-    save_thread_with_audit(
-        workspace,
-        &thread,
-        AuditedWriteRequest::new(system_actor(), LedgerOp::Create)
-            .with_note(format!("Created thread '{}'", thread.title)),
-    )
-    .await?;
-    Ok(thread)
+    ThreadMutationService::new(workspace)
+        .create_thread(id, title, parent_mission_id)
+        .await
 }
 
 /// Loads a persisted thread by identifier.
@@ -139,25 +114,9 @@ pub async fn list_threads(workspace: &WorkspacePath) -> Result<Vec<Thread>> {
 ///
 /// Returns an error when the transition is invalid or persistence fails.
 pub async fn open_thread(workspace: &WorkspacePath, thread_id: &str) -> Result<Thread> {
-    let mut thread = load_thread(workspace, thread_id).await?;
-    match thread.status {
-        ThreadStatus::Draft | ThreadStatus::Blocked => thread.status = ThreadStatus::Ready,
-        ThreadStatus::Ready => {}
-        _ => {
-            return Err(WorkgraphError::ValidationError(format!(
-                "thread '{thread_id}' cannot be opened from status {:?}",
-                thread.status
-            )));
-        }
-    }
-    save_thread_with_audit(
-        workspace,
-        &thread,
-        AuditedWriteRequest::new(system_actor(), LedgerOp::Reopen)
-            .with_note(format!("Opened thread '{thread_id}'")),
-    )
-    .await?;
-    Ok(thread)
+    ThreadMutationService::new(workspace)
+        .open_thread(thread_id)
+        .await
 }
 
 /// Claims a ready or waiting thread for an actor and marks it active.
@@ -171,49 +130,9 @@ pub async fn claim_thread(
     thread_id: &str,
     actor: ActorId,
 ) -> Result<Thread> {
-    let mut thread = load_thread(workspace, thread_id).await?;
-
-    match thread.status {
-        ThreadStatus::Ready | ThreadStatus::Waiting => {
-            if let Some(existing) = &thread.assigned_actor {
-                if existing != &actor {
-                    return Err(WorkgraphError::ValidationError(format!(
-                        "thread '{thread_id}' is already assigned to '{}'",
-                        existing
-                    )));
-                }
-            }
-            thread.assigned_actor = Some(actor.clone());
-            thread.status = ThreadStatus::Active;
-        }
-        ThreadStatus::Active => {
-            if thread.assigned_actor.as_ref() == Some(&actor) {
-                return Ok(thread);
-            }
-            return Err(WorkgraphError::ValidationError(format!(
-                "thread '{thread_id}' is already assigned to '{}'",
-                thread
-                    .assigned_actor
-                    .as_ref()
-                    .map_or("unknown", ActorId::as_str)
-            )));
-        }
-        _ => {
-            return Err(WorkgraphError::ValidationError(format!(
-                "thread '{thread_id}' cannot be claimed from status {:?}",
-                thread.status
-            )));
-        }
-    }
-
-    save_thread_with_audit(
-        workspace,
-        &thread,
-        AuditedWriteRequest::new(actor.clone(), LedgerOp::Claim)
-            .with_note(format!("Claimed thread '{thread_id}'")),
-    )
-    .await?;
-    Ok(thread)
+    ThreadMutationService::new(workspace)
+        .claim_thread(thread_id, actor)
+        .await
 }
 
 /// Appends a structured exit criterion to a thread.
@@ -227,34 +146,9 @@ pub async fn add_exit_criterion(
     thread_id: &str,
     criterion: ThreadExitCriterion,
 ) -> Result<Thread> {
-    if criterion.id.trim().is_empty() {
-        return Err(WorkgraphError::ValidationError(
-            "thread exit criterion id must not be empty".to_owned(),
-        ));
-    }
-    let mut thread = load_thread(workspace, thread_id).await?;
-    if thread
-        .exit_criteria
-        .iter()
-        .any(|existing| existing.id == criterion.id)
-    {
-        return Err(WorkgraphError::ValidationError(format!(
-            "thread '{thread_id}' already contains exit criterion '{}'",
-            criterion.id
-        )));
-    }
-    let criterion_id = criterion.id.clone();
-    thread.exit_criteria.push(criterion);
-    save_thread_with_audit(
-        workspace,
-        &thread,
-        AuditedWriteRequest::new(system_actor(), LedgerOp::Update).with_note(format!(
-            "Added exit criterion '{}' to thread '{thread_id}'",
-            criterion_id
-        )),
-    )
-    .await?;
-    Ok(thread)
+    ThreadMutationService::new(workspace)
+        .add_exit_criterion(thread_id, criterion)
+        .await
 }
 
 /// Records evidence against a thread.
@@ -265,52 +159,11 @@ pub async fn add_exit_criterion(
 pub async fn add_evidence(
     workspace: &WorkspacePath,
     thread_id: &str,
-    mut evidence: EvidenceItem,
+    evidence: EvidenceItem,
 ) -> Result<Thread> {
-    if evidence.id.trim().is_empty() {
-        return Err(WorkgraphError::ValidationError(
-            "thread evidence id must not be empty".to_owned(),
-        ));
-    }
-    let mut thread = load_thread(workspace, thread_id).await?;
-    if thread
-        .evidence
-        .iter()
-        .any(|existing| existing.id == evidence.id)
-    {
-        return Err(WorkgraphError::ValidationError(format!(
-            "thread '{thread_id}' already contains evidence '{}'",
-            evidence.id
-        )));
-    }
-    let known_criteria = thread
-        .exit_criteria
-        .iter()
-        .map(|criterion| criterion.id.as_str())
-        .collect::<BTreeSet<_>>();
-    for criterion_id in &evidence.satisfies {
-        if !known_criteria.contains(criterion_id.as_str()) {
-            return Err(WorkgraphError::ValidationError(format!(
-                "thread '{thread_id}' evidence '{}' references unknown criterion '{}'",
-                evidence.id, criterion_id
-            )));
-        }
-    }
-    if evidence.recorded_at.is_none() {
-        evidence.recorded_at = Some(Utc::now());
-    }
-    let evidence_id = evidence.id.clone();
-    thread.evidence.push(evidence);
-    save_thread_with_audit(
-        workspace,
-        &thread,
-        AuditedWriteRequest::new(system_actor(), LedgerOp::Update).with_note(format!(
-            "Added evidence '{}' to thread '{thread_id}'",
-            evidence_id
-        )),
-    )
-    .await?;
-    Ok(thread)
+    ThreadMutationService::new(workspace)
+        .add_evidence(thread_id, evidence)
+        .await
 }
 
 /// Appends a planned update action to a thread.
@@ -323,7 +176,9 @@ pub async fn add_update_action(
     thread_id: &str,
     action: CoordinationAction,
 ) -> Result<Thread> {
-    add_action(workspace, thread_id, action, ActionList::Update).await
+    ThreadMutationService::new(workspace)
+        .add_update_action(thread_id, action)
+        .await
 }
 
 /// Appends a planned completion action to a thread.
@@ -336,7 +191,9 @@ pub async fn add_completion_action(
     thread_id: &str,
     action: CoordinationAction,
 ) -> Result<Thread> {
-    add_action(workspace, thread_id, action, ActionList::Completion).await
+    ThreadMutationService::new(workspace)
+        .add_completion_action(thread_id, action)
+        .await
 }
 
 /// Returns unsatisfied required exit criterion identifiers for the thread.
@@ -362,38 +219,9 @@ pub fn unsatisfied_exit_criteria(thread: &Thread) -> Vec<String> {
 /// Returns an error when required criteria remain unsatisfied, the transition is
 /// invalid, or persistence fails.
 pub async fn complete_thread(workspace: &WorkspacePath, thread_id: &str) -> Result<Thread> {
-    let mut thread = load_thread(workspace, thread_id).await?;
-    let missing = unsatisfied_exit_criteria(&thread);
-    if !missing.is_empty() {
-        return Err(WorkgraphError::ValidationError(format!(
-            "thread '{thread_id}' cannot complete; unsatisfied exit criteria: {}",
-            missing.join(", ")
-        )));
-    }
-
-    match thread.status {
-        ThreadStatus::Active
-        | ThreadStatus::Waiting
-        | ThreadStatus::Blocked
-        | ThreadStatus::Done => {
-            thread.status = ThreadStatus::Done;
-        }
-        _ => {
-            return Err(WorkgraphError::ValidationError(format!(
-                "thread '{thread_id}' cannot be completed from status {:?}",
-                thread.status
-            )));
-        }
-    }
-
-    save_thread_with_audit(
-        workspace,
-        &thread,
-        AuditedWriteRequest::new(system_actor(), LedgerOp::Done)
-            .with_note(format!("Completed thread '{thread_id}'")),
-    )
-    .await?;
-    Ok(thread)
+    ThreadMutationService::new(workspace)
+        .complete_thread(thread_id)
+        .await
 }
 
 /// Appends a conversation message to a thread.
@@ -408,71 +236,9 @@ pub async fn add_message(
     actor: ActorId,
     text: &str,
 ) -> Result<Thread> {
-    if text.trim().is_empty() {
-        return Err(WorkgraphError::ValidationError(
-            "thread messages must not be empty".to_owned(),
-        ));
-    }
-
-    let mut thread = load_thread(workspace, thread_id).await?;
-    if matches!(thread.status, ThreadStatus::Done | ThreadStatus::Cancelled) {
-        return Err(WorkgraphError::ValidationError(format!(
-            "thread '{thread_id}' is terminal and cannot receive new messages"
-        )));
-    }
-
-    let message_actor = actor.clone();
-    thread.messages.push(ConversationMessage {
-        ts: Utc::now(),
-        kind: infer_message_kind(&actor),
-        actor,
-        text: text.to_owned(),
-    });
-
-    save_thread_with_audit(
-        workspace,
-        &thread,
-        AuditedWriteRequest::new(message_actor, LedgerOp::Update)
-            .with_note(format!("Added message to thread '{thread_id}'")),
-    )
-    .await?;
-    Ok(thread)
-}
-
-async fn add_action(
-    workspace: &WorkspacePath,
-    thread_id: &str,
-    action: CoordinationAction,
-    list: ActionList,
-) -> Result<Thread> {
-    if action.id.trim().is_empty() {
-        return Err(WorkgraphError::ValidationError(
-            "coordination action id must not be empty".to_owned(),
-        ));
-    }
-    let mut thread = load_thread(workspace, thread_id).await?;
-    let actions = match list {
-        ActionList::Update => &mut thread.update_actions,
-        ActionList::Completion => &mut thread.completion_actions,
-    };
-    if actions.iter().any(|existing| existing.id == action.id) {
-        return Err(WorkgraphError::ValidationError(format!(
-            "thread '{thread_id}' already contains action '{}'",
-            action.id
-        )));
-    }
-    let action_id = action.id.clone();
-    actions.push(action);
-    save_thread_with_audit(
-        workspace,
-        &thread,
-        AuditedWriteRequest::new(system_actor(), LedgerOp::Update).with_note(format!(
-            "Added action '{}' to thread '{thread_id}'",
-            action_id
-        )),
-    )
-    .await?;
-    Ok(thread)
+    ThreadMutationService::new(workspace)
+        .add_message(thread_id, actor, text)
+        .await
 }
 
 async fn save_thread_with_audit(
@@ -729,11 +495,6 @@ fn system_actor() -> ActorId {
 
 fn encoding_error(error: impl std::fmt::Display) -> WorkgraphError {
     WorkgraphError::EncodingError(error.to_string())
-}
-
-enum ActionList {
-    Update,
-    Completion,
 }
 
 #[cfg(test)]

@@ -1,16 +1,13 @@
 //! Implementation of the `workgraph create` command.
 
-use anyhow::{Context, bail};
-use wg_clock::RealClock;
-use wg_policy::{PolicyAction, PolicyContext, PolicyDecision, evaluate as evaluate_policy};
-use wg_store::{
-    AuditedWriteRequest, PrimitiveFrontmatter, StoredPrimitive, write_primitive_audited,
-};
-use wg_types::{ActorId, LedgerOp};
+use anyhow::bail;
+use wg_store::{PrimitiveFrontmatter, StoredPrimitive};
+use wg_types::ActorId;
 
 use crate::app::AppContext;
 use crate::args::KeyValueInput;
 use crate::output::CreateOutput;
+use crate::services::mutation::PrimitiveMutationService;
 use crate::util::fields::split_body_and_frontmatter;
 use crate::util::slug::unique_slug;
 
@@ -49,28 +46,9 @@ pub async fn handle(
         body,
     };
 
-    let policy_decision = evaluate_policy(
-        app.workspace(),
-        &actor,
-        PolicyAction::Create,
-        primitive_type,
-        &PolicyContext::default(),
-    )
-    .await
-    .with_context(|| format!("failed to evaluate policy for {primitive_type}/{id}"))?;
-    if policy_decision == PolicyDecision::Deny {
-        bail!("policy denied creation of {primitive_type}/{id} for actor '{actor}'");
-    }
-
-    let (path, ledger_entry) = write_primitive_audited(
-        app.workspace(),
-        &registry,
-        &primitive,
-        AuditedWriteRequest::new(actor, LedgerOp::Create),
-        RealClock::new(),
-    )
-    .await
-    .with_context(|| format!("failed to create {primitive_type}/{id}"))?;
+    let (path, ledger_entry) = PrimitiveMutationService::new(app, &registry)
+        .create(actor, &primitive)
+        .await?;
 
     Ok(CreateOutput {
         reference: format!("{primitive_type}/{id}"),

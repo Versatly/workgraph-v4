@@ -12,6 +12,9 @@ use wg_store::{
 };
 use wg_types::{ActorId, LedgerOp, MissionPrimitive, Registry, ThreadStatus};
 
+mod mutation;
+
+pub use mutation::MissionMutationService;
 pub use wg_types::MissionStatus;
 
 const MISSION_TYPE: &str = "mission";
@@ -58,38 +61,9 @@ pub async fn create_mission(
     title: &str,
     objective: &str,
 ) -> Result<Mission> {
-    if id.trim().is_empty() {
-        return Err(WorkgraphError::ValidationError(
-            "mission id must not be empty".to_owned(),
-        ));
-    }
-    if title.trim().is_empty() {
-        return Err(WorkgraphError::ValidationError(
-            "mission title must not be empty".to_owned(),
-        ));
-    }
-    if objective.trim().is_empty() {
-        return Err(WorkgraphError::ValidationError(
-            "mission objective must not be empty".to_owned(),
-        ));
-    }
-
-    let mission = MissionPrimitive {
-        id: id.to_owned(),
-        title: title.to_owned(),
-        status: MissionStatus::Planned,
-        objective: objective.to_owned(),
-        thread_ids: Vec::new(),
-        run_ids: Vec::new(),
-    };
-    save_mission_with_audit(
-        workspace,
-        &mission,
-        AuditedWriteRequest::new(system_actor(), LedgerOp::Create)
-            .with_note(format!("Created mission '{}'", mission.id)),
-    )
-    .await?;
-    Ok(mission)
+    MissionMutationService::new(workspace)
+        .create_mission(id, title, objective)
+        .await
 }
 
 /// Loads a persisted mission by identifier.
@@ -121,25 +95,9 @@ pub async fn list_missions(workspace: &WorkspacePath) -> Result<Vec<Mission>> {
 ///
 /// Returns an error when the transition is invalid or persistence fails.
 pub async fn activate_mission(workspace: &WorkspacePath, mission_id: &str) -> Result<Mission> {
-    let mut mission = load_mission(workspace, mission_id).await?;
-    match mission.status {
-        MissionStatus::Planned | MissionStatus::Blocked => mission.status = MissionStatus::Active,
-        MissionStatus::Active => {}
-        MissionStatus::Completed | MissionStatus::Cancelled => {
-            return Err(WorkgraphError::ValidationError(format!(
-                "mission '{mission_id}' cannot be activated from status '{}'",
-                mission.status.as_str()
-            )));
-        }
-    }
-    save_mission_with_audit(
-        workspace,
-        &mission,
-        AuditedWriteRequest::new(system_actor(), LedgerOp::Start)
-            .with_note(format!("Activated mission '{}'", mission.id)),
-    )
-    .await?;
-    Ok(mission)
+    MissionMutationService::new(workspace)
+        .activate_mission(mission_id)
+        .await
 }
 
 /// Marks a mission blocked.
@@ -148,26 +106,9 @@ pub async fn activate_mission(workspace: &WorkspacePath, mission_id: &str) -> Re
 ///
 /// Returns an error when the transition is invalid or persistence fails.
 pub async fn block_mission(workspace: &WorkspacePath, mission_id: &str) -> Result<Mission> {
-    let mut mission = load_mission(workspace, mission_id).await?;
-    match mission.status {
-        MissionStatus::Planned | MissionStatus::Active | MissionStatus::Blocked => {
-            mission.status = MissionStatus::Blocked;
-        }
-        MissionStatus::Completed | MissionStatus::Cancelled => {
-            return Err(WorkgraphError::ValidationError(format!(
-                "mission '{mission_id}' cannot be blocked from status '{}'",
-                mission.status.as_str()
-            )));
-        }
-    }
-    save_mission_with_audit(
-        workspace,
-        &mission,
-        AuditedWriteRequest::new(system_actor(), LedgerOp::Update)
-            .with_note(format!("Blocked mission '{}'", mission.id)),
-    )
-    .await?;
-    Ok(mission)
+    MissionMutationService::new(workspace)
+        .block_mission(mission_id)
+        .await
 }
 
 /// Marks a mission completed.
@@ -176,27 +117,9 @@ pub async fn block_mission(workspace: &WorkspacePath, mission_id: &str) -> Resul
 ///
 /// Returns an error when the transition is invalid or persistence fails.
 pub async fn complete_mission(workspace: &WorkspacePath, mission_id: &str) -> Result<Mission> {
-    let mut mission = load_mission(workspace, mission_id).await?;
-    match mission.status {
-        MissionStatus::Planned | MissionStatus::Active | MissionStatus::Blocked => {
-            mission.status = MissionStatus::Completed;
-        }
-        MissionStatus::Completed => {}
-        MissionStatus::Cancelled => {
-            return Err(WorkgraphError::ValidationError(format!(
-                "mission '{mission_id}' cannot be completed from status '{}'",
-                mission.status.as_str()
-            )));
-        }
-    }
-    save_mission_with_audit(
-        workspace,
-        &mission,
-        AuditedWriteRequest::new(system_actor(), LedgerOp::Done)
-            .with_note(format!("Completed mission '{}'", mission.id)),
-    )
-    .await?;
-    Ok(mission)
+    MissionMutationService::new(workspace)
+        .complete_mission(mission_id)
+        .await
 }
 
 /// Adds a child thread to a mission.
@@ -209,25 +132,9 @@ pub async fn add_thread_to_mission(
     mission_id: &str,
     thread_id: &str,
 ) -> Result<Mission> {
-    if thread_id.trim().is_empty() {
-        return Err(WorkgraphError::ValidationError(
-            "thread id must not be empty".to_owned(),
-        ));
-    }
-    let mut mission = load_mission(workspace, mission_id).await?;
-    if !mission.thread_ids.iter().any(|id| id == thread_id) {
-        mission.thread_ids.push(thread_id.to_owned());
-    }
-    save_mission_with_audit(
-        workspace,
-        &mission,
-        AuditedWriteRequest::new(system_actor(), LedgerOp::Update).with_note(format!(
-            "Attached thread '{}' to mission '{}'",
-            thread_id, mission.id
-        )),
-    )
-    .await?;
-    Ok(mission)
+    MissionMutationService::new(workspace)
+        .add_thread_to_mission(mission_id, thread_id)
+        .await
 }
 
 /// Adds a run to a mission.
@@ -240,25 +147,9 @@ pub async fn add_run_to_mission(
     mission_id: &str,
     run_id: &str,
 ) -> Result<Mission> {
-    if run_id.trim().is_empty() {
-        return Err(WorkgraphError::ValidationError(
-            "run id must not be empty".to_owned(),
-        ));
-    }
-    let mut mission = load_mission(workspace, mission_id).await?;
-    if !mission.run_ids.iter().any(|id| id == run_id) {
-        mission.run_ids.push(run_id.to_owned());
-    }
-    save_mission_with_audit(
-        workspace,
-        &mission,
-        AuditedWriteRequest::new(system_actor(), LedgerOp::Update).with_note(format!(
-            "Attached run '{}' to mission '{}'",
-            run_id, mission.id
-        )),
-    )
-    .await?;
-    Ok(mission)
+    MissionMutationService::new(workspace)
+        .add_run_to_mission(mission_id, run_id)
+        .await
 }
 
 /// Computes mission progress from the stored thread primitives.
@@ -300,7 +191,7 @@ pub async fn mission_progress(
     })
 }
 
-async fn save_mission_with_audit(
+pub(crate) async fn save_mission_with_audit(
     workspace: &WorkspacePath,
     mission: &Mission,
     audit: AuditedWriteRequest,
@@ -310,7 +201,7 @@ async fn save_mission_with_audit(
     Ok(())
 }
 
-fn system_actor() -> ActorId {
+pub(crate) fn system_actor() -> ActorId {
     ActorId::new(SYSTEM_ACTOR)
 }
 

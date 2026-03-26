@@ -8,8 +8,10 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
+mod mutation;
 mod runtime;
 
+pub use mutation::CheckpointMutationService;
 pub use runtime::{ActorBrief, WorkspaceStatus, brief, checkpoint, status};
 
 /// The perspective or slice of context requested for a workspace brief.
