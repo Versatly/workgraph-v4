@@ -74,6 +74,11 @@ The graph holds state. The ledger records state change. Both matter.
 Durable primitive mutation paths should emit ledger events consistently so status, trigger
 evaluation, and auditability observe the same state transitions.
 
+Coordination-family writes should flow through explicit domain mutation services above the
+audited store layer. Those services own operation-specific semantics, policy checks, audited
+writes, and future trigger hook integration so the graph and ledger observe one coherent mutation
+contract per primitive family instead of scattered persistence helpers.
+
 ## Query Expectations
 
 A useful WorkGraph query should be able to answer not only “what links to this?” but also:

@@ -56,6 +56,7 @@ This foundation pass supports event source contracts for:
 Concrete matching is implemented for ledger events in this pass. The other sources are part of the schema contract but not yet live runtime surfaces.
 
 Kernel and CLI mutation paths append durable ledger entries for persisted coordination changes so trigger evaluation can observe real thread, mission, run, trigger, and checkpoint state transitions.
+Those mutation paths should flow through primitive-family domain mutation services that own lifecycle semantics, policy checks, audited writes, and future trigger hooks rather than composing store writes ad hoc at call sites.
 
 ### Checkpoint
 

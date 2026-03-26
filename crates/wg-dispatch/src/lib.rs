@@ -10,13 +10,17 @@ use wg_store::{
     AuditedWriteRequest, PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive,
     write_primitive_audited_now,
 };
-use wg_types::{ActorId, LedgerOp, Registry, RunPrimitive, RunStatus};
+use wg_types::{ActorId, Registry, RunPrimitive, RunStatus};
+
+mod mutation;
 
 const RUN_TYPE: &str = "run";
 const SYSTEM_ACTOR: &str = "system:workgraph";
 
 /// Typed run model persisted by this crate.
 pub type Run = RunPrimitive;
+
+pub use mutation::RunMutationService;
 
 /// Durable request used to create a new run.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,41 +65,9 @@ pub async fn create_run(
     id: &str,
     request: DispatchRequest,
 ) -> Result<Run> {
-    if id.trim().is_empty() {
-        return Err(WorkgraphError::ValidationError(
-            "run id must not be empty".to_owned(),
-        ));
-    }
-    if request.title.trim().is_empty() {
-        return Err(WorkgraphError::ValidationError(
-            "run title must not be empty".to_owned(),
-        ));
-    }
-    if request.thread_id.trim().is_empty() {
-        return Err(WorkgraphError::ValidationError(
-            "run thread_id must not be empty".to_owned(),
-        ));
-    }
-
-    let run = RunPrimitive {
-        id: id.to_owned(),
-        title: request.title,
-        status: RunStatus::Queued,
-        actor_id: request.actor_id,
-        executor_id: request.executor_id,
-        thread_id: request.thread_id,
-        mission_id: request.mission_id,
-        parent_run_id: request.parent_run_id,
-        summary: request.summary,
-    };
-    save_run_with_audit(
-        workspace,
-        &run,
-        AuditedWriteRequest::new(system_actor(), LedgerOp::Create)
-            .with_note(format!("Created run '{}'", run.id)),
-    )
-    .await?;
-    Ok(run)
+    RunMutationService::new(workspace)
+        .create_run(id, request)
+        .await
 }
 
 /// Loads a persisted run by identifier.
@@ -127,7 +99,7 @@ pub async fn list_runs(workspace: &WorkspacePath) -> Result<Vec<Run>> {
 ///
 /// Returns an error when the transition is invalid or persistence fails.
 pub async fn start_run(workspace: &WorkspacePath, run_id: &str) -> Result<Run> {
-    transition_run(workspace, run_id, RunStatus::Running, LedgerOp::Start, None).await
+    RunMutationService::new(workspace).start_run(run_id).await
 }
 
 /// Marks a run succeeded.
@@ -140,14 +112,9 @@ pub async fn complete_run(
     run_id: &str,
     summary: Option<&str>,
 ) -> Result<Run> {
-    transition_run(
-        workspace,
-        run_id,
-        RunStatus::Succeeded,
-        LedgerOp::Done,
-        summary,
-    )
-    .await
+    RunMutationService::new(workspace)
+        .complete_run(run_id, summary)
+        .await
 }
 
 /// Marks a run failed.
@@ -160,14 +127,9 @@ pub async fn fail_run(
     run_id: &str,
     summary: Option<&str>,
 ) -> Result<Run> {
-    transition_run(
-        workspace,
-        run_id,
-        RunStatus::Failed,
-        LedgerOp::Update,
-        summary,
-    )
-    .await
+    RunMutationService::new(workspace)
+        .fail_run(run_id, summary)
+        .await
 }
 
 /// Marks a run cancelled.
@@ -180,45 +142,12 @@ pub async fn cancel_run(
     run_id: &str,
     summary: Option<&str>,
 ) -> Result<Run> {
-    transition_run(
-        workspace,
-        run_id,
-        RunStatus::Cancelled,
-        LedgerOp::Cancel,
-        summary,
-    )
-    .await
+    RunMutationService::new(workspace)
+        .cancel_run(run_id, summary)
+        .await
 }
 
-async fn transition_run(
-    workspace: &WorkspacePath,
-    run_id: &str,
-    next: RunStatus,
-    op: LedgerOp,
-    summary: Option<&str>,
-) -> Result<Run> {
-    let mut run = load_run(workspace, run_id).await?;
-    run.status = run
-        .status
-        .transition_to(next)
-        .map_err(WorkgraphError::ValidationError)?;
-    if let Some(summary) = summary {
-        run.summary = Some(summary.to_owned());
-    }
-    save_run_with_audit(
-        workspace,
-        &run,
-        AuditedWriteRequest::new(system_actor(), op).with_note(format!(
-            "Transitioned run '{}' to '{}'",
-            run.id,
-            run.status.as_str()
-        )),
-    )
-    .await?;
-    Ok(run)
-}
-
-async fn save_run_with_audit(
+pub(crate) async fn save_run_with_audit(
     workspace: &WorkspacePath,
     run: &Run,
     audit: AuditedWriteRequest,

@@ -42,6 +42,8 @@ Specifically:
 - immutable ledger-backed history
 - evidence-aware coordination
 - policy-gated mutation surfaces for durable writes
+- explicit domain mutation services per primitive family so semantic checks,
+  policy, audited writes, and future hooks share one contract
 - trigger evaluation over durable events
 - cross-agent continuity through missions, threads, runs, checkpoints, and action plans
 
@@ -99,6 +101,19 @@ Those future surfaces must preserve:
 - the same trigger semantics
 - the same evidence and provenance requirements
 - the same distinction between single-user and organizational modes
+
+## Mutation Surface Contract
+
+Durable writes are split into two layers on purpose:
+
+- storage primitives validate structure, write markdown, and append ledger entries
+- domain mutation services own primitive-family semantics, policy evaluation,
+  audited persistence orchestration, and future hook points
+
+`wg-store` remains the low-level audited persistence layer. Coordination and
+other semantic families should expose explicit mutation services above it so
+every create/update path flows through one durable contract instead of
+re-implementing policy or audit behavior ad hoc.
 
 ## Codebase Discipline
 

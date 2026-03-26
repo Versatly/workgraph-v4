@@ -11,15 +11,18 @@ use wg_store::{
     write_primitive_audited_now,
 };
 use wg_types::{
-    ActorId, EventPattern, EventSourceKind, LedgerEntry, LedgerOp, Registry, TriggerActionPlan,
-    TriggerPrimitive, TriggerStatus,
+    EventPattern, EventSourceKind, LedgerEntry, Registry, TriggerActionPlan, TriggerPrimitive,
+    TriggerStatus,
 };
 
+mod mutation;
+
 const TRIGGER_TYPE: &str = "trigger";
-const SYSTEM_ACTOR: &str = "system:workgraph";
 
 /// Typed trigger model persisted by this crate.
 pub type Trigger = TriggerPrimitive;
+
+pub use mutation::TriggerMutationService;
 
 /// Result of matching a trigger against a concrete event.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,17 +41,9 @@ pub struct MatchedTrigger {
 ///
 /// Returns an error when validation or persistence fails.
 pub async fn save_trigger(workspace: &WorkspacePath, trigger: &Trigger) -> Result<()> {
-    validate_trigger_definition(trigger)?;
-    let primitive = trigger_to_primitive(trigger)?;
-    write_primitive_audited_now(
-        workspace,
-        &Registry::builtins(),
-        &primitive,
-        AuditedWriteRequest::new(system_actor(), LedgerOp::Update)
-            .with_note(format!("Saved trigger '{}'", trigger.id)),
-    )
-    .await?;
-    Ok(())
+    TriggerMutationService::new(workspace)
+        .save_trigger(trigger)
+        .await
 }
 
 /// Loads a persisted trigger by identifier.
@@ -122,6 +117,16 @@ pub async fn evaluate_ledger_entry(
             action_plans: trigger.action_plans,
         })
         .collect())
+}
+
+async fn save_trigger_with_audit(
+    workspace: &WorkspacePath,
+    trigger: &Trigger,
+    audit: AuditedWriteRequest,
+) -> Result<()> {
+    let primitive = trigger_to_primitive(trigger)?;
+    write_primitive_audited_now(workspace, &Registry::builtins(), &primitive, audit).await?;
+    Ok(())
 }
 
 fn validate_event_pattern(trigger_id: &str, pattern: &EventPattern) -> Result<()> {
@@ -262,10 +267,6 @@ fn encoding_error(error: impl std::fmt::Display) -> WorkgraphError {
     WorkgraphError::EncodingError(error.to_string())
 }
 
-fn system_actor() -> ActorId {
-    ActorId::new(SYSTEM_ACTOR)
-}
-
 #[cfg(test)]
 mod tests {
     use tempfile::tempdir;
@@ -341,7 +342,7 @@ mod tests {
             .await
             .expect("ledger should be readable");
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].op, LedgerOp::Update);
+        assert_eq!(entries[0].op, LedgerOp::Create);
 
         let clock = MockClock::new(
             "2026-03-22T10:00:00Z"
