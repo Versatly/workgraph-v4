@@ -46,6 +46,8 @@ The current workspace encodes the durable MVP foundation rather than only descri
 - typed graph edges in `wg-graph`, including assignment, containment, evidence, trigger, reference, and actor-lineage edges derived from agent metadata
 - orientation and CLI surfaces that expose evidence gaps, graph issues, coordination contracts, and primitive discovery metadata
 - agent-friendly CLI contract features including JSON envelopes, `--dry-run`, idempotent create behavior, stdin body input, examples in help output, and actionable errors
+- first-class CLI workflows for thread, mission, run, trigger, and checkpoint mutations
+- thin remote adapters in `wg-mcp` and `wg-api` that translate remote requests into the same CLI/kernel-backed operations
 
 Live trigger execution loops, webhook ingress, approval execution, and federation are intentionally still outside the MVP boundary.
 

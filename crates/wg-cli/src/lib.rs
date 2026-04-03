@@ -85,6 +85,25 @@ where
     }
 }
 
+/// Executes the CLI and returns the rendered response even when the command fails.
+///
+/// This is useful for adapter surfaces such as MCP and API that need the exact
+/// structured envelope while preserving CLI semantics.
+///
+/// # Errors
+///
+/// Returns an error only when the execution contract itself cannot be produced.
+pub async fn execute_envelope<I, T>(
+    args: I,
+    workspace_root: impl AsRef<Path>,
+) -> anyhow::Result<String>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<OsString> + Clone,
+{
+    Ok(execute_contract(args, workspace_root).await?.rendered)
+}
+
 struct ExecutionContract {
     rendered: String,
     success: bool,
@@ -267,6 +286,13 @@ mod tests {
         assert_eq!(capabilities_json["command"], "capabilities");
         assert!(capabilities_json["result"]["workflows"].is_array());
         assert!(capabilities_json["result"]["primitive_contracts"].is_array());
+        assert!(
+            capabilities_json["result"]["commands"]
+                .as_array()
+                .expect("commands should be an array")
+                .iter()
+                .any(|command| command["name"] == "thread")
+        );
 
         let schema_output = execute(["workgraph", "--json", "schema", "create"], temp_dir.path())
             .await
@@ -276,6 +302,14 @@ mod tests {
         assert_eq!(schema_json["command"], "schema");
         assert_eq!(schema_json["result"]["commands"][0]["name"], "create");
         assert!(schema_json["result"]["primitive_contracts"].is_array());
+
+        let thread_schema_output =
+            execute(["workgraph", "--json", "schema", "thread"], temp_dir.path())
+                .await
+                .expect("thread schema should succeed");
+        let thread_schema_json: JsonValue = serde_json::from_str(&thread_schema_output)
+            .expect("thread schema output should be valid JSON");
+        assert_eq!(thread_schema_json["result"]["commands"][0]["name"], "thread");
     }
 
     #[test]

@@ -980,6 +980,14 @@ dependencies = [
 [[package]]
 name = "wg-api"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "wg-cli",
+]
 
 [[package]]
 name = "wg-autonomy"
@@ -1115,6 +1123,14 @@ version = "0.1.0"
 [[package]]
 name = "wg-mcp"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "wg-cli",
+]
 
 [[package]]
 name = "wg-mission"

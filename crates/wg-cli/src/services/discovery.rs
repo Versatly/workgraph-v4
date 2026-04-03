@@ -143,11 +143,24 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
             WorkflowSkill {
                 key: "coordination".to_owned(),
                 title: "Coordination integrity".to_owned(),
-                description: "Inspect thread, mission, run, and trigger contracts before mutating active work.".to_owned(),
+                description: "Inspect and mutate thread, mission, run, trigger, and checkpoint workflows through the reference CLI surface.".to_owned(),
                 commands: vec![
+                    "workgraph --json thread create --id <id> --title <title>".to_owned(),
+                    "workgraph --json mission create --id <id> --title <title> --objective <markdown>".to_owned(),
+                    "workgraph --json run create --id <id> --title <title> --actor <actor> --thread <thread>".to_owned(),
+                    "workgraph --json trigger save ...".to_owned(),
+                    "workgraph --json checkpoint --working-on <item> --focus <focus>".to_owned(),
+                ],
+                common: true,
+            },
+            WorkflowSkill {
+                key: "trigger_evaluation".to_owned(),
+                title: "Trigger evaluation".to_owned(),
+                description: "Persist trigger contracts and evaluate them against durable ledger events to inspect planned follow-up actions.".to_owned(),
+                commands: vec![
+                    "workgraph --json trigger save ...".to_owned(),
+                    "workgraph --json trigger evaluate --entry-index <n>".to_owned(),
                     "workgraph --json status".to_owned(),
-                    "workgraph --json schema".to_owned(),
-                    "workgraph --json show thread/<id>".to_owned(),
                 ],
                 common: true,
             },
@@ -193,6 +206,48 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
                     "workgraph --json create decision --title 'Rust for WorkGraph' --id rust-for-workgraph --dry-run".to_owned(),
                 ],
                 vec!["show".to_owned(), "status".to_owned(), "query".to_owned()],
+            ),
+            command_skill(
+                "thread",
+                "Create and mutate evidence-bearing coordination threads.",
+                vec![
+                    "workgraph --json thread create --id launch-thread --title 'Launch readiness'".to_owned(),
+                    "workgraph --json thread add-evidence launch-thread --id evidence-1 --title 'Verifier report' --satisfies criterion-1".to_owned(),
+                ],
+                vec!["show".to_owned(), "status".to_owned()],
+            ),
+            command_skill(
+                "mission",
+                "Create and mutate missions that coordinate related threads and runs.",
+                vec![
+                    "workgraph --json mission create --id launch --title 'Launch mission' --objective 'Ship safely.'".to_owned(),
+                    "workgraph --json mission progress launch".to_owned(),
+                ],
+                vec!["show".to_owned(), "status".to_owned()],
+            ),
+            command_skill(
+                "run",
+                "Create and transition execution runs bound to threads.",
+                vec![
+                    "workgraph --json run create --id run-1 --title 'Cursor analysis' --actor agent:cursor --thread launch-thread".to_owned(),
+                    "workgraph --json run complete run-1 --summary 'Completed successfully'".to_owned(),
+                ],
+                vec!["show".to_owned(), "status".to_owned()],
+            ),
+            command_skill(
+                "trigger",
+                "Save trigger definitions and evaluate them against ledger events.",
+                vec![
+                    "workgraph --json trigger save --id trigger-1 --title 'React to completed threads' --status active --event-source ledger --op done --primitive-type thread --field-name evidence --action-kind rebrief_actor --action-target agent/cursor --action-instruction 'Refresh the brief'".to_owned(),
+                    "workgraph --json trigger evaluate --entry-index 3".to_owned(),
+                ],
+                vec!["show".to_owned(), "status".to_owned()],
+            ),
+            command_skill(
+                "checkpoint",
+                "Persist a resumable checkpoint for the current work focus.",
+                vec!["workgraph --json checkpoint --working-on 'Kernel implementation' --focus 'Finish trigger CLI'".to_owned()],
+                vec!["show".to_owned(), "brief".to_owned()],
             ),
             command_skill(
                 "query",
@@ -290,6 +345,63 @@ pub fn cli_schema(schema_version: &str, requested_command: Option<&str>) -> CliS
                 },
             ],
             "printf 'Mission objective' | workgraph --json create mission --title 'Launch mission' --stdin-body",
+        ),
+        command_schema(
+            "thread",
+            "Create and mutate evidence-bearing coordination threads.",
+            vec![CommandArgument {
+                name: "<subcommand>".to_owned(),
+                description: "Thread workflow such as create, claim, add-evidence, add-message, or complete.".to_owned(),
+                required: true,
+            }],
+            "workgraph --json thread create --id launch-thread --title 'Launch readiness'",
+        ),
+        command_schema(
+            "mission",
+            "Create and mutate missions that coordinate related threads and runs.",
+            vec![CommandArgument {
+                name: "<subcommand>".to_owned(),
+                description: "Mission workflow such as create, activate, add-thread, add-run, or progress.".to_owned(),
+                required: true,
+            }],
+            "workgraph --json mission create --id launch --title 'Launch mission' --objective 'Ship safely.'",
+        ),
+        command_schema(
+            "run",
+            "Create and transition execution runs.",
+            vec![CommandArgument {
+                name: "<subcommand>".to_owned(),
+                description: "Run workflow such as create, start, complete, fail, or cancel.".to_owned(),
+                required: true,
+            }],
+            "workgraph --json run create --id run-1 --title 'Cursor analysis' --actor agent:cursor --thread launch-thread",
+        ),
+        command_schema(
+            "trigger",
+            "Save trigger definitions and evaluate them against ledger entries.",
+            vec![CommandArgument {
+                name: "<subcommand>".to_owned(),
+                description: "Trigger workflow such as save or evaluate.".to_owned(),
+                required: true,
+            }],
+            "workgraph --json trigger evaluate --entry-index 3",
+        ),
+        command_schema(
+            "checkpoint",
+            "Persist a resumable checkpoint for current work context.",
+            vec![
+                CommandArgument {
+                    name: "--working-on".to_owned(),
+                    description: "Current work item being carried forward.".to_owned(),
+                    required: true,
+                },
+                CommandArgument {
+                    name: "--focus".to_owned(),
+                    description: "Current focus for the next agent or human.".to_owned(),
+                    required: true,
+                },
+            ],
+            "workgraph --json checkpoint --working-on 'Kernel implementation' --focus 'Finish trigger CLI'",
         ),
         command_schema(
             "query",
