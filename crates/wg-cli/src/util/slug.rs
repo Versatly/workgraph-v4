@@ -1,9 +1,5 @@
 //! Helpers for deriving stable CLI-friendly slugs and identifiers.
 
-use anyhow::Context;
-use tokio::fs;
-use wg_paths::WorkspacePath;
-
 /// Normalizes a human title into a lowercase, dash-delimited identifier slug.
 #[must_use]
 pub fn slugify(input: &str) -> String {
@@ -28,38 +24,30 @@ pub fn slugify(input: &str) -> String {
     }
 }
 
-/// Generates a unique primitive identifier by suffixing collisions with incrementing counters.
+/// Validates an explicit identifier or derives one deterministically from the title.
 ///
 /// # Errors
 ///
-/// Returns an error when the filesystem cannot be checked for existing primitive paths.
-pub async fn unique_slug(
-    workspace: &WorkspacePath,
-    primitive_type: &str,
-    title: &str,
-) -> anyhow::Result<String> {
-    let base = slugify(title);
-    let mut candidate = base.clone();
-    let mut suffix = 2_usize;
+/// Returns an error when the explicit identifier is empty or normalizes to a different stable slug.
+pub fn validate_or_derive_id(id: Option<&str>, title: &str) -> anyhow::Result<String> {
+    match id {
+        Some(id) => {
+            let trimmed = id.trim();
+            if trimmed.is_empty() {
+                anyhow::bail!("explicit --id must not be empty");
+            }
 
-    loop {
-        let exists = fs::try_exists(
-            workspace
-                .primitive_path(primitive_type, &candidate)
-                .as_path(),
-        )
-        .await
-        .with_context(|| {
-            format!(
-                "failed to inspect primitive path for type '{primitive_type}' and id '{candidate}'"
-            )
-        })?;
+            let normalized = slugify(trimmed);
+            if normalized != trimmed {
+                anyhow::bail!(
+                    "explicit --id must already be a stable lowercase slug such as '{}'",
+                    normalized
+                );
+            }
 
-        if !exists {
-            return Ok(candidate);
+            Ok(trimmed.to_owned())
         }
-
-        candidate = format!("{base}-{suffix}");
-        suffix += 1;
+        None => Ok(slugify(title)),
     }
 }
+

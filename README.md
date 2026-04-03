@@ -14,9 +14,28 @@ The canonical definition lives in `docs/`, not in scattered comments or one-off 
 - `docs/roadmap.md` — the disciplined execution order from foundation lock through federation
 - `AGENTS.md` — contributor operating contract for future humans and agents
 
+## MVP Scope
+
+The MVP for WorkGraph is the disciplined completion of roadmap phases 1-4:
+
+- durable semantic contracts for knowledge, coordination, graph, and ledger primitives
+- a CLI-first operator/agent surface with machine-readable discovery and write workflows
+- evidence-aware coordination over threads, missions, runs, triggers, and checkpoints
+- trigger evaluation that yields durable action plans rather than generic automation glue
+- thin remote MCP/API adapters over the same kernel operations used by the CLI
+
+The MVP does **not** include:
+
+- live autonomous trigger execution loops
+- webhook ingress runtime
+- approval workflow execution
+- federation / cross-workspace distributed coordination
+
+Those remain post-MVP roadmap work.
+
 ## What Exists In The Repo Today
 
-The current workspace encodes the durable foundation rather than only describing it:
+The current workspace encodes the durable MVP foundation rather than only describing it:
 
 - markdown-native primitive storage with YAML frontmatter
 - immutable ledger entries with hash-chain verification
@@ -25,11 +44,12 @@ The current workspace encodes the durable foundation rather than only describing
 - evidence-bearing thread persistence in `wg-thread`
 - mission and run persistence in `wg-mission` and `wg-dispatch`
 - typed graph edges in `wg-graph`, including assignment, containment, evidence, trigger, reference, and actor-lineage edges derived from agent metadata
-- orientation and CLI surfaces that expose evidence gaps, graph issues, coordination contracts, and full primitive discovery metadata
+- orientation and CLI surfaces that expose evidence gaps, graph issues, coordination contracts, and primitive discovery metadata
+- agent-friendly CLI contract features including JSON envelopes, `--dry-run`, idempotent create behavior, stdin body input, examples in help output, and actionable errors
 
-This turn does not implement live trigger execution loops, webhook ingress, remote MCP, or API runtime surfaces yet. It establishes the durable contracts those surfaces must honor.
+Live trigger execution loops, webhook ingress, approval execution, and federation are intentionally still outside the MVP boundary.
 
-CLI creation paths now evaluate persisted policy primitives before writing. Trigger action plans remain durable planned follow-up actions rather than auto-executed effects in this foundation pass.
+CLI creation paths evaluate persisted policy primitives before writing. Trigger action plans remain durable planned follow-up actions rather than auto-executed effects.
 
 ## Product Boundary
 
@@ -66,10 +86,12 @@ Lower layers may not depend on higher layers.
 ```bash
 cargo build --release
 ./target/release/workgraph init
-./target/release/workgraph brief --lens workspace
-./target/release/workgraph status
-./target/release/workgraph capabilities
-./target/release/workgraph schema
+./target/release/workgraph --json brief --lens workspace
+./target/release/workgraph --json status
+./target/release/workgraph --json capabilities
+./target/release/workgraph --json schema
+./target/release/workgraph --json create org --title Versatly --field summary="AI-native company"
+printf 'Mission objective' | ./target/release/workgraph --json create mission --title "Launch mission" --stdin-body
 ```
 
 ## Quality Gate

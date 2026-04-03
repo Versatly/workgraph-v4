@@ -131,9 +131,11 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
             WorkflowSkill {
                 key: "knowledge_capture".to_owned(),
                 title: "Context capture".to_owned(),
-                description: "Record durable company context and coordination state with provenance in the ledger.".to_owned(),
+                description: "Record durable company context and coordination state with provenance in the ledger, using idempotent create semantics and optional stdin body input.".to_owned(),
                 commands: vec![
-                    "workgraph --json create <type> --title ...".to_owned(),
+                    "workgraph --json create <type> --title ... --id <id>".to_owned(),
+                    "printf 'markdown body' | workgraph --json create <type> --title ... --stdin-body".to_owned(),
+                    "workgraph --json create <type> --title ... --dry-run".to_owned(),
                     "workgraph --json show <type>/<id>".to_owned(),
                 ],
                 common: true,
@@ -184,8 +186,12 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
             ),
             command_skill(
                 "create",
-                "Create a markdown primitive and append a matching ledger entry.",
-                vec!["workgraph --json create org --title Versatly".to_owned()],
+                "Create a markdown primitive with idempotent identity, optional stdin body input, and dry-run validation.",
+                vec![
+                    "workgraph --json create org --title Versatly".to_owned(),
+                    "printf 'Mission objective' | workgraph --json create mission --title 'Launch mission' --stdin-body".to_owned(),
+                    "workgraph --json create decision --title 'Rust for WorkGraph' --id rust-for-workgraph --dry-run".to_owned(),
+                ],
                 vec!["show".to_owned(), "status".to_owned(), "query".to_owned()],
             ),
             command_skill(
@@ -245,7 +251,7 @@ pub fn cli_schema(schema_version: &str, requested_command: Option<&str>) -> CliS
         ),
         command_schema(
             "create",
-            "Create a primitive and record it in the ledger.",
+            "Create a primitive and record it in the ledger with idempotent identity and optional dry-run validation.",
             vec![
                 CommandArgument {
                     name: "<type>".to_owned(),
@@ -258,12 +264,32 @@ pub fn cli_schema(schema_version: &str, requested_command: Option<&str>) -> CliS
                     required: true,
                 },
                 CommandArgument {
+                    name: "--id".to_owned(),
+                    description: "Optional explicit primitive identifier. Defaults to a slug derived from the title.".to_owned(),
+                    required: false,
+                },
+                CommandArgument {
+                    name: "--body".to_owned(),
+                    description: "Optional markdown body content supplied directly on the command line.".to_owned(),
+                    required: false,
+                },
+                CommandArgument {
+                    name: "--stdin-body".to_owned(),
+                    description: "Read the markdown body from standard input for pipeline-friendly writes.".to_owned(),
+                    required: false,
+                },
+                CommandArgument {
                     name: "--field".to_owned(),
                     description: "Additional frontmatter as key=value pairs.".to_owned(),
                     required: false,
                 },
+                CommandArgument {
+                    name: "--dry-run".to_owned(),
+                    description: "Validate and render the intended create without mutating storage or ledger state.".to_owned(),
+                    required: false,
+                },
             ],
-            "workgraph --json create org --title Versatly",
+            "printf 'Mission objective' | workgraph --json create mission --title 'Launch mission' --stdin-body",
         ),
         command_schema(
             "query",

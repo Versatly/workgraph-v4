@@ -15,6 +15,7 @@ Success looks like:
 - durable coordination contracts in `wg-types`
 - machine-readable discovery surfaces aware of those contracts
 - CLI passes agent-friendly audit: `--json` envelopes, `brief`, `capabilities`, `schema`, examples in `--help`, idempotent creates, `--dry-run`, stdin support, actionable errors
+- the reference CLI surface exposes the durable coordination primitives agents need for MVP workflows rather than leaving those semantics reachable only through Rust APIs
 
 ## Phase 2 - Kernel Hardening
 

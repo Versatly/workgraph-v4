@@ -193,10 +193,37 @@ fn render_status(output: &StatusOutput) -> String {
 }
 
 fn render_create(output: &CreateOutput) -> String {
-    format!(
-        "Created {} at {}\nLedger hash: {}",
-        output.reference, output.path, output.ledger_entry.hash
-    )
+    let mut rendered = String::new();
+    if output.dry_run {
+        let _ = writeln!(
+            rendered,
+            "Dry run: would create {} at {}",
+            output.reference, output.path
+        );
+        if output.idempotent {
+            let _ = writeln!(
+                rendered,
+                "Existing primitive already matches the requested identity."
+            );
+        }
+        return rendered.trim_end().to_owned();
+    }
+
+    if output.idempotent {
+        let _ = writeln!(
+            rendered,
+            "Reused existing {} at {}",
+            output.reference, output.path
+        );
+    } else {
+        let _ = writeln!(rendered, "Created {} at {}", output.reference, output.path);
+    }
+
+    if let Some(ledger_entry) = &output.ledger_entry {
+        let _ = writeln!(rendered, "Ledger hash: {}", ledger_entry.hash);
+    }
+
+    rendered.trim_end().to_owned()
 }
 
 fn render_capabilities(output: &CapabilitiesOutput) -> String {

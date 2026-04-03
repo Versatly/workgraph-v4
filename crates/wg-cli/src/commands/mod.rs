@@ -30,9 +30,21 @@ pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<Comma
         Command::Create {
             primitive_type,
             title,
+            id,
+            body,
+            stdin_body,
             fields,
         } => Ok(CommandOutput::Create(
-            create::handle(app, &primitive_type, &title, &fields).await?,
+            create::handle(
+                app,
+                &primitive_type,
+                &title,
+                id.as_deref(),
+                body.as_deref(),
+                stdin_body,
+                &fields,
+            )
+            .await?,
         )),
         Command::Query {
             primitive_type,

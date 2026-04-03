@@ -167,6 +167,57 @@ async fn init_create_query_and_verify_ledger_chain() {
         Registry::builtins().list_types().len()
     );
 
+    let dry_run_output = execute(
+        [
+            "workgraph",
+            "--json",
+            "--dry-run",
+            "create",
+            "project",
+            "--title",
+            "Dealer Portal",
+            "--field",
+            "status=active",
+        ],
+        temp_dir.path(),
+    )
+    .await
+    .expect("dry-run create should succeed");
+    let dry_run_json: serde_json::Value =
+        serde_json::from_str(&dry_run_output).expect("dry-run output should be valid JSON");
+    assert_eq!(dry_run_json["command"], "create");
+    assert_eq!(dry_run_json["result"]["dry_run"], true);
+    assert_eq!(dry_run_json["result"]["reference"], "project/dealer-portal");
+    assert_eq!(dry_run_json["result"]["ledger_entry"], serde_json::Value::Null);
+    assert!(
+        !fs::try_exists(temp_dir.path().join("projects").join("dealer-portal.md"))
+            .await
+            .expect("dry-run project existence check should succeed")
+    );
+
+    let idempotent_create_output = execute(
+        [
+            "workgraph",
+            "--json",
+            "create",
+            "org",
+            "--title",
+            "Versatly",
+            "--field",
+            "summary=AI-native company",
+        ],
+        temp_dir.path(),
+    )
+    .await
+    .expect("idempotent org creation should succeed");
+    let idempotent_create_json: serde_json::Value = serde_json::from_str(&idempotent_create_output)
+        .expect("idempotent create output should be valid JSON");
+    assert_eq!(idempotent_create_json["result"]["idempotent"], true);
+    assert_eq!(
+        idempotent_create_json["result"]["ledger_entry"],
+        serde_json::Value::Null
+    );
+
     let workspace = WorkspacePath::new(temp_dir.path());
 
     create_thread(

@@ -17,6 +17,34 @@ use anyhow::{Context, anyhow};
 use app::AppContext;
 use args::{OutputFormat, parse_cli};
 
+/// Structured CLI exit error used to preserve documented exit-code discipline.
+#[derive(Debug)]
+pub struct CliExitError {
+    exit_code: u8,
+}
+
+impl CliExitError {
+    /// Creates a new CLI exit error.
+    #[must_use]
+    pub const fn new(exit_code: u8) -> Self {
+        Self { exit_code }
+    }
+
+    /// Returns the process exit code associated with this failure.
+    #[must_use]
+    pub const fn exit_code(&self) -> u8 {
+        self.exit_code
+    }
+}
+
+impl std::fmt::Display for CliExitError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "workgraph exited with status {}", self.exit_code)
+    }
+}
+
+impl std::error::Error for CliExitError {}
+
 /// Parses CLI arguments from the current process, executes the requested command, and prints the result.
 ///
 /// # Errors
@@ -32,7 +60,8 @@ pub async fn run_from_env() -> anyhow::Result<()> {
     if execution.success {
         Ok(())
     } else {
-        Err(anyhow!("command execution failed"))
+        let exit_code = if execution.usage_error { 2 } else { 1 };
+        Err(CliExitError::new(exit_code).into())
     }
 }
 
@@ -59,6 +88,7 @@ where
 struct ExecutionContract {
     rendered: String,
     success: bool,
+    usage_error: bool,
 }
 
 async fn execute_contract<I, T>(
@@ -75,11 +105,12 @@ where
     match parse_cli(args.clone()) {
         Ok(cli) => {
             let command_name = cli.command.name();
-            let app = AppContext::new(workspace_root.as_ref().to_path_buf());
+            let app = AppContext::new(workspace_root.as_ref().to_path_buf(), cli.dry_run);
             match commands::execute(&app, cli.command).await {
                 Ok(output) => Ok(ExecutionContract {
                     rendered: output::render_success(&output, cli.json || cli.format.is_json())?,
                     success: true,
+                    usage_error: false,
                 }),
                 Err(error) => Ok(ExecutionContract {
                     rendered: output::render_failure(
@@ -88,12 +119,14 @@ where
                         cli.json || cli.format.is_json(),
                     )?,
                     success: false,
+                    usage_error: false,
                 }),
             }
         }
         Err(error) => Ok(ExecutionContract {
             rendered: output::render_failure(None, &error.into(), output_format.is_json())?,
             success: false,
+            usage_error: true,
         }),
     }
 }
@@ -131,6 +164,8 @@ fn parse_output_format(args: &[OsString]) -> OutputFormat {
 
 #[cfg(test)]
 mod tests {
+    use std::process::Command;
+
     use crate::execute;
     use crate::util::fields::parse_key_value_input;
     use crate::util::slug::slugify;
@@ -242,4 +277,28 @@ mod tests {
         assert_eq!(schema_json["result"]["commands"][0]["name"], "create");
         assert!(schema_json["result"]["primitive_contracts"].is_array());
     }
+
+    #[test]
+    fn clap_usage_errors_exit_with_code_two() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let workspace_root = std::path::Path::new(manifest_dir)
+            .parent()
+            .and_then(std::path::Path::parent)
+            .expect("workspace root should resolve");
+        let output = Command::new("cargo")
+            .arg("run")
+            .arg("--quiet")
+            .arg("-p")
+            .arg("workgraph")
+            .arg("--bin")
+            .arg("workgraph")
+            .arg("--")
+            .arg("create")
+            .current_dir(workspace_root)
+            .output()
+            .expect("binary should execute");
+
+        assert_eq!(output.status.code(), Some(2));
+    }
+
 }

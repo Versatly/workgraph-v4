@@ -1,9 +1,8 @@
 //! CLI-side generic primitive mutation services.
 
 use anyhow::{Context, bail};
-use wg_clock::RealClock;
 use wg_policy::{PolicyAction, PolicyContext, PolicyDecision, evaluate as evaluate_policy};
-use wg_store::{AuditedWriteRequest, StoredPrimitive, write_primitive_audited};
+use wg_store::{AuditedWriteRequest, StoredPrimitive, write_primitive_audited_now};
 use wg_types::{ActorId, LedgerEntry, LedgerOp, Registry};
 
 use crate::app::AppContext;
@@ -36,27 +35,14 @@ impl<'a> PrimitiveMutationService<'a> {
         let primitive_type = primitive.frontmatter.r#type.as_str();
         let primitive_id = primitive.frontmatter.id.as_str();
 
-        let policy_decision = evaluate_policy(
-            self.app.workspace(),
-            &actor,
-            PolicyAction::Create,
-            primitive_type,
-            &PolicyContext::default(),
-        )
-        .await
-        .with_context(|| {
-            format!("failed to evaluate policy for {primitive_type}/{primitive_id}")
-        })?;
-        if policy_decision == PolicyDecision::Deny {
-            bail!("policy denied creation of {primitive_type}/{primitive_id} for actor '{actor}'");
-        }
+        self.authorize_create(&actor, primitive_type, primitive_id)
+            .await?;
 
-        let (path, ledger_entry) = write_primitive_audited(
+        let (path, ledger_entry) = write_primitive_audited_now(
             self.app.workspace(),
             self.registry,
             primitive,
             AuditedWriteRequest::new(actor, LedgerOp::Create),
-            RealClock::new(),
         )
         .await
         .with_context(|| format!("failed to create {primitive_type}/{primitive_id}"))?;
@@ -68,6 +54,31 @@ impl<'a> PrimitiveMutationService<'a> {
 
     async fn after_mutation(&self, _primitive: &StoredPrimitive) -> anyhow::Result<()> {
         // Reserved for future generic trigger-aware follow-up hooks.
+        Ok(())
+    }
+
+    async fn authorize_create(
+        &self,
+        actor: &ActorId,
+        primitive_type: &str,
+        primitive_id: &str,
+    ) -> anyhow::Result<()> {
+        let policy_decision = evaluate_policy(
+            self.app.workspace(),
+            actor,
+            PolicyAction::Create,
+            primitive_type,
+            &PolicyContext::default(),
+        )
+        .await
+        .with_context(|| {
+            format!("failed to evaluate policy for {primitive_type}/{primitive_id}")
+        })?;
+        if policy_decision == PolicyDecision::Deny {
+            bail!(
+                "policy denied creation of {primitive_type}/{primitive_id} for actor '{actor}'"
+            );
+        }
         Ok(())
     }
 }

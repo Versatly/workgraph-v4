@@ -101,12 +101,17 @@ pub struct SchemaOutput {
 pub struct CreateOutput {
     /// The created primitive reference in `<type>/<id>` form.
     pub reference: String,
+    /// Whether the create operation was a dry run.
+    pub dry_run: bool,
+    /// Whether an existing primitive already satisfied the create request.
+    pub idempotent: bool,
     /// The filesystem path where the markdown primitive was stored.
     pub path: String,
     /// The stored primitive that was written.
     pub primitive: StoredPrimitive,
     /// The appended ledger entry corresponding to the creation event.
-    pub ledger_entry: LedgerEntry,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ledger_entry: Option<LedgerEntry>,
 }
 
 /// Output model produced by the `query` command.

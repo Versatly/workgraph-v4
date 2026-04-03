@@ -1,6 +1,7 @@
 //! Helpers for parsing and transforming field values supplied through the CLI.
 
 use std::collections::BTreeMap;
+use std::io::{IsTerminal as _, Read as _};
 
 use serde_yaml::Value;
 
@@ -43,6 +44,40 @@ pub fn split_body_and_frontmatter(fields: &[KeyValueInput]) -> (String, BTreeMap
     (body, extra_fields)
 }
 
+/// Resolves markdown body content from explicit arguments, stdin, and parsed fields.
+///
+/// Explicit `--body` input wins over `--stdin-body`, which wins over `body=...` field input.
+///
+/// # Errors
+///
+/// Returns an error when stdin body input was requested but stdin could not be read.
+pub fn resolve_body_input(
+    body: Option<&str>,
+    stdin_body: bool,
+    fields: &[KeyValueInput],
+) -> anyhow::Result<String> {
+    if let Some(body) = body {
+        return Ok(body.to_owned());
+    }
+
+    if stdin_body {
+        if stdin_is_terminal() {
+            return Err(anyhow::anyhow!(
+                "--stdin-body requires piped stdin input; provide --body or pipe markdown content"
+            ));
+        }
+
+        let mut buffer = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buffer)
+            .map_err(|error| anyhow::anyhow!("failed to read body from stdin: {error}"))?;
+        return Ok(buffer);
+    }
+
+    let (body, _) = split_body_and_frontmatter(fields);
+    Ok(body)
+}
+
 /// Converts a free-form CLI input string into a scalar YAML value when possible.
 #[must_use]
 pub fn parse_scalar_value(input: &str) -> Value {
@@ -59,4 +94,10 @@ pub fn parse_scalar_value(input: &str) -> Value {
         "false" => Value::Bool(false),
         _ => Value::String(input.to_owned()),
     }
+}
+
+/// Returns whether stdin currently appears to be connected to an interactive terminal.
+#[must_use]
+pub fn stdin_is_terminal() -> bool {
+    std::io::stdin().is_terminal()
 }

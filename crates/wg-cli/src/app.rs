@@ -14,15 +14,17 @@ use wg_types::{LedgerEntry, Registry, WorkgraphConfig};
 pub struct AppContext {
     root: PathBuf,
     workspace: WorkspacePath,
+    dry_run: bool,
 }
 
 impl AppContext {
     /// Creates a new application context rooted at the provided workspace path.
     #[must_use]
-    pub fn new(root: PathBuf) -> Self {
+    pub fn new(root: PathBuf, dry_run: bool) -> Self {
         Self {
             workspace: WorkspacePath::new(root.clone()),
             root,
+            dry_run,
         }
     }
 
@@ -36,6 +38,12 @@ impl AppContext {
     #[must_use]
     pub fn workspace(&self) -> &WorkspacePath {
         &self.workspace
+    }
+
+    /// Returns whether write commands should avoid mutating storage or ledger state.
+    #[must_use]
+    pub const fn dry_run(&self) -> bool {
+        self.dry_run
     }
 
     /// Returns the path to the hidden `.workgraph` metadata directory.

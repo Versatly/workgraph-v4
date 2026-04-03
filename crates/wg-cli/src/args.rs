@@ -7,7 +7,12 @@ use crate::util::fields::parse_key_value_input;
 
 /// Top-level parsed CLI arguments.
 #[derive(Debug, Parser)]
-#[command(name = "workgraph", version, about = "WorkGraph v4 CLI")]
+#[command(
+    name = "workgraph",
+    version,
+    about = "WorkGraph v4 CLI",
+    after_help = "Examples:\n  workgraph --json init\n  workgraph --json brief --lens workspace\n  workgraph --json create org --title Versatly --field summary='AI-native company'\n  printf 'Mission objective' | workgraph --json create mission --title 'Launch mission' --stdin-body\n  workgraph --json create decision --title 'Rust for WorkGraph' --dry-run"
+)]
 pub struct Cli {
     /// Emits machine-readable JSON instead of human-oriented text output.
     #[arg(long, global = true)]
@@ -15,6 +20,9 @@ pub struct Cli {
     /// Selects the output format explicitly.
     #[arg(long, global = true, default_value_t = OutputFormat::Human)]
     pub format: OutputFormat,
+    /// Validates a write command and renders the intended result without mutating storage or ledger state.
+    #[arg(long, global = true)]
+    pub dry_run: bool,
     /// The subcommand to execute.
     #[command(subcommand)]
     pub command: Command,
@@ -52,32 +60,53 @@ pub enum Command {
     /// Initializes a new WorkGraph workspace in the current directory.
     Init,
     /// Produces an orientation summary for a human or agent entering the workspace.
+    #[command(
+        after_help = "Examples:\n  workgraph --json brief --lens workspace\n  workgraph --json brief --lens delivery"
+    )]
     Brief {
         /// Selects the orientation lens used to build the brief.
         #[arg(long, default_value_t = ContextLensArg(ContextLens::Workspace), value_parser = parse_context_lens)]
         lens: ContextLensArg,
     },
     /// Shows primitive counts and the latest recorded ledger entry.
+    #[command(after_help = "Examples:\n  workgraph --json status")]
     Status,
     /// Lists the structured capabilities and workflows exposed by this CLI.
+    #[command(after_help = "Examples:\n  workgraph --json capabilities")]
     Capabilities,
     /// Describes command arguments, outputs, and result envelope structure.
+    #[command(after_help = "Examples:\n  workgraph --json schema\n  workgraph --json schema create")]
     Schema {
         /// Optionally narrows the schema view to a single command.
         command: Option<String>,
     },
     /// Creates a new primitive in the markdown store.
+    #[command(
+        after_help = "Examples:\n  workgraph --json create org --title Versatly --field summary='AI-native company'\n  workgraph --json create decision --title 'Rust for WorkGraph' --id rust-for-workgraph --field status=decided\n  printf 'Long-form mission objective' | workgraph --json create mission --title 'Launch mission' --stdin-body\n  workgraph --json create strategic_note --title 'North star' --body 'Long-form context' --dry-run"
+    )]
     Create {
         /// The primitive type to create.
         primitive_type: String,
         /// The human-readable title of the new primitive.
         #[arg(long)]
         title: String,
+        /// Optional explicit primitive identifier. When omitted, WorkGraph derives a stable id from the title.
+        #[arg(long)]
+        id: Option<String>,
+        /// Optional markdown body content supplied directly on the command line.
+        #[arg(long)]
+        body: Option<String>,
+        /// Reads the markdown body from standard input. Useful for shell pipelines.
+        #[arg(long)]
+        stdin_body: bool,
         /// Additional frontmatter fields expressed as `key=value`.
         #[arg(long = "field", value_parser = parse_key_value_input)]
         fields: Vec<KeyValueInput>,
     },
     /// Queries primitives of a given type with optional exact-match filters.
+    #[command(
+        after_help = "Examples:\n  workgraph --json query decision\n  workgraph --json query decision --filter status=decided"
+    )]
     Query {
         /// The primitive type to query.
         primitive_type: String,
@@ -86,6 +115,7 @@ pub enum Command {
         filters: Vec<KeyValueInput>,
     },
     /// Displays a single primitive by `<type>/<id>`.
+    #[command(after_help = "Examples:\n  workgraph --json show org/versatly")]
     Show {
         /// The primitive reference in `<type>/<id>` form.
         reference: String,
