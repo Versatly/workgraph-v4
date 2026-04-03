@@ -47,6 +47,34 @@ Do not jump ahead into flashy transport or runtime work while the semantic layer
 - Avoid fuzzy naming. If a term matters to coordination, define it precisely.
 - Treat graph edges, thread completion, lineage, and trigger semantics as durable contracts, not incidental implementation details.
 
+## Surface Architecture Decision: CLI-first, MCP as Cloud Adapter
+
+**Decided 2026-04-03 by Pedro + Clawdious.**
+
+The CLI (`wg-cli`) is the **default interface** for all agents with shell access. The MCP server (`wg-mcp`) is the adapter for cloud/OAuth-only contexts (ChatGPT, cloud-hosted agents without shell).
+
+**Rationale:**
+- Agents with shell access already know how to exec binaries. Zero setup, zero auth.
+- MCP adds overhead (server process, HTTP, connection lifecycle) unnecessary when you have a shell.
+- Cloud agents can't exec binaries — MCP is their only path in.
+- Same graph, different door. Both surfaces call the same kernel operations.
+
+**Rules:**
+1. `wg-cli` is the reference surface — every feature lands here first.
+2. `wg-mcp` is a thin translation layer wrapping the same workspace ops.
+3. Neither surface contains business logic — both are I/O adapters over the kernel.
+4. MCP must never implement features unavailable via CLI.
+5. Agent onboarding leads with CLI, mentions MCP as cloud alternative.
+
+**Agent-friendly CLI requirements** (Cursor research, Eric Zakariasson March 2026):
+- `--json` envelope on every command (`schema_version`, `success`, `result`, `next_actions`, `error`, `fix`)
+- `--help` with examples on every subcommand
+- Idempotent creates, `--dry-run` on writes
+- Stdin support for pipelines
+- Actionable errors with fix suggestions
+- Predictable command structure
+- Exit codes: 0 success, 1 error, 2 usage
+
 ## Surface Expectations
 
 - `workgraph schema` is the authoritative machine-readable discovery surface for CLI and primitive contracts.
