@@ -1,20 +1,22 @@
 # Roadmap
 
-## Phase 1 — Foundation Lock
+## Phase 1 - Foundation Lock
 
 Goal:
 
 - make the product boundary explicit
 - lock down graph, actor, thread, run, trigger, and checkpoint definitions
 - make canonical docs and code contracts agree
+- make the CLI fully agent-friendly as the primary interface surface
 
 Success looks like:
 
-- no fuzzy “context graph” language left in the repo
+- no fuzzy "context graph" language left in the repo
 - durable coordination contracts in `wg-types`
 - machine-readable discovery surfaces aware of those contracts
+- CLI passes agent-friendly audit: `--json` envelopes, `brief`, `capabilities`, `schema`, examples in `--help`, idempotent creates, `--dry-run`, stdin support, actionable errors
 
-## Phase 2 — Kernel Hardening
+## Phase 2 - Kernel Hardening
 
 Goal:
 
@@ -27,7 +29,7 @@ Scope:
 - typed graph edge emission
 - orientation and CLI surfaces for graph issues and evidence gaps
 
-## Phase 3 — Trigger Plane
+## Phase 3 - Trigger Plane
 
 Goal:
 
@@ -40,20 +42,24 @@ Scope:
 - policy-aware action planning
 - ingress from internal and external event sources
 
-## Phase 4 — Remote Access Surfaces
+## Phase 4 — Remote Access Surfaces (MCP as Cloud Adapter)
 
 Goal:
 
-- expose the same durable contracts over remote interfaces
+- expose the same durable contracts over remote interfaces for agents without shell access
+
+The CLI is the primary interface (decided Phase 1). MCP and API are secondary surfaces for cloud-hosted agents, ChatGPT plugins, OAuth-gated services, and contexts where an agent cannot exec a binary.
+
+MCP and API must be thin translation layers over the same kernel operations the CLI uses. They must never implement features unavailable via CLI.
 
 Scope:
 
-- remote MCP
-- API surfaces
+- remote MCP server (`wg-mcp`) wrapping kernel ops
+- HTTP API (`wg-api`) for REST consumers
 - scoped auth and service accounts
 - access boundaries that differ cleanly between single-user and org mode
 
-## Phase 5 — Org-Grade Governance
+## Phase 5 - Org-Grade Governance
 
 Goal:
 
@@ -66,7 +72,7 @@ Scope:
 - durable operational guardrails
 - richer audit workflows
 
-## Phase 6 — Federation
+## Phase 6 - Federation
 
 Goal:
 

@@ -90,11 +90,19 @@ The durable contract is:
 
 Opaque lineage means WorkGraph preserves delegation meaning without forcing every descendant actor into the graph.
 
-## Remote Access Principles
+## Surface Architecture: CLI-first
 
-Remote MCP and API access are expected future surfaces, but they are not the product boundary. They are access paths into the durable contracts defined here.
+The CLI is the **primary interface** for all agents with shell access. It is the reference surface — every feature lands here first.
 
-Those future surfaces must preserve:
+MCP and API are **secondary surfaces** for cloud-hosted agents that cannot exec a binary (ChatGPT plugins, OAuth-gated services, cloud-hosted agents without shell). They are thin translation layers over the same kernel operations the CLI uses. They must never implement features unavailable via CLI.
+
+This was decided because:
+
+- agents with shell access already know how to exec binaries — zero setup, zero auth
+- MCP adds overhead (server process, HTTP, connection lifecycle) unnecessary when you have a shell
+- cloud agents can't exec binaries — MCP is their only path in
+
+All access surfaces (CLI, MCP, API) must preserve:
 
 - the same typed primitive model
 - the same graph semantics

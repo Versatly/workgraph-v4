@@ -74,6 +74,21 @@ That means:
 
 Planned update actions and completion actions are durable follow-up intentions. They are not automatically executed in this foundation pass.
 
+## Surface Model
+
+The CLI (`wg-cli`) is the primary agent interface. An agent on any machine with shell access runs `workgraph brief --json` and is immediately oriented.
+
+MCP (`wg-mcp`) and API (`wg-api`) are secondary surfaces for cloud contexts. Both call the same kernel operations — neither owns business logic.
+
+Agent-facing CLI expectations:
+
+- structured JSON envelope on every command (`--json`)
+- `workgraph brief` for orientation (what is this workspace, what's here, what happened recently)
+- `workgraph capabilities` for self-discovery (what commands exist, what they accept)
+- `workgraph schema [type]` for field definitions
+- idempotent creates, `--dry-run` on writes, stdin for pipelines
+- actionable error messages with fix suggestions
+
 ## Delegation And Handoff
 
 Durable delegation should preserve:
