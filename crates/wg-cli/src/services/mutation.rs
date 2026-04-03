@@ -75,9 +75,7 @@ impl<'a> PrimitiveMutationService<'a> {
             format!("failed to evaluate policy for {primitive_type}/{primitive_id}")
         })?;
         if policy_decision == PolicyDecision::Deny {
-            bail!(
-                "policy denied creation of {primitive_type}/{primitive_id} for actor '{actor}'"
-            );
+            bail!("policy denied creation of {primitive_type}/{primitive_id} for actor '{actor}'");
         }
         Ok(())
     }

@@ -448,11 +448,9 @@ impl CommandOutput {
                     "workgraph --json status",
                     "Inspect mission, thread, and graph state after the mission change.",
                 )];
-                if let Some(reference) = output
-                    .mission
-                    .as_ref()
-                    .map(|mission| format!("{}/{}", mission.frontmatter.r#type, mission.frontmatter.id))
-                {
+                if let Some(reference) = output.mission.as_ref().map(|mission| {
+                    format!("{}/{}", mission.frontmatter.r#type, mission.frontmatter.id)
+                }) {
                     actions.push(next_action(
                         "show-mission",
                         &format!("workgraph --json show {reference}"),

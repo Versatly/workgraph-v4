@@ -64,34 +64,30 @@ pub async fn handle(app: &AppContext, command: RunCommand) -> anyhow::Result<Run
                 run: run_to_stored(&run)?,
             })
         }
-        RunCommand::Start { run_id } => transition_or_preview(
-            app,
-            "start",
-            &run_id,
-            async { start_run(app.workspace(), &run_id).await },
-        )
-        .await,
-        RunCommand::Complete { run_id, summary } => transition_or_preview(
-            app,
-            "complete",
-            &run_id,
-            async { complete_run(app.workspace(), &run_id, summary.as_deref()).await },
-        )
-        .await,
-        RunCommand::Fail { run_id, summary } => transition_or_preview(
-            app,
-            "fail",
-            &run_id,
-            async { fail_run(app.workspace(), &run_id, summary.as_deref()).await },
-        )
-        .await,
-        RunCommand::Cancel { run_id, summary } => transition_or_preview(
-            app,
-            "cancel",
-            &run_id,
-            async { cancel_run(app.workspace(), &run_id, summary.as_deref()).await },
-        )
-        .await,
+        RunCommand::Start { run_id } => {
+            transition_or_preview(app, "start", &run_id, async {
+                start_run(app.workspace(), &run_id).await
+            })
+            .await
+        }
+        RunCommand::Complete { run_id, summary } => {
+            transition_or_preview(app, "complete", &run_id, async {
+                complete_run(app.workspace(), &run_id, summary.as_deref()).await
+            })
+            .await
+        }
+        RunCommand::Fail { run_id, summary } => {
+            transition_or_preview(app, "fail", &run_id, async {
+                fail_run(app.workspace(), &run_id, summary.as_deref()).await
+            })
+            .await
+        }
+        RunCommand::Cancel { run_id, summary } => {
+            transition_or_preview(app, "cancel", &run_id, async {
+                cancel_run(app.workspace(), &run_id, summary.as_deref()).await
+            })
+            .await
+        }
     }
 }
 
@@ -106,9 +102,9 @@ where
 {
     let reference = format!("run/{run_id}");
     if app.dry_run() {
-        let run = load_run(app.workspace(), run_id).await.with_context(|| {
-            format!("failed to load run '{run_id}' for dry-run preview")
-        })?;
+        let run = load_run(app.workspace(), run_id)
+            .await
+            .with_context(|| format!("failed to load run '{run_id}' for dry-run preview"))?;
         return Ok(RunOutput {
             action: action.to_owned(),
             dry_run: true,

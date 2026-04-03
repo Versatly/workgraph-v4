@@ -188,7 +188,10 @@ async fn init_create_query_and_verify_ledger_chain() {
     assert_eq!(dry_run_json["command"], "create");
     assert_eq!(dry_run_json["result"]["dry_run"], true);
     assert_eq!(dry_run_json["result"]["reference"], "project/dealer-portal");
-    assert_eq!(dry_run_json["result"]["ledger_entry"], serde_json::Value::Null);
+    assert_eq!(
+        dry_run_json["result"]["ledger_entry"],
+        serde_json::Value::Null
+    );
     assert!(
         !fs::try_exists(temp_dir.path().join("projects").join("dealer-portal.md"))
             .await
@@ -416,7 +419,10 @@ async fn coordination_cli_commands_cover_thread_mission_run_trigger_and_checkpoi
         serde_json::from_str(&thread_create).expect("thread create output should be valid JSON");
     assert_eq!(thread_create_json["command"], "thread");
     assert_eq!(thread_create_json["result"]["action"], "create");
-    assert_eq!(thread_create_json["result"]["reference"], "thread/launch-thread");
+    assert_eq!(
+        thread_create_json["result"]["reference"],
+        "thread/launch-thread"
+    );
 
     execute(
         ["workgraph", "--json", "thread", "open", "launch-thread"],
@@ -504,8 +510,8 @@ async fn coordination_cli_commands_cover_thread_mission_run_trigger_and_checkpoi
     )
     .await
     .expect("mission create should succeed");
-    let mission_create_json: serde_json::Value = serde_json::from_str(&mission_create)
-        .expect("mission create output should be valid JSON");
+    let mission_create_json: serde_json::Value =
+        serde_json::from_str(&mission_create).expect("mission create output should be valid JSON");
     assert_eq!(mission_create_json["command"], "mission");
     assert_eq!(mission_create_json["result"]["action"], "create");
     execute(
@@ -539,7 +545,10 @@ async fn coordination_cli_commands_cover_thread_mission_run_trigger_and_checkpoi
         mission_progress_json["result"]["progress"]["completed_threads"],
         1
     );
-    assert_eq!(mission_progress_json["result"]["progress"]["total_threads"], 1);
+    assert_eq!(
+        mission_progress_json["result"]["progress"]["total_threads"],
+        1
+    );
 
     let run_create = execute(
         [
@@ -645,7 +654,10 @@ async fn coordination_cli_commands_cover_thread_mission_run_trigger_and_checkpoi
     let trigger_eval_json: serde_json::Value = serde_json::from_str(&trigger_eval)
         .expect("trigger evaluation output should be valid JSON");
     assert_eq!(trigger_eval_json["result"]["action"], "evaluate");
-    assert_eq!(trigger_eval_json["result"]["matches"][0]["trigger_id"], "trigger-1");
+    assert_eq!(
+        trigger_eval_json["result"]["matches"][0]["trigger_id"],
+        "trigger-1"
+    );
 
     let checkpoint_output = execute(
         [
@@ -661,8 +673,8 @@ async fn coordination_cli_commands_cover_thread_mission_run_trigger_and_checkpoi
     )
     .await
     .expect("checkpoint command should succeed");
-    let checkpoint_json: serde_json::Value = serde_json::from_str(&checkpoint_output)
-        .expect("checkpoint output should be valid JSON");
+    let checkpoint_json: serde_json::Value =
+        serde_json::from_str(&checkpoint_output).expect("checkpoint output should be valid JSON");
     assert_eq!(checkpoint_json["command"], "checkpoint");
     assert_eq!(
         checkpoint_json["result"]["checkpoint"]["frontmatter"]["type"],

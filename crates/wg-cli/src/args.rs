@@ -75,7 +75,9 @@ pub enum Command {
     #[command(after_help = "Examples:\n  workgraph --json capabilities")]
     Capabilities,
     /// Describes command arguments, outputs, and result envelope structure.
-    #[command(after_help = "Examples:\n  workgraph --json schema\n  workgraph --json schema create")]
+    #[command(
+        after_help = "Examples:\n  workgraph --json schema\n  workgraph --json schema create"
+    )]
     Schema {
         /// Optionally narrows the schema view to a single command.
         command: Option<String>,
@@ -343,7 +345,10 @@ pub enum MissionCommand {
     /// Marks a mission completed.
     Complete { mission_id: String },
     /// Attaches an existing thread to a mission.
-    AddThread { mission_id: String, thread_id: String },
+    AddThread {
+        mission_id: String,
+        thread_id: String,
+    },
     /// Attaches an existing run to a mission.
     AddRun { mission_id: String, run_id: String },
     /// Computes mission progress from stored threads.
@@ -409,6 +414,11 @@ pub enum RunCommand {
 }
 
 /// Supported trigger-specific workflows exposed by the CLI.
+///
+/// This enum is short-lived parser state. Keeping the save command fields
+/// inline preserves a straightforward clap definition and avoids unnecessary
+/// boxing noise in the reference CLI surface.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand)]
 pub enum TriggerCommand {
     /// Saves a trigger definition.

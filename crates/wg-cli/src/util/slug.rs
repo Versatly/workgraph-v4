@@ -50,4 +50,3 @@ pub fn validate_or_derive_id(id: Option<&str>, title: &str) -> anyhow::Result<St
         None => Ok(slugify(title)),
     }
 }
-

@@ -2,7 +2,7 @@
 
 use anyhow::Context;
 use wg_mission::{
-    add_run_to_mission, add_thread_to_mission, activate_mission, block_mission, complete_mission,
+    activate_mission, add_run_to_mission, add_thread_to_mission, block_mission, complete_mission,
     create_mission, load_mission, mission_progress,
 };
 
@@ -168,7 +168,9 @@ pub async fn handle(app: &AppContext, command: MissionCommand) -> anyhow::Result
                 .with_context(|| format!("failed to load mission '{mission_id}'"))?;
             let progress = mission_progress(app.workspace(), &mission_id)
                 .await
-                .with_context(|| format!("failed to compute progress for mission '{mission_id}'"))?;
+                .with_context(|| {
+                    format!("failed to compute progress for mission '{mission_id}'")
+                })?;
             Ok(MissionOutput {
                 action: "progress".to_owned(),
                 dry_run: app.dry_run(),

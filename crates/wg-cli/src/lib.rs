@@ -309,7 +309,10 @@ mod tests {
                 .expect("thread schema should succeed");
         let thread_schema_json: JsonValue = serde_json::from_str(&thread_schema_output)
             .expect("thread schema output should be valid JSON");
-        assert_eq!(thread_schema_json["result"]["commands"][0]["name"], "thread");
+        assert_eq!(
+            thread_schema_json["result"]["commands"][0]["name"],
+            "thread"
+        );
     }
 
     #[test]
@@ -334,5 +337,4 @@ mod tests {
 
         assert_eq!(output.status.code(), Some(2));
     }
-
 }

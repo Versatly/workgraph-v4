@@ -391,7 +391,11 @@ fn render_mission(output: &MissionOutput) -> String {
 fn render_run(output: &RunOutput) -> String {
     let mut rendered = String::new();
     let prefix = if output.dry_run { "Dry run: " } else { "" };
-    let _ = writeln!(rendered, "{prefix}run {} {}", output.action, output.reference);
+    let _ = writeln!(
+        rendered,
+        "{prefix}run {} {}",
+        output.action, output.reference
+    );
     rendered.push_str(&render_show(&ShowOutput {
         reference: output.reference.clone(),
         primitive: output.run.clone(),
@@ -408,10 +412,9 @@ fn render_trigger(output: &TriggerOutput) -> String {
     }
     if let Some(trigger) = &output.trigger {
         rendered.push_str(&render_show(&ShowOutput {
-            reference: output
-                .reference
-                .clone()
-                .unwrap_or_else(|| format!("{}/{}", trigger.frontmatter.r#type, trigger.frontmatter.id)),
+            reference: output.reference.clone().unwrap_or_else(|| {
+                format!("{}/{}", trigger.frontmatter.r#type, trigger.frontmatter.id)
+            }),
             primitive: trigger.clone(),
         }));
         let _ = writeln!(rendered);

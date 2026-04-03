@@ -57,7 +57,9 @@ pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<Comma
         } => Ok(CommandOutput::Query(
             query::handle(app, &primitive_type, &filters).await?,
         )),
-        Command::Thread { command } => Ok(CommandOutput::Thread(thread::handle(app, command).await?)),
+        Command::Thread { command } => {
+            Ok(CommandOutput::Thread(thread::handle(app, command).await?))
+        }
         Command::Mission { command } => {
             Ok(CommandOutput::Mission(mission::handle(app, command).await?))
         }

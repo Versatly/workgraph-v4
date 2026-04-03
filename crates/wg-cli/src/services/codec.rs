@@ -87,10 +87,7 @@ fn struct_value_to_stored(
     Ok(stored)
 }
 
-fn extract_body(
-    primitive_type: &str,
-    value: &mut serde_yaml::Mapping,
-) -> String {
+fn extract_body(primitive_type: &str, value: &mut serde_yaml::Mapping) -> String {
     let body_key = serde_yaml::Value::String(match primitive_type {
         "mission" => "objective".to_owned(),
         "run" => "summary".to_owned(),

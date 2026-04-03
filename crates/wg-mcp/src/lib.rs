@@ -51,18 +51,66 @@ impl McpServer {
     #[must_use]
     pub fn tools(&self) -> Vec<McpTool> {
         vec![
-            tool("brief", "Produce a structured workspace brief.", "brief --lens workspace"),
-            tool("status", "Inspect counts, graph issues, and evidence gaps.", "status"),
-            tool("capabilities", "Discover workflows and primitive contracts.", "capabilities"),
-            tool("schema", "Inspect command and envelope contracts.", "schema create"),
-            tool("show", "Load one primitive by reference.", "show org/versatly"),
-            tool("query", "List primitives of one type.", "query decision --filter status=decided"),
-            tool("create", "Create a primitive through the reference CLI surface.", "create org --title Versatly"),
-            tool("thread", "Run thread lifecycle workflows.", "thread create --id launch-thread --title 'Launch readiness'"),
-            tool("mission", "Run mission workflows.", "mission progress launch-mission"),
-            tool("run", "Run execution lifecycle workflows.", "run complete run-1 --summary 'Completed successfully'"),
-            tool("trigger", "Save or evaluate trigger definitions.", "trigger evaluate --entry-index 0"),
-            tool("checkpoint", "Save a resumable checkpoint.", "checkpoint --working-on 'Kernel work' --focus 'Finalize tests'"),
+            tool(
+                "brief",
+                "Produce a structured workspace brief.",
+                "brief --lens workspace",
+            ),
+            tool(
+                "status",
+                "Inspect counts, graph issues, and evidence gaps.",
+                "status",
+            ),
+            tool(
+                "capabilities",
+                "Discover workflows and primitive contracts.",
+                "capabilities",
+            ),
+            tool(
+                "schema",
+                "Inspect command and envelope contracts.",
+                "schema create",
+            ),
+            tool(
+                "show",
+                "Load one primitive by reference.",
+                "show org/versatly",
+            ),
+            tool(
+                "query",
+                "List primitives of one type.",
+                "query decision --filter status=decided",
+            ),
+            tool(
+                "create",
+                "Create a primitive through the reference CLI surface.",
+                "create org --title Versatly",
+            ),
+            tool(
+                "thread",
+                "Run thread lifecycle workflows.",
+                "thread create --id launch-thread --title 'Launch readiness'",
+            ),
+            tool(
+                "mission",
+                "Run mission workflows.",
+                "mission progress launch-mission",
+            ),
+            tool(
+                "run",
+                "Run execution lifecycle workflows.",
+                "run complete run-1 --summary 'Completed successfully'",
+            ),
+            tool(
+                "trigger",
+                "Save or evaluate trigger definitions.",
+                "trigger evaluate --entry-index 0",
+            ),
+            tool(
+                "checkpoint",
+                "Save a resumable checkpoint.",
+                "checkpoint --working-on 'Kernel work' --focus 'Finalize tests'",
+            ),
         ]
     }
 

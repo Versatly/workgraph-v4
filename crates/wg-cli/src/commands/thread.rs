@@ -6,7 +6,9 @@ use wg_thread::{
     add_completion_action, add_evidence, add_exit_criterion, add_message, add_update_action,
     claim_thread, complete_thread, create_thread, open_thread,
 };
-use wg_types::{ActorId, CoordinationAction, EvidenceItem, ThreadExitCriterion, ThreadPrimitive, ThreadStatus};
+use wg_types::{
+    ActorId, CoordinationAction, EvidenceItem, ThreadExitCriterion, ThreadPrimitive, ThreadStatus,
+};
 
 use crate::app::AppContext;
 use crate::args::ThreadCommand;
@@ -54,7 +56,13 @@ pub async fn handle(app: &AppContext, command: ThreadCommand) -> anyhow::Result<
         ThreadCommand::Open { thread_id } => {
             let reference = format!("thread/{thread_id}");
             if app.dry_run() {
-                return dry_run_from_existing_or_placeholder(app, "open", &thread_id, ThreadStatus::Ready).await;
+                return dry_run_from_existing_or_placeholder(
+                    app,
+                    "open",
+                    &thread_id,
+                    ThreadStatus::Ready,
+                )
+                .await;
             }
 
             open_thread(app.workspace(), &thread_id)
@@ -65,7 +73,13 @@ pub async fn handle(app: &AppContext, command: ThreadCommand) -> anyhow::Result<
         ThreadCommand::Claim { thread_id, actor } => {
             let reference = format!("thread/{thread_id}");
             if app.dry_run() {
-                return dry_run_from_existing_or_placeholder(app, "claim", &thread_id, ThreadStatus::Active).await;
+                return dry_run_from_existing_or_placeholder(
+                    app,
+                    "claim",
+                    &thread_id,
+                    ThreadStatus::Active,
+                )
+                .await;
             }
 
             claim_thread(app.workspace(), &thread_id, ActorId::new(actor))
@@ -148,7 +162,13 @@ pub async fn handle(app: &AppContext, command: ThreadCommand) -> anyhow::Result<
             add_update_action(
                 app.workspace(),
                 &thread_id,
-                CoordinationAction { id, title, kind, target_reference, description },
+                CoordinationAction {
+                    id,
+                    title,
+                    kind,
+                    target_reference,
+                    description,
+                },
             )
             .await
             .with_context(|| format!("failed to add update action to thread '{thread_id}'"))?;
@@ -170,13 +190,23 @@ pub async fn handle(app: &AppContext, command: ThreadCommand) -> anyhow::Result<
             add_completion_action(
                 app.workspace(),
                 &thread_id,
-                CoordinationAction { id, title, kind, target_reference, description },
+                CoordinationAction {
+                    id,
+                    title,
+                    kind,
+                    target_reference,
+                    description,
+                },
             )
             .await
             .with_context(|| format!("failed to add completion action to thread '{thread_id}'"))?;
             load_output(app, "add_completion_action", &reference).await
         }
-        ThreadCommand::AddMessage { thread_id, actor, text } => {
+        ThreadCommand::AddMessage {
+            thread_id,
+            actor,
+            text,
+        } => {
             let reference = format!("thread/{thread_id}");
             if app.dry_run() {
                 return dry_run_existing(app, "add_message", &reference).await;
@@ -201,7 +231,11 @@ pub async fn handle(app: &AppContext, command: ThreadCommand) -> anyhow::Result<
     }
 }
 
-async fn load_output(app: &AppContext, action: &str, reference: &str) -> anyhow::Result<ThreadOutput> {
+async fn load_output(
+    app: &AppContext,
+    action: &str,
+    reference: &str,
+) -> anyhow::Result<ThreadOutput> {
     let (primitive_type, id) = reference
         .split_once('/')
         .expect("thread references should be well-formed");
@@ -216,7 +250,11 @@ async fn load_output(app: &AppContext, action: &str, reference: &str) -> anyhow:
     })
 }
 
-async fn dry_run_existing(app: &AppContext, action: &str, reference: &str) -> anyhow::Result<ThreadOutput> {
+async fn dry_run_existing(
+    app: &AppContext,
+    action: &str,
+    reference: &str,
+) -> anyhow::Result<ThreadOutput> {
     let (primitive_type, id) = reference
         .split_once('/')
         .expect("thread references should be well-formed");
