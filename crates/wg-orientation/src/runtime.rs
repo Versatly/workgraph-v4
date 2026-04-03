@@ -8,8 +8,8 @@ use wg_store::StoredPrimitive;
 use wg_types::ActorId;
 
 use crate::{
-    BriefItem, CheckpointMutationService, GraphIssue, RecentActivity, ThreadEvidenceGap,
-    brief_runtime, status_runtime,
+    BriefItem, CheckpointMutationService, GraphIssue, GraphOrphan, RecentActivity,
+    ThreadEvidenceGap, brief_runtime, status_runtime,
 };
 
 /// Workspace orientation summary derived from real persisted data.
@@ -21,6 +21,8 @@ pub struct WorkspaceStatus {
     pub recent_activity: Vec<RecentActivity>,
     /// Typed graph hygiene issues discovered by the graph engine.
     pub graph_issues: Vec<GraphIssue>,
+    /// Primitives with no inbound graph edges.
+    pub orphan_nodes: Vec<GraphOrphan>,
     /// Threads with unsatisfied required exit criteria.
     pub thread_evidence_gaps: Vec<ThreadEvidenceGap>,
 }
@@ -192,6 +194,12 @@ mod tests {
                 .graph_issues
                 .iter()
                 .any(|issue| issue.source_reference == "decision/alpha")
+        );
+        assert!(
+            snapshot
+                .orphan_nodes
+                .iter()
+                .any(|orphan| orphan.reference == "decision/alpha")
         );
         assert_eq!(snapshot.thread_evidence_gaps.len(), 1);
         assert_eq!(

@@ -8,9 +8,9 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 use serde_json::Value as JsonValue;
-use wg_orientation::{GraphIssue, RecentActivity, ThreadEvidenceGap, WorkspaceBrief};
+use wg_orientation::{GraphIssue, GraphOrphan, RecentActivity, ThreadEvidenceGap, WorkspaceBrief};
 use wg_store::StoredPrimitive;
-use wg_types::{LedgerEntry, WorkgraphConfig};
+use wg_types::{LedgerEntry, ThreadPrimitive, WorkgraphConfig};
 
 /// Stable schema version for the JSON agent contract emitted by the CLI.
 pub const AGENT_SCHEMA_VERSION: &str = "v1";
@@ -25,6 +25,14 @@ pub enum CommandOutput {
     Brief(BriefOutput),
     /// Result of `workgraph status`.
     Status(StatusOutput),
+    /// Result of `workgraph claim`.
+    Claim(ThreadClaimOutput),
+    /// Result of `workgraph complete`.
+    Complete(ThreadCompleteOutput),
+    /// Result of `workgraph checkpoint`.
+    Checkpoint(CheckpointOutput),
+    /// Result of `workgraph ledger`.
+    Ledger(LedgerOutput),
     /// Result of `workgraph capabilities`.
     Capabilities(CapabilitiesOutput),
     /// Result of `workgraph schema`.
@@ -67,8 +75,40 @@ pub struct StatusOutput {
     pub last_entry: Option<LedgerEntry>,
     /// Typed graph hygiene issues discovered by the graph builder.
     pub graph_issues: Vec<GraphIssue>,
+    /// Nodes with no inbound graph edges.
+    pub orphan_nodes: Vec<GraphOrphan>,
     /// Threads that cannot yet complete because required evidence is missing.
     pub thread_evidence_gaps: Vec<ThreadEvidenceGap>,
+}
+
+/// Output model produced by the `claim` command.
+#[derive(Debug, Serialize)]
+pub struct ThreadClaimOutput {
+    /// Updated thread after assignment.
+    pub thread: ThreadPrimitive,
+}
+
+/// Output model produced by the `complete` command.
+#[derive(Debug, Serialize)]
+pub struct ThreadCompleteOutput {
+    /// Updated thread after completion.
+    pub thread: ThreadPrimitive,
+}
+
+/// Output model produced by the `checkpoint` command.
+#[derive(Debug, Serialize)]
+pub struct CheckpointOutput {
+    /// Persisted checkpoint primitive.
+    pub primitive: StoredPrimitive,
+}
+
+/// Output model produced by the `ledger` command.
+#[derive(Debug, Serialize)]
+pub struct LedgerOutput {
+    /// Number of entries returned.
+    pub count: usize,
+    /// Recent ledger entries in reverse chronological order.
+    pub entries: Vec<LedgerEntry>,
 }
 
 /// Stable workspace identity details included in orientation responses.
@@ -206,6 +246,10 @@ impl CommandOutput {
             Self::Init(_) => "init",
             Self::Brief(_) => "brief",
             Self::Status(_) => "status",
+            Self::Claim(_) => "claim",
+            Self::Complete(_) => "complete",
+            Self::Checkpoint(_) => "checkpoint",
+            Self::Ledger(_) => "ledger",
             Self::Capabilities(_) => "capabilities",
             Self::Schema(_) => "schema",
             Self::Create(_) => "create",
@@ -224,6 +268,10 @@ impl CommandOutput {
             Self::Init(output) => serde_json::to_value(output),
             Self::Brief(output) => serde_json::to_value(output),
             Self::Status(output) => serde_json::to_value(output),
+            Self::Claim(output) => serde_json::to_value(output),
+            Self::Complete(output) => serde_json::to_value(output),
+            Self::Checkpoint(output) => serde_json::to_value(output),
+            Self::Ledger(output) => serde_json::to_value(output),
             Self::Capabilities(output) => serde_json::to_value(output),
             Self::Schema(output) => serde_json::to_value(output),
             Self::Create(output) => serde_json::to_value(output),
@@ -251,6 +299,27 @@ impl CommandOutput {
             Self::Status(_) => vec![
                 "workgraph brief".to_owned(),
                 "workgraph query org".to_owned(),
+            ],
+            Self::Claim(output) => vec![
+                format!("workgraph show thread/{}", output.thread.id),
+                format!("workgraph complete {}", output.thread.id),
+                "workgraph status".to_owned(),
+            ],
+            Self::Complete(output) => vec![
+                format!("workgraph show thread/{}", output.thread.id),
+                "workgraph status".to_owned(),
+                "workgraph ledger --last 10".to_owned(),
+            ],
+            Self::Checkpoint(output) => vec![
+                format!(
+                    "workgraph show {}/{}",
+                    output.primitive.frontmatter.r#type, output.primitive.frontmatter.id
+                ),
+                "workgraph brief".to_owned(),
+            ],
+            Self::Ledger(_) => vec![
+                "workgraph status".to_owned(),
+                "workgraph ledger --last 20".to_owned(),
             ],
             Self::Capabilities(_) => vec![
                 "workgraph schema".to_owned(),

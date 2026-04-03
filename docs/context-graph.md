@@ -44,6 +44,16 @@ Every edge records provenance so the system can distinguish soft references from
 
 Edge provenance is part of the contract, not a debugging nicety.
 
+## Graph Hygiene
+
+Graph hygiene is a first-class operational output, not just a debugging helper.
+
+Status surfaces should expose at least:
+
+- broken structured references (with edge kind + provenance)
+- orphan nodes (nodes with no inbound typed edges)
+- evidence contract gaps on coordination threads
+
 ## Authority Rules
 
 ### What belongs in the graph

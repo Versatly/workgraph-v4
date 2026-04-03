@@ -118,6 +118,13 @@ pub struct GraphIssue {
     pub reason: String,
 }
 
+/// Graph orphan node detected during graph construction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GraphOrphan {
+    /// Orphan primitive reference in `type/id` form.
+    pub reference: String,
+}
+
 /// Unsatisfied evidence contract for a thread.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ThreadEvidenceGap {

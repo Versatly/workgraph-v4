@@ -5,8 +5,9 @@ use std::fmt::Write as _;
 use serde_yaml::Value;
 
 use super::{
-    CapabilitiesOutput, CommandOutput, CreateOutcome, CreateOutput, InitOutput, QueryOutput,
-    SchemaOutput, ShowOutput, StatusOutput,
+    CapabilitiesOutput, CheckpointOutput, CommandOutput, CreateOutcome, CreateOutput, InitOutput,
+    LedgerOutput, QueryOutput, SchemaOutput, ShowOutput, StatusOutput, ThreadClaimOutput,
+    ThreadCompleteOutput,
 };
 
 /// Renders a structured command output to human-readable text.
@@ -16,6 +17,10 @@ pub fn render(output: &CommandOutput, next_actions: &[String]) -> String {
         CommandOutput::Init(output) => render_init(output),
         CommandOutput::Brief(output) => render_brief(output),
         CommandOutput::Status(output) => render_status(output),
+        CommandOutput::Claim(output) => render_claim(output),
+        CommandOutput::Complete(output) => render_complete(output),
+        CommandOutput::Checkpoint(output) => render_checkpoint(output),
+        CommandOutput::Ledger(output) => render_ledger(output),
         CommandOutput::Capabilities(output) => render_capabilities(output),
         CommandOutput::Schema(output) => render_schema(output),
         CommandOutput::Create(output) => render_create(output),
@@ -202,7 +207,72 @@ fn render_status(output: &StatusOutput) -> String {
             );
         }
     }
+    let _ = writeln!(rendered, "Orphan nodes:");
+    if output.orphan_nodes.is_empty() {
+        let _ = writeln!(rendered, "- none");
+    } else {
+        for orphan in &output.orphan_nodes {
+            let _ = writeln!(rendered, "- {}", orphan.reference);
+        }
+    }
 
+    rendered.trim_end().to_owned()
+}
+
+fn render_claim(output: &ThreadClaimOutput) -> String {
+    let mut rendered = String::new();
+    let _ = writeln!(rendered, "Claimed thread: {}", output.thread.id);
+    let _ = writeln!(rendered, "title: {}", output.thread.title);
+    let _ = writeln!(rendered, "status: {}", output.thread.status.as_str());
+    let _ = writeln!(
+        rendered,
+        "assigned_actor: {}",
+        output
+            .thread
+            .assigned_actor
+            .as_ref()
+            .map_or("none", |actor| actor.as_str())
+    );
+    rendered.trim_end().to_owned()
+}
+
+fn render_complete(output: &ThreadCompleteOutput) -> String {
+    let mut rendered = String::new();
+    let _ = writeln!(rendered, "Completed thread: {}", output.thread.id);
+    let _ = writeln!(rendered, "title: {}", output.thread.title);
+    let _ = writeln!(rendered, "status: {}", output.thread.status.as_str());
+    rendered.trim_end().to_owned()
+}
+
+fn render_checkpoint(output: &CheckpointOutput) -> String {
+    let mut rendered = String::new();
+    let _ = writeln!(
+        rendered,
+        "Saved checkpoint: {}/{}",
+        output.primitive.frontmatter.r#type, output.primitive.frontmatter.id
+    );
+    let _ = writeln!(rendered, "title: {}", output.primitive.frontmatter.title);
+    rendered.trim_end().to_owned()
+}
+
+fn render_ledger(output: &LedgerOutput) -> String {
+    let mut rendered = String::new();
+    let _ = writeln!(rendered, "Ledger entries: {}", output.count);
+    if output.entries.is_empty() {
+        let _ = writeln!(rendered, "- none");
+    } else {
+        for entry in &output.entries {
+            let _ = writeln!(
+                rendered,
+                "- {} {} {}/{} {:?}",
+                entry.ts.to_rfc3339(),
+                entry.actor,
+                entry.primitive_type,
+                entry.primitive_id,
+                entry.op
+            );
+        }
+    }
     rendered.trim_end().to_owned()
 }
 
@@ -289,12 +359,16 @@ fn render_query(output: &QueryOutput) -> String {
         "{} result(s) for type '{}':",
         output.count, output.primitive_type
     );
-    for item in &output.items {
-        let _ = writeln!(
-            rendered,
-            "- {}/{} — {}",
-            item.frontmatter.r#type, item.frontmatter.id, item.frontmatter.title
-        );
+    if output.items.is_empty() {
+        let _ = writeln!(rendered, "- none");
+    } else {
+        for item in &output.items {
+            let _ = writeln!(
+                rendered,
+                "- {}/{} — {}",
+                item.frontmatter.r#type, item.frontmatter.id, item.frontmatter.title
+            );
+        }
     }
     rendered.trim_end().to_owned()
 }

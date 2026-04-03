@@ -273,6 +273,7 @@ mod tests {
             serde_json::from_str(&status_output).expect("status output should be valid JSON");
         assert_eq!(status_json["command"], "status");
         assert_eq!(status_json["result"]["type_counts"]["org"], 1);
+        assert!(status_json["result"]["orphan_nodes"].is_array());
 
         let query_output = execute(["workgraph", "--json", "query", "org"], temp_dir.path())
             .await
@@ -316,6 +317,77 @@ mod tests {
         assert!(schema_json["result"]["envelope_fields"].is_array());
         assert!(schema_json["result"]["primitive_types"].is_array());
         assert_eq!(schema_json["result"]["primitive_types"][0]["name"], "org");
+
+        execute(
+            [
+                "workgraph",
+                "--json",
+                "create",
+                "thread",
+                "--title",
+                "Kernel Thread",
+                "--field",
+                "status=ready",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("thread create should succeed");
+        let claim_output = execute(
+            ["workgraph", "--json", "claim", "kernel-thread"],
+            temp_dir.path(),
+        )
+        .await
+        .expect("claim should succeed");
+        let claim_json: JsonValue =
+            serde_json::from_str(&claim_output).expect("claim output should be valid JSON");
+        assert_eq!(claim_json["command"], "claim");
+        assert_eq!(claim_json["result"]["thread"]["status"], "active");
+        assert_eq!(claim_json["result"]["thread"]["assigned_actor"], "cli");
+
+        let complete_output = execute(
+            ["workgraph", "--json", "complete", "kernel-thread"],
+            temp_dir.path(),
+        )
+        .await
+        .expect("complete should succeed");
+        let complete_json: JsonValue =
+            serde_json::from_str(&complete_output).expect("complete output should be valid JSON");
+        assert_eq!(complete_json["command"], "complete");
+        assert_eq!(complete_json["result"]["thread"]["status"], "done");
+
+        let checkpoint_output = execute(
+            [
+                "workgraph",
+                "--json",
+                "checkpoint",
+                "--working-on",
+                "Kernel hardening",
+                "--focus",
+                "Phase 2 delivery",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("checkpoint should succeed");
+        let checkpoint_json: JsonValue = serde_json::from_str(&checkpoint_output)
+            .expect("checkpoint output should be valid JSON");
+        assert_eq!(checkpoint_json["command"], "checkpoint");
+        assert_eq!(
+            checkpoint_json["result"]["primitive"]["frontmatter"]["type"],
+            "checkpoint"
+        );
+
+        let ledger_output = execute(
+            ["workgraph", "--json", "ledger", "--last", "5"],
+            temp_dir.path(),
+        )
+        .await
+        .expect("ledger should succeed");
+        let ledger_json: JsonValue =
+            serde_json::from_str(&ledger_output).expect("ledger output should be valid JSON");
+        assert_eq!(ledger_json["command"], "ledger");
+        assert!(ledger_json["result"]["entries"].is_array());
     }
 
     #[tokio::test]

@@ -21,6 +21,7 @@ pub async fn handle(app: &AppContext) -> anyhow::Result<StatusOutput> {
         recent_activity: workspace_status.recent_activity,
         last_entry: entries.first().cloned(),
         graph_issues: workspace_status.graph_issues,
+        orphan_nodes: workspace_status.orphan_nodes,
         thread_evidence_gaps: workspace_status.thread_evidence_gaps,
     })
 }

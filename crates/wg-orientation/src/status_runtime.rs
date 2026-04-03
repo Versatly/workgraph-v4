@@ -8,6 +8,7 @@ use crate::{GraphIssue, WorkspaceStatus};
 
 use super::runtime_support::{
     edge_kind_label, edge_source_label, load_recent_activity, load_thread_evidence_gaps,
+    orphan_nodes,
 };
 
 /// Builds a workspace status summary from persisted primitives and ledger entries.
@@ -34,11 +35,13 @@ pub async fn status(workspace: &WorkspacePath) -> Result<WorkspaceStatus> {
             reason: broken.reason.clone(),
         })
         .collect();
+    let orphan_nodes = orphan_nodes(&graph);
 
     Ok(WorkspaceStatus {
         type_counts,
         recent_activity: load_recent_activity(workspace, 10).await?,
         graph_issues,
+        orphan_nodes,
         thread_evidence_gaps: load_thread_evidence_gaps(workspace).await?,
     })
 }

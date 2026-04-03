@@ -17,8 +17,8 @@ pub use config::WorkgraphConfig;
 pub use coordination::{
     CheckpointPrimitive, ConversationMessage, CoordinationAction, EventPattern, EventSourceKind,
     EvidenceItem, GraphEdgeKind, GraphEdgeReference, GraphEdgeSource, LineageMode, MessageKind,
-    MissionPrimitive, MissionStatus, RunPrimitive, ThreadExitCriterion, ThreadPrimitive,
-    TriggerActionPlan, TriggerPrimitive, TriggerStatus,
+    MissionMilestone, MissionPrimitive, MissionStatus, RunPrimitive, ThreadExitCriterion,
+    ThreadPrimitive, TriggerActionPlan, TriggerPrimitive, TriggerStatus,
 };
 pub use identity::{ActorId, NodeId, WorkspaceId};
 pub use ledger::{LedgerEntry, LedgerOp};

@@ -3,6 +3,7 @@
 
 //! Durable run persistence and lifecycle helpers for WorkGraph dispatch.
 
+use chrono::{DateTime, Utc};
 use serde_yaml::Value;
 use wg_error::{Result, WorkgraphError};
 use wg_paths::WorkspacePath;
@@ -183,6 +184,8 @@ fn run_to_primitive(run: &Run) -> Result<StoredPrimitive> {
             Value::String(parent_run_id.clone()),
         );
     }
+    set_datetime_field(&mut extra_fields, "started_at", run.started_at);
+    set_datetime_field(&mut extra_fields, "ended_at", run.ended_at);
 
     Ok(StoredPrimitive {
         frontmatter: PrimitiveFrontmatter {
@@ -256,6 +259,16 @@ fn run_from_primitive(primitive: &StoredPrimitive) -> Result<Run> {
             .get("parent_run_id")
             .and_then(string_value)
             .map(str::to_owned),
+        started_at: primitive
+            .frontmatter
+            .extra_fields
+            .get("started_at")
+            .map_or(Ok(None), parse_optional_datetime)?,
+        ended_at: primitive
+            .frontmatter
+            .extra_fields
+            .get("ended_at")
+            .map_or(Ok(None), parse_optional_datetime)?,
         summary: (!primitive.body.trim().is_empty()).then(|| primitive.body.clone()),
     })
 }
@@ -281,6 +294,29 @@ fn string_value(value: &Value) -> Option<&str> {
 
 fn encoding_error(error: impl std::fmt::Display) -> WorkgraphError {
     WorkgraphError::EncodingError(error.to_string())
+}
+
+fn set_datetime_field(
+    extra_fields: &mut std::collections::BTreeMap<String, Value>,
+    key: &str,
+    value: Option<DateTime<Utc>>,
+) {
+    if let Some(value) = value {
+        extra_fields.insert(key.to_owned(), Value::String(value.to_rfc3339()));
+    }
+}
+
+fn parse_optional_datetime(value: &Value) -> Result<Option<DateTime<Utc>>> {
+    match value {
+        Value::String(value) => DateTime::parse_from_rfc3339(value)
+            .map(|timestamp| Some(timestamp.with_timezone(&Utc)))
+            .map_err(encoding_error),
+        Value::Tagged(tagged) => parse_optional_datetime(&tagged.value),
+        Value::Null => Ok(None),
+        Value::Bool(_) | Value::Number(_) | Value::Sequence(_) | Value::Mapping(_) => Err(
+            WorkgraphError::ValidationError("expected RFC3339 datetime string".to_owned()),
+        ),
+    }
 }
 
 fn system_actor() -> ActorId {
@@ -322,12 +358,16 @@ mod tests {
             .await
             .expect("run should start");
         assert_eq!(running.status, RunStatus::Running);
+        assert!(running.started_at.is_some());
+        assert!(running.ended_at.is_none());
 
         let completed = complete_run(&workspace, "run-1", Some("Completed successfully"))
             .await
             .expect("run should complete");
         assert_eq!(completed.status, RunStatus::Succeeded);
         assert_eq!(completed.parent_run_id.as_deref(), Some("run-parent"));
+        assert!(completed.started_at.is_some());
+        assert!(completed.ended_at.is_some());
 
         let stored = read_primitive(&workspace, "run", "run-1")
             .await
@@ -372,6 +412,8 @@ mod tests {
             .await
             .expect("run should fail");
         assert_eq!(failed.status, RunStatus::Failed);
+        assert!(failed.started_at.is_some());
+        assert!(failed.ended_at.is_some());
 
         let cancelled_error = cancel_run(&workspace, "run-2", None)
             .await
