@@ -24,15 +24,25 @@ pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<Comma
         Command::Brief { lens } => Ok(CommandOutput::Brief(brief::handle(app, lens.0).await?)),
         Command::Status => Ok(CommandOutput::Status(status::handle(app).await?)),
         Command::Capabilities => Ok(CommandOutput::Capabilities(capabilities::handle())),
-        Command::Schema { command } => {
-            Ok(CommandOutput::Schema(schema::handle(command.as_deref())))
-        }
+        Command::Schema { primitive_type } => Ok(CommandOutput::Schema(
+            schema::handle(app, primitive_type.as_deref()).await?,
+        )),
         Command::Create {
             primitive_type,
             title,
             fields,
+            dry_run,
+            stdin,
         } => Ok(CommandOutput::Create(
-            create::handle(app, &primitive_type, &title, &fields).await?,
+            create::handle(
+                app,
+                &primitive_type,
+                title.as_deref(),
+                &fields,
+                dry_run,
+                stdin,
+            )
+            .await?,
         )),
         Command::Query {
             primitive_type,

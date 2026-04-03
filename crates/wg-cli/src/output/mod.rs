@@ -1,5 +1,6 @@
 //! Structured CLI output models and rendering entrypoints.
 
+mod envelope;
 mod human;
 mod json;
 
@@ -12,7 +13,7 @@ use wg_store::StoredPrimitive;
 use wg_types::{LedgerEntry, WorkgraphConfig};
 
 /// Stable schema version for the JSON agent contract emitted by the CLI.
-pub const AGENT_SCHEMA_VERSION: &str = "workgraph.cli.v1alpha2";
+pub const AGENT_SCHEMA_VERSION: &str = "v1";
 
 /// A structured command result suitable for either human or JSON rendering.
 #[derive(Debug, Serialize)]
@@ -21,7 +22,7 @@ pub enum CommandOutput {
     /// Result of `workgraph init`.
     Init(InitOutput),
     /// Result of `workgraph brief`.
-    Brief(WorkspaceBrief),
+    Brief(BriefOutput),
     /// Result of `workgraph status`.
     Status(StatusOutput),
     /// Result of `workgraph capabilities`.
@@ -70,43 +71,79 @@ pub struct StatusOutput {
     pub thread_evidence_gaps: Vec<ThreadEvidenceGap>,
 }
 
+/// Stable workspace identity details included in orientation responses.
+#[derive(Debug, Serialize)]
+pub struct WorkspaceIdentity {
+    /// Stable workspace identifier.
+    pub id: String,
+    /// Human-readable workspace name.
+    pub name: String,
+    /// Filesystem root for this workspace.
+    pub root: String,
+    /// Default actor identifier when configured.
+    pub default_actor_id: Option<String>,
+}
+
+/// Output model produced by the `brief` command.
+#[derive(Debug, Serialize)]
+pub struct BriefOutput {
+    /// Workspace identity metadata.
+    pub workspace: WorkspaceIdentity,
+    /// Primitive counts grouped by primitive type.
+    pub primitive_counts: BTreeMap<String, usize>,
+    /// Last immutable ledger entries for immediate orientation.
+    pub recent_ledger_entries: Vec<LedgerEntry>,
+    /// Recommended follow-up commands for entering agents.
+    pub suggested_next_actions: Vec<String>,
+    /// Rich orientation sections and warnings for entering agents.
+    pub orientation: WorkspaceBrief,
+}
+
 /// Output model produced by the `capabilities` command.
 #[derive(Debug, Serialize)]
 pub struct CapabilitiesOutput {
-    /// Recommended machine-readable format for autonomous agents.
-    pub recommended_format: String,
-    /// Grouped workflows exposed by the CLI.
-    pub workflows: Vec<super::services::discovery::WorkflowSkill>,
-    /// Command-level structured capabilities.
-    pub commands: Vec<super::services::discovery::CommandSkill>,
-    /// First-class primitive contracts that agents should understand before writing.
-    pub primitive_contracts: Vec<super::services::discovery::PrimitiveContract>,
+    /// The first command agents should call to orient on a workspace.
+    pub first_command: String,
+    /// Structured command capabilities for self-discovery.
+    pub commands: Vec<super::services::discovery::CommandCapability>,
 }
 
 /// Output model produced by the `schema` command.
 #[derive(Debug, Serialize)]
 pub struct SchemaOutput {
-    /// Stable schema version for agent-native CLI envelopes.
+    /// Stable schema version for machine-readable discovery responses.
     pub schema_version: String,
     /// The top-level structured envelope fields emitted in JSON mode.
     pub envelope_fields: Vec<super::services::discovery::SchemaField>,
-    /// Structured command definitions.
-    pub commands: Vec<super::services::discovery::CommandSchema>,
-    /// Typed primitive contracts discoverable through the CLI.
-    pub primitive_contracts: Vec<super::services::discovery::PrimitiveContract>,
+    /// Primitive field definitions for one type (or all when omitted).
+    pub primitive_types: Vec<super::services::discovery::PrimitiveTypeSchema>,
+}
+
+/// Structured outcome for `create` mutations.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CreateOutcome {
+    /// A new primitive was persisted and ledgered.
+    Created,
+    /// The existing primitive already matched the requested payload.
+    Noop,
+    /// A create preview was returned without writing.
+    DryRun,
 }
 
 /// Output model produced by the `create` command.
 #[derive(Debug, Serialize)]
 pub struct CreateOutput {
+    /// Whether this create call persisted state, noop'd, or was a dry-run preview.
+    pub outcome: CreateOutcome,
     /// The created primitive reference in `<type>/<id>` form.
     pub reference: String,
-    /// The filesystem path where the markdown primitive was stored.
+    /// The filesystem path where the markdown primitive was stored or would be stored.
     pub path: String,
-    /// The stored primitive that was written.
+    /// The stored primitive payload.
     pub primitive: StoredPrimitive,
-    /// The appended ledger entry corresponding to the creation event.
-    pub ledger_entry: LedgerEntry,
+    /// The appended ledger entry corresponding to the creation event, when persisted.
+    pub ledger_entry: Option<LedgerEntry>,
 }
 
 /// Output model produced by the `query` command.
@@ -129,36 +166,17 @@ pub struct ShowOutput {
     pub primitive: StoredPrimitive,
 }
 
-/// A suggested follow-up action an autonomous agent can attempt next.
-#[derive(Debug, Clone, Serialize)]
-pub struct NextAction {
-    /// A short stable label for the suggested action.
-    pub title: String,
-    /// A concrete command template the agent can execute.
-    pub command: String,
-    /// Why this follow-up is useful.
-    pub description: String,
-}
-
-/// A structured machine-readable error payload for JSON mode.
-#[derive(Debug, Clone, Serialize)]
-pub struct AgentError {
-    /// Stable machine-readable error code.
-    pub code: String,
-    /// Human-readable error message.
-    pub message: String,
-}
-
 /// Renders a structured command output in either human-readable or JSON form.
 ///
 /// # Errors
 ///
 /// Returns an error when JSON serialization fails.
 pub fn render_success(output: &CommandOutput, json: bool) -> anyhow::Result<String> {
+    let envelope = envelope::success(output)?;
     if json {
-        json::render_success(output)
+        json::render_success(&envelope)
     } else {
-        Ok(human::render(output))
+        Ok(human::render(output, &envelope.next_actions))
     }
 }
 
@@ -172,10 +190,11 @@ pub fn render_failure(
     error: &anyhow::Error,
     json: bool,
 ) -> anyhow::Result<String> {
+    let envelope = envelope::failure(command, error);
     if json {
-        json::render_failure(command, error)
+        json::render_failure(&envelope)
     } else {
-        Ok(human::render_failure(command, error))
+        Ok(human::render_failure(command, error, &envelope.fix))
     }
 }
 
@@ -216,139 +235,51 @@ impl CommandOutput {
 
     /// Returns contextual follow-up actions that agents can take next.
     #[must_use]
-    pub fn next_actions(&self) -> Vec<NextAction> {
+    pub fn next_actions(&self) -> Vec<String> {
         match self {
             Self::Init(_) => vec![
-                next_action(
-                    "brief",
-                    "workgraph --json brief",
-                    "Orient a new agent entering the workspace.",
-                ),
-                next_action(
-                    "capabilities",
-                    "workgraph --json capabilities",
-                    "Discover structured CLI capabilities and workflows.",
-                ),
-                next_action(
-                    "create-org",
-                    "workgraph --json create org --title <title>",
-                    "Record the primary organization context.",
-                ),
+                "workgraph brief".to_owned(),
+                "workgraph capabilities".to_owned(),
+                "workgraph create org --title \"<title>\"".to_owned(),
+                "workgraph show org/versatly".to_owned(),
             ],
             Self::Brief(_) => vec![
-                next_action(
-                    "status",
-                    "workgraph --json status",
-                    "Inspect workspace counts and the latest immutable activity.",
-                ),
-                next_action(
-                    "query",
-                    "workgraph --json query <type>",
-                    "Inspect a specific primitive type in more detail.",
-                ),
-                next_action(
-                    "create",
-                    "workgraph --json create <type> --title <title>",
-                    "Contribute new company context to the graph.",
-                ),
+                "workgraph show org/versatly".to_owned(),
+                "workgraph query org".to_owned(),
+                "workgraph status".to_owned(),
             ],
             Self::Status(_) => vec![
-                next_action(
-                    "brief",
-                    "workgraph --json brief",
-                    "Get a richer orientation summary than raw counts.",
-                ),
-                next_action(
-                    "query",
-                    "workgraph --json query <type>",
-                    "Inspect a specific primitive type.",
-                ),
+                "workgraph brief".to_owned(),
+                "workgraph query org".to_owned(),
             ],
             Self::Capabilities(_) => vec![
-                next_action(
-                    "schema",
-                    "workgraph --json schema",
-                    "Inspect the structured output and command contract.",
-                ),
-                next_action(
-                    "brief",
-                    "workgraph --json brief",
-                    "Use the recommended orientation workflow.",
-                ),
+                "workgraph schema".to_owned(),
+                "workgraph brief".to_owned(),
+                "workgraph create org --title \"<title>\"".to_owned(),
             ],
             Self::Schema(_) => vec![
-                next_action(
-                    "capabilities",
-                    "workgraph --json capabilities",
-                    "Inspect higher-level workflows and examples.",
-                ),
-                next_action(
-                    "brief",
-                    "workgraph --json brief",
-                    "Run a concrete orientation command using the schema.",
-                ),
+                "workgraph capabilities".to_owned(),
+                "workgraph create org --title \"<title>\"".to_owned(),
             ],
             Self::Create(output) => vec![
-                next_action(
-                    "show",
-                    &format!("workgraph --json show {}", output.reference),
-                    "Inspect the newly written primitive and confirm its stored representation.",
-                ),
-                next_action(
-                    "status",
-                    "workgraph --json status",
-                    "Confirm the ledger and counts reflect the new primitive.",
-                ),
-                next_action(
-                    "query-type",
-                    &format!(
-                        "workgraph --json query {}",
-                        output.primitive.frontmatter.r#type
-                    ),
-                    "List primitives of the same type for additional context.",
-                ),
+                format!("workgraph show {}", output.reference),
+                "workgraph status".to_owned(),
+                format!("workgraph query {}", output.primitive.frontmatter.r#type),
             ],
             Self::Query(output) => {
-                let mut actions = vec![next_action(
-                    "brief",
-                    "workgraph --json brief",
-                    "Re-orient using a summarized workspace view.",
-                )];
+                let mut actions = vec!["workgraph brief".to_owned()];
                 if let Some(first) = output.items.first() {
-                    actions.push(next_action(
-                        "show-first",
-                        &format!(
-                            "workgraph --json show {}/{}",
-                            first.frontmatter.r#type, first.frontmatter.id
-                        ),
-                        "Inspect the first matching primitive in detail.",
+                    actions.push(format!(
+                        "workgraph show {}/{}",
+                        first.frontmatter.r#type, first.frontmatter.id
                     ));
                 }
                 actions
             }
             Self::Show(output) => vec![
-                next_action(
-                    "query-same-type",
-                    &format!(
-                        "workgraph --json query {}",
-                        output.primitive.frontmatter.r#type
-                    ),
-                    "Inspect more primitives of the same type.",
-                ),
-                next_action(
-                    "status",
-                    "workgraph --json status",
-                    "Return to a workspace-wide status summary.",
-                ),
+                format!("workgraph query {}", output.primitive.frontmatter.r#type),
+                "workgraph status".to_owned(),
             ],
         }
-    }
-}
-
-fn next_action(title: &str, command: &str, description: &str) -> NextAction {
-    NextAction {
-        title: title.to_owned(),
-        command: command.to_owned(),
-        description: description.to_owned(),
     }
 }

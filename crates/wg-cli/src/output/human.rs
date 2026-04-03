@@ -5,15 +5,14 @@ use std::fmt::Write as _;
 use serde_yaml::Value;
 
 use super::{
-    CapabilitiesOutput, CommandOutput, CreateOutput, InitOutput, QueryOutput, SchemaOutput,
-    ShowOutput, StatusOutput,
+    CapabilitiesOutput, CommandOutput, CreateOutcome, CreateOutput, InitOutput, QueryOutput,
+    SchemaOutput, ShowOutput, StatusOutput,
 };
-use wg_orientation::WorkspaceBrief;
 
 /// Renders a structured command output to human-readable text.
 #[must_use]
-pub fn render(output: &CommandOutput) -> String {
-    match output {
+pub fn render(output: &CommandOutput, next_actions: &[String]) -> String {
+    let mut rendered = match output {
         CommandOutput::Init(output) => render_init(output),
         CommandOutput::Brief(output) => render_brief(output),
         CommandOutput::Status(output) => render_status(output),
@@ -22,12 +21,20 @@ pub fn render(output: &CommandOutput) -> String {
         CommandOutput::Create(output) => render_create(output),
         CommandOutput::Query(output) => render_query(output),
         CommandOutput::Show(output) => render_show(output),
+    };
+    if !next_actions.is_empty() {
+        rendered.push_str("\n\nNext actions:");
+        for action in next_actions {
+            rendered.push_str("\n- ");
+            rendered.push_str(action);
+        }
     }
+    rendered
 }
 
 /// Renders a structured command failure to human-readable text.
 #[must_use]
-pub fn render_failure(command: Option<&str>, error: &anyhow::Error) -> String {
+pub fn render_failure(command: Option<&str>, error: &anyhow::Error, fix: &str) -> String {
     let mut rendered = String::new();
     let _ = writeln!(
         rendered,
@@ -38,9 +45,8 @@ pub fn render_failure(command: Option<&str>, error: &anyhow::Error) -> String {
     );
     let _ = writeln!(rendered, "{}", error);
     let _ = writeln!(rendered);
-    let _ = writeln!(rendered, "Try:");
-    let _ = writeln!(rendered, "- workgraph --json capabilities");
-    let _ = writeln!(rendered, "- workgraph --json schema");
+    let _ = writeln!(rendered, "Fix:");
+    let _ = writeln!(rendered, "- {fix}");
     rendered.trim_end().to_owned()
 }
 
@@ -62,17 +68,18 @@ fn render_init(output: &InitOutput) -> String {
     rendered.trim_end().to_owned()
 }
 
-fn render_brief(output: &WorkspaceBrief) -> String {
+fn render_brief(output: &super::BriefOutput) -> String {
     let mut rendered = String::new();
+    let orientation = &output.orientation;
     let _ = writeln!(
         rendered,
         "Workspace brief [{}]: {} ({})",
-        output.lens.as_str(),
-        output.workspace_name,
-        output.workspace_id
+        orientation.lens.as_str(),
+        output.workspace.name,
+        output.workspace.id
     );
-    let _ = writeln!(rendered, "Root: {}", output.workspace_root);
-    match &output.default_actor_id {
+    let _ = writeln!(rendered, "Root: {}", output.workspace.root);
+    match &output.workspace.default_actor_id {
         Some(default_actor) => {
             let _ = writeln!(rendered, "Default actor: {default_actor}");
         }
@@ -81,10 +88,10 @@ fn render_brief(output: &WorkspaceBrief) -> String {
         }
     }
     let _ = writeln!(rendered, "Key counts:");
-    for (primitive_type, count) in &output.type_counts {
+    for (primitive_type, count) in &output.primitive_counts {
         let _ = writeln!(rendered, "- {primitive_type}: {count}");
     }
-    for section in &output.sections {
+    for section in &orientation.sections {
         let _ = writeln!(rendered, "{} ({})", section.title, section.summary);
         if section.items.is_empty() {
             let _ = writeln!(rendered, "- none");
@@ -103,17 +110,24 @@ fn render_brief(output: &WorkspaceBrief) -> String {
     }
 
     let _ = writeln!(rendered, "Recent activity:");
-    if output.recent_activity.is_empty() {
+    if output.recent_ledger_entries.is_empty() {
         let _ = writeln!(rendered, "- none");
     } else {
-        for entry in &output.recent_activity {
-            let _ = writeln!(rendered, "- {} {} {}", entry.ts, entry.reference, entry.op);
+        for entry in &output.recent_ledger_entries {
+            let _ = writeln!(
+                rendered,
+                "- {} {}/{} {:?}",
+                entry.ts.to_rfc3339(),
+                entry.primitive_type,
+                entry.primitive_id,
+                entry.op
+            );
         }
     }
 
-    if !output.warnings.is_empty() {
+    if !orientation.warnings.is_empty() {
         let _ = writeln!(rendered, "Warnings:");
-        for warning in &output.warnings {
+        for warning in &orientation.warnings {
             let _ = writeln!(rendered, "- {warning}");
         }
     }
@@ -193,35 +207,41 @@ fn render_status(output: &StatusOutput) -> String {
 }
 
 fn render_create(output: &CreateOutput) -> String {
-    format!(
-        "Created {} at {}\nLedger hash: {}",
-        output.reference, output.path, output.ledger_entry.hash
-    )
+    let mut rendered = String::new();
+    let action = match output.outcome {
+        CreateOutcome::Created => "Created",
+        CreateOutcome::Noop => "No-op (already exists)",
+        CreateOutcome::DryRun => "Dry run preview",
+    };
+    let _ = writeln!(rendered, "{action}: {}", output.reference);
+    let _ = writeln!(rendered, "Path: {}", output.path);
+    if let Some(ledger_entry) = &output.ledger_entry {
+        let _ = writeln!(rendered, "Ledger hash: {}", ledger_entry.hash);
+    } else {
+        let _ = writeln!(rendered, "Ledger hash: n/a");
+    }
+    rendered.trim_end().to_owned()
 }
 
 fn render_capabilities(output: &CapabilitiesOutput) -> String {
     let mut rendered = String::new();
-    let _ = writeln!(
-        rendered,
-        "WorkGraph CLI capabilities (recommended format: {})",
-        output.recommended_format
-    );
-    let _ = writeln!(rendered, "Workflows:");
-    for workflow in &output.workflows {
-        let _ = writeln!(rendered, "- {} — {}", workflow.title, workflow.description);
-        for command in &workflow.commands {
-            let _ = writeln!(rendered, "  • {command}");
-        }
-    }
+    let _ = writeln!(rendered, "WorkGraph CLI capabilities");
+    let _ = writeln!(rendered, "First command: {}", output.first_command);
     let _ = writeln!(rendered, "Commands:");
     for command in &output.commands {
         let _ = writeln!(rendered, "- {} — {}", command.name, command.description);
-    }
-    let _ = writeln!(rendered, "Primitive contracts:");
-    for contract in &output.primitive_contracts {
-        let _ = writeln!(rendered, "- {} — {}", contract.name, contract.description);
-        for note in &contract.notes {
-            let _ = writeln!(rendered, "  • {note}");
+        if !command.required_args.is_empty() {
+            let _ = writeln!(
+                rendered,
+                "  required args: {}",
+                command.required_args.join(", ")
+            );
+        }
+        if !command.flags.is_empty() {
+            let _ = writeln!(rendered, "  flags: {}", command.flags.join(", "));
+        }
+        for example in &command.examples {
+            let _ = writeln!(rendered, "  example: {example}");
         }
     }
     rendered.trim_end().to_owned()
@@ -241,40 +261,22 @@ fn render_schema(output: &SchemaOutput) -> String {
             field.description
         );
     }
-    let _ = writeln!(rendered, "Commands:");
-    for command in &output.commands {
-        let _ = writeln!(rendered, "- {} — {}", command.name, command.description);
-        for argument in &command.arguments {
+    let _ = writeln!(rendered, "Primitive types:");
+    for primitive_type in &output.primitive_types {
+        let _ = writeln!(
+            rendered,
+            "- {} ({}) — {}",
+            primitive_type.name, primitive_type.directory, primitive_type.description
+        );
+        for field in &primitive_type.fields {
             let _ = writeln!(
                 rendered,
-                "  • {}{} — {}",
-                argument.name,
-                if argument.required { " (required)" } else { "" },
-                argument.description
+                "  • {} ({}){} — {}",
+                field.name,
+                field.field_type,
+                if field.required { ", required" } else { "" },
+                field.description
             );
-        }
-        let _ = writeln!(rendered, "  example: {}", command.example);
-    }
-    let _ = writeln!(rendered, "Primitive contracts:");
-    for contract in &output.primitive_contracts {
-        let _ = writeln!(rendered, "- {} — {}", contract.name, contract.description);
-        if !contract.required_fields.is_empty() {
-            let required = contract
-                .required_fields
-                .iter()
-                .map(|field| field.name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-            let _ = writeln!(rendered, "  • required: {required}");
-        }
-        if !contract.optional_fields.is_empty() {
-            let optional = contract
-                .optional_fields
-                .iter()
-                .map(|field| field.name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-            let _ = writeln!(rendered, "  • optional: {optional}");
         }
     }
     rendered.trim_end().to_owned()

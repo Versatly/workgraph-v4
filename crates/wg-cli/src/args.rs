@@ -7,7 +7,12 @@ use crate::util::fields::parse_key_value_input;
 
 /// Top-level parsed CLI arguments.
 #[derive(Debug, Parser)]
-#[command(name = "workgraph", version, about = "WorkGraph v4 CLI")]
+#[command(
+    name = "workgraph",
+    version,
+    about = "WorkGraph v4 CLI",
+    after_help = "Examples:\n  workgraph brief\n  workgraph --json brief\n  workgraph --format json status"
+)]
 pub struct Cli {
     /// Emits machine-readable JSON instead of human-oriented text output.
     #[arg(long, global = true)]
@@ -50,34 +55,63 @@ impl OutputFormat {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Initializes a new WorkGraph workspace in the current directory.
+    #[command(
+        after_help = "Examples:\n  workgraph init\n  workgraph --json init\n  workgraph --format json init"
+    )]
     Init,
     /// Produces an orientation summary for a human or agent entering the workspace.
+    #[command(
+        after_help = "Examples:\n  workgraph brief\n  workgraph brief --lens delivery\n  workgraph --json brief --lens workspace"
+    )]
     Brief {
         /// Selects the orientation lens used to build the brief.
         #[arg(long, default_value_t = ContextLensArg(ContextLens::Workspace), value_parser = parse_context_lens)]
         lens: ContextLensArg,
     },
     /// Shows primitive counts and the latest recorded ledger entry.
+    #[command(
+        after_help = "Examples:\n  workgraph status\n  workgraph --json status\n  workgraph --format json status"
+    )]
     Status,
     /// Lists the structured capabilities and workflows exposed by this CLI.
+    #[command(
+        after_help = "Examples:\n  workgraph capabilities\n  workgraph --json capabilities\n  workgraph --format json capabilities"
+    )]
     Capabilities,
-    /// Describes command arguments, outputs, and result envelope structure.
+    /// Describes primitive field definitions and output envelope metadata.
+    #[command(
+        after_help = "Examples:\n  workgraph schema\n  workgraph schema org\n  workgraph --json schema thread"
+    )]
     Schema {
-        /// Optionally narrows the schema view to a single command.
-        command: Option<String>,
+        /// Optionally narrows the schema view to a single primitive type.
+        primitive_type: Option<String>,
     },
     /// Creates a new primitive in the markdown store.
+    #[command(
+        after_help = "Examples:\n  workgraph create org --title \"Versatly\"\n  workgraph create decision --title \"Use Rust\" --field status=decided\n  echo '{\"title\":\"Versatly\",\"fields\":{\"summary\":\"AI-native company\"}}' | workgraph create org --stdin"
+    )]
     Create {
         /// The primitive type to create.
         primitive_type: String,
         /// The human-readable title of the new primitive.
+        ///
+        /// Optional when `--stdin` is provided and the stdin payload includes `title`.
         #[arg(long)]
-        title: String,
+        title: Option<String>,
         /// Additional frontmatter fields expressed as `key=value`.
         #[arg(long = "field", value_parser = parse_key_value_input)]
         fields: Vec<KeyValueInput>,
+        /// Previews the created primitive and reference without writing anything.
+        #[arg(long)]
+        dry_run: bool,
+        /// Reads a JSON payload from stdin (for example in pipelines).
+        #[arg(long)]
+        stdin: bool,
     },
     /// Queries primitives of a given type with optional exact-match filters.
+    #[command(
+        after_help = "Examples:\n  workgraph query org\n  workgraph query decision --filter status=decided\n  workgraph --json query thread --filter assigned_actor=cli"
+    )]
     Query {
         /// The primitive type to query.
         primitive_type: String,
@@ -86,6 +120,9 @@ pub enum Command {
         filters: Vec<KeyValueInput>,
     },
     /// Displays a single primitive by `<type>/<id>`.
+    #[command(
+        after_help = "Examples:\n  workgraph show org/versatly\n  workgraph --json show decision/rust-for-workgraph-v4\n  workgraph show thread/kernel-thread-1"
+    )]
     Show {
         /// The primitive reference in `<type>/<id>` form.
         reference: String,
