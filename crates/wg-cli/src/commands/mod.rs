@@ -2,12 +2,17 @@
 
 mod brief;
 mod capabilities;
+mod checkpoint;
 mod create;
 mod init;
+mod mission;
 mod query;
+mod run;
 mod schema;
 mod show;
 mod status;
+mod thread;
+mod trigger;
 
 use crate::app::AppContext;
 use crate::args::Command;
@@ -51,6 +56,17 @@ pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<Comma
             filters,
         } => Ok(CommandOutput::Query(
             query::handle(app, &primitive_type, &filters).await?,
+        )),
+        Command::Thread { command } => Ok(CommandOutput::Thread(thread::handle(app, command).await?)),
+        Command::Mission { command } => {
+            Ok(CommandOutput::Mission(mission::handle(app, command).await?))
+        }
+        Command::Run { command } => Ok(CommandOutput::Run(run::handle(app, command).await?)),
+        Command::Trigger { command } => {
+            Ok(CommandOutput::Trigger(trigger::handle(app, command).await?))
+        }
+        Command::Checkpoint { working_on, focus } => Ok(CommandOutput::Checkpoint(
+            checkpoint::handle(app, &working_on, &focus).await?,
         )),
         Command::Show { reference } => {
             Ok(CommandOutput::Show(show::handle(app, &reference).await?))

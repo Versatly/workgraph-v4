@@ -23,6 +23,10 @@ wg-paths = { path = "../wg-paths" }
 wg-policy = { path = "../wg-policy" }
 wg-registry = { path = "../wg-registry" }
 wg-store = { path = "../wg-store" }
+wg-dispatch = { path = "../wg-dispatch" }
+wg-mission = { path = "../wg-mission" }
+wg-thread = { path = "../wg-thread" }
+wg-trigger = { path = "../wg-trigger" }
 wg-error = { path = "../wg-error" }
 wg-types = { path = "../wg-types" }
 

@@ -388,3 +388,288 @@ async fn init_create_query_and_verify_ledger_chain() {
         .await
         .expect("ledger chain should remain valid");
 }
+
+#[tokio::test]
+async fn coordination_cli_commands_cover_thread_mission_run_trigger_and_checkpoint_workflows() {
+    let temp_dir = tempdir().expect("temporary directory should be created");
+
+    execute(["workgraph", "--json", "init"], temp_dir.path())
+        .await
+        .expect("workspace initialization should succeed");
+
+    let thread_create = execute(
+        [
+            "workgraph",
+            "--json",
+            "thread",
+            "create",
+            "--id",
+            "launch-thread",
+            "--title",
+            "Launch readiness",
+        ],
+        temp_dir.path(),
+    )
+    .await
+    .expect("thread create should succeed");
+    let thread_create_json: serde_json::Value =
+        serde_json::from_str(&thread_create).expect("thread create output should be valid JSON");
+    assert_eq!(thread_create_json["command"], "thread");
+    assert_eq!(thread_create_json["result"]["action"], "create");
+    assert_eq!(thread_create_json["result"]["reference"], "thread/launch-thread");
+
+    execute(
+        ["workgraph", "--json", "thread", "open", "launch-thread"],
+        temp_dir.path(),
+    )
+    .await
+    .expect("thread open should succeed");
+    execute(
+        [
+            "workgraph",
+            "--json",
+            "thread",
+            "claim",
+            "launch-thread",
+            "--actor",
+            "pedro",
+        ],
+        temp_dir.path(),
+    )
+    .await
+    .expect("thread claim should succeed");
+    execute(
+        [
+            "workgraph",
+            "--json",
+            "thread",
+            "add-exit-criterion",
+            "launch-thread",
+            "--id",
+            "criterion-1",
+            "--title",
+            "Verification complete",
+        ],
+        temp_dir.path(),
+    )
+    .await
+    .expect("thread exit criterion should succeed");
+    execute(
+        [
+            "workgraph",
+            "--json",
+            "thread",
+            "add-evidence",
+            "launch-thread",
+            "--id",
+            "evidence-1",
+            "--title",
+            "Verifier report",
+            "--satisfies",
+            "criterion-1",
+            "--source",
+            "manual",
+        ],
+        temp_dir.path(),
+    )
+    .await
+    .expect("thread evidence should succeed");
+    let thread_complete = execute(
+        ["workgraph", "--json", "thread", "complete", "launch-thread"],
+        temp_dir.path(),
+    )
+    .await
+    .expect("thread complete should succeed");
+    let thread_complete_json: serde_json::Value = serde_json::from_str(&thread_complete)
+        .expect("thread complete output should be valid JSON");
+    assert_eq!(
+        thread_complete_json["result"]["thread"]["frontmatter"]["status"],
+        "done"
+    );
+
+    let mission_create = execute(
+        [
+            "workgraph",
+            "--json",
+            "mission",
+            "create",
+            "--id",
+            "launch-mission",
+            "--title",
+            "Launch mission",
+            "--objective",
+            "Ship safely.",
+        ],
+        temp_dir.path(),
+    )
+    .await
+    .expect("mission create should succeed");
+    let mission_create_json: serde_json::Value = serde_json::from_str(&mission_create)
+        .expect("mission create output should be valid JSON");
+    assert_eq!(mission_create_json["command"], "mission");
+    assert_eq!(mission_create_json["result"]["action"], "create");
+    execute(
+        [
+            "workgraph",
+            "--json",
+            "mission",
+            "add-thread",
+            "launch-mission",
+            "launch-thread",
+        ],
+        temp_dir.path(),
+    )
+    .await
+    .expect("mission add-thread should succeed");
+    let mission_progress_output = execute(
+        [
+            "workgraph",
+            "--json",
+            "mission",
+            "progress",
+            "launch-mission",
+        ],
+        temp_dir.path(),
+    )
+    .await
+    .expect("mission progress should succeed");
+    let mission_progress_json: serde_json::Value = serde_json::from_str(&mission_progress_output)
+        .expect("mission progress output should be valid JSON");
+    assert_eq!(
+        mission_progress_json["result"]["progress"]["completed_threads"],
+        1
+    );
+    assert_eq!(mission_progress_json["result"]["progress"]["total_threads"], 1);
+
+    let run_create = execute(
+        [
+            "workgraph",
+            "--json",
+            "run",
+            "create",
+            "--id",
+            "run-1",
+            "--title",
+            "Cursor analysis",
+            "--actor",
+            "agent:cursor",
+            "--thread",
+            "launch-thread",
+            "--mission",
+            "launch-mission",
+        ],
+        temp_dir.path(),
+    )
+    .await
+    .expect("run create should succeed");
+    let run_create_json: serde_json::Value =
+        serde_json::from_str(&run_create).expect("run create output should be valid JSON");
+    assert_eq!(run_create_json["command"], "run");
+    assert_eq!(run_create_json["result"]["action"], "create");
+    execute(
+        ["workgraph", "--json", "run", "start", "run-1"],
+        temp_dir.path(),
+    )
+    .await
+    .expect("run start should succeed");
+    let run_complete = execute(
+        [
+            "workgraph",
+            "--json",
+            "run",
+            "complete",
+            "run-1",
+            "--summary",
+            "Completed successfully",
+        ],
+        temp_dir.path(),
+    )
+    .await
+    .expect("run complete should succeed");
+    let run_complete_json: serde_json::Value =
+        serde_json::from_str(&run_complete).expect("run complete output should be valid JSON");
+    assert_eq!(
+        run_complete_json["result"]["run"]["frontmatter"]["status"],
+        "succeeded"
+    );
+
+    let trigger_save = execute(
+        [
+            "workgraph",
+            "--json",
+            "trigger",
+            "save",
+            "--id",
+            "trigger-1",
+            "--title",
+            "React to completed threads",
+            "--status",
+            "active",
+            "--event-source",
+            "ledger",
+            "--op",
+            "done",
+            "--primitive-type",
+            "thread",
+            "--field-name",
+            "evidence",
+            "--action-kind",
+            "rebrief_actor",
+            "--action-target",
+            "agent/cursor",
+            "--action-instruction",
+            "Refresh the brief",
+        ],
+        temp_dir.path(),
+    )
+    .await
+    .expect("trigger save should succeed");
+    let trigger_save_json: serde_json::Value =
+        serde_json::from_str(&trigger_save).expect("trigger save output should be valid JSON");
+    assert_eq!(trigger_save_json["command"], "trigger");
+    assert_eq!(trigger_save_json["result"]["action"], "save");
+
+    let trigger_eval = execute(
+        [
+            "workgraph",
+            "--json",
+            "trigger",
+            "evaluate",
+            "--entry-index",
+            "5",
+        ],
+        temp_dir.path(),
+    )
+    .await
+    .expect("trigger evaluation should succeed");
+    let trigger_eval_json: serde_json::Value = serde_json::from_str(&trigger_eval)
+        .expect("trigger evaluation output should be valid JSON");
+    assert_eq!(trigger_eval_json["result"]["action"], "evaluate");
+    assert_eq!(trigger_eval_json["result"]["matches"][0]["trigger_id"], "trigger-1");
+
+    let checkpoint_output = execute(
+        [
+            "workgraph",
+            "--json",
+            "checkpoint",
+            "--working-on",
+            "Kernel implementation",
+            "--focus",
+            "Finalize trigger CLI",
+        ],
+        temp_dir.path(),
+    )
+    .await
+    .expect("checkpoint command should succeed");
+    let checkpoint_json: serde_json::Value = serde_json::from_str(&checkpoint_output)
+        .expect("checkpoint output should be valid JSON");
+    assert_eq!(checkpoint_json["command"], "checkpoint");
+    assert_eq!(
+        checkpoint_json["result"]["checkpoint"]["frontmatter"]["type"],
+        "checkpoint"
+    );
+
+    verify_chain(temp_dir.path())
+        .await
+        .expect("ledger chain should remain valid after CLI workflows");
+}

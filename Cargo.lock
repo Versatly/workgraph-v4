@@ -1002,14 +1002,18 @@ dependencies = [
  "tokio",
  "tracing",
  "wg-clock",
+ "wg-dispatch",
  "wg-error",
  "wg-fs",
  "wg-ledger",
+ "wg-mission",
  "wg-orientation",
  "wg-paths",
  "wg-policy",
  "wg-registry",
  "wg-store",
+ "wg-thread",
+ "wg-trigger",
  "wg-types",
 ]
 

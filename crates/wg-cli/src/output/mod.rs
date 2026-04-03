@@ -9,7 +9,7 @@ use serde::Serialize;
 use serde_json::Value as JsonValue;
 use wg_orientation::{GraphIssue, RecentActivity, ThreadEvidenceGap, WorkspaceBrief};
 use wg_store::StoredPrimitive;
-use wg_types::{LedgerEntry, WorkgraphConfig};
+use wg_types::{LedgerEntry, TriggerActionPlan, WorkgraphConfig};
 
 /// Stable schema version for the JSON agent contract emitted by the CLI.
 pub const AGENT_SCHEMA_VERSION: &str = "workgraph.cli.v1alpha2";
@@ -30,6 +30,16 @@ pub enum CommandOutput {
     Schema(SchemaOutput),
     /// Result of `workgraph create`.
     Create(CreateOutput),
+    /// Result of `workgraph thread`.
+    Thread(ThreadOutput),
+    /// Result of `workgraph mission`.
+    Mission(MissionOutput),
+    /// Result of `workgraph run`.
+    Run(RunOutput),
+    /// Result of `workgraph trigger`.
+    Trigger(TriggerOutput),
+    /// Result of `workgraph checkpoint`.
+    Checkpoint(CheckpointOutput),
     /// Result of `workgraph query`.
     Query(QueryOutput),
     /// Result of `workgraph show`.
@@ -114,6 +124,103 @@ pub struct CreateOutput {
     pub ledger_entry: Option<LedgerEntry>,
 }
 
+/// Output model produced by thread commands.
+#[derive(Debug, Serialize)]
+pub struct ThreadOutput {
+    /// Stable command action, such as create, claim, or complete.
+    pub action: String,
+    /// Whether the operation was evaluated as a dry run.
+    pub dry_run: bool,
+    /// Thread reference in `<type>/<id>` form.
+    pub reference: String,
+    /// Persisted or previewed thread state.
+    pub thread: StoredPrimitive,
+}
+
+/// Output model produced by mission commands.
+#[derive(Debug, Serialize)]
+pub struct MissionOutput {
+    /// Stable command action, such as create, activate, or progress.
+    pub action: String,
+    /// Whether the operation was evaluated as a dry run.
+    pub dry_run: bool,
+    /// Mission reference in `<type>/<id>` form.
+    pub reference: String,
+    /// Persisted mission primitive, when applicable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mission: Option<StoredPrimitive>,
+    /// Progress snapshot when the command computes mission progress.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<MissionProgressOutput>,
+}
+
+/// Output model produced by mission progress commands.
+#[derive(Debug, Serialize)]
+pub struct MissionProgressOutput {
+    /// Number of completed child threads.
+    pub completed_threads: usize,
+    /// Total tracked child threads.
+    pub total_threads: usize,
+}
+
+/// Output model produced by run commands.
+#[derive(Debug, Serialize)]
+pub struct RunOutput {
+    /// Stable command action, such as create, start, or complete.
+    pub action: String,
+    /// Whether the operation was evaluated as a dry run.
+    pub dry_run: bool,
+    /// Run reference in `<type>/<id>` form.
+    pub reference: String,
+    /// Persisted or previewed run state.
+    pub run: StoredPrimitive,
+}
+
+/// Output model produced by trigger commands.
+#[derive(Debug, Serialize)]
+pub struct TriggerOutput {
+    /// Stable command action, such as save or evaluate.
+    pub action: String,
+    /// Whether the operation was evaluated as a dry run.
+    pub dry_run: bool,
+    /// Trigger reference when a trigger was created or updated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<String>,
+    /// Persisted or previewed trigger primitive.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trigger: Option<StoredPrimitive>,
+    /// Ledger entry reference used for evaluation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evaluated_entry: Option<LedgerEntry>,
+    /// Matched triggers and their planned action outputs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub matches: Vec<TriggerMatchOutput>,
+}
+
+/// Output model produced by checkpoint commands.
+#[derive(Debug, Serialize)]
+pub struct CheckpointOutput {
+    /// Stable command action.
+    pub action: String,
+    /// Whether the operation was evaluated as a dry run.
+    pub dry_run: bool,
+    /// Checkpoint reference in `<type>/<id>` form.
+    pub reference: String,
+    /// Persisted or previewed checkpoint primitive.
+    pub checkpoint: StoredPrimitive,
+}
+
+/// One matched trigger and its durable action plans.
+#[derive(Debug, Serialize)]
+pub struct TriggerMatchOutput {
+    /// Matched trigger identifier.
+    pub trigger_id: String,
+    /// Trigger title.
+    pub title: String,
+    /// Durable action plans yielded by the trigger.
+    pub action_plans: Vec<TriggerActionPlan>,
+}
+
 /// Output model produced by the `query` command.
 #[derive(Debug, Serialize)]
 pub struct QueryOutput {
@@ -195,6 +302,11 @@ impl CommandOutput {
             Self::Capabilities(_) => "capabilities",
             Self::Schema(_) => "schema",
             Self::Create(_) => "create",
+            Self::Thread(_) => "thread",
+            Self::Mission(_) => "mission",
+            Self::Run(_) => "run",
+            Self::Trigger(_) => "trigger",
+            Self::Checkpoint(_) => "checkpoint",
             Self::Query(_) => "query",
             Self::Show(_) => "show",
         }
@@ -213,6 +325,11 @@ impl CommandOutput {
             Self::Capabilities(output) => serde_json::to_value(output),
             Self::Schema(output) => serde_json::to_value(output),
             Self::Create(output) => serde_json::to_value(output),
+            Self::Thread(output) => serde_json::to_value(output),
+            Self::Mission(output) => serde_json::to_value(output),
+            Self::Run(output) => serde_json::to_value(output),
+            Self::Trigger(output) => serde_json::to_value(output),
+            Self::Checkpoint(output) => serde_json::to_value(output),
             Self::Query(output) => serde_json::to_value(output),
             Self::Show(output) => serde_json::to_value(output),
         }
@@ -311,6 +428,76 @@ impl CommandOutput {
                         output.primitive.frontmatter.r#type
                     ),
                     "List primitives of the same type for additional context.",
+                ),
+            ],
+            Self::Thread(output) => vec![
+                next_action(
+                    "show-thread",
+                    &format!("workgraph --json show {}", output.reference),
+                    "Inspect the thread primitive and its coordination state.",
+                ),
+                next_action(
+                    "status",
+                    "workgraph --json status",
+                    "Inspect graph issues and evidence gaps after the thread change.",
+                ),
+            ],
+            Self::Mission(output) => {
+                let mut actions = vec![next_action(
+                    "status",
+                    "workgraph --json status",
+                    "Inspect mission, thread, and graph state after the mission change.",
+                )];
+                if let Some(reference) = output
+                    .mission
+                    .as_ref()
+                    .map(|mission| format!("{}/{}", mission.frontmatter.r#type, mission.frontmatter.id))
+                {
+                    actions.push(next_action(
+                        "show-mission",
+                        &format!("workgraph --json show {reference}"),
+                        "Inspect the mission primitive in detail.",
+                    ));
+                }
+                actions
+            }
+            Self::Run(output) => vec![
+                next_action(
+                    "show-run",
+                    &format!("workgraph --json show {}", output.reference),
+                    "Inspect the run primitive and lifecycle state.",
+                ),
+                next_action(
+                    "status",
+                    "workgraph --json status",
+                    "Inspect workspace activity after the run change.",
+                ),
+            ],
+            Self::Trigger(output) => {
+                let mut actions = vec![next_action(
+                    "status",
+                    "workgraph --json status",
+                    "Inspect workspace activity and trigger-related graph issues.",
+                )];
+                if let Some(reference) = &output.reference {
+                    actions.push(next_action(
+                        "show-trigger",
+                        &format!("workgraph --json show {reference}"),
+                        "Inspect the trigger definition in detail.",
+                    ));
+                }
+                actions
+            }
+            Self::Checkpoint(output) => vec![
+                next_action(
+                    "show-checkpoint",
+                    &format!("workgraph --json show {}", output.reference),
+                    "Inspect the saved checkpoint context.",
+                ),
+                next_action(
+                    "brief",
+                    "workgraph --json brief",
+                    "Re-orient using the latest workspace state.",
                 ),
             ],
             Self::Query(output) => {

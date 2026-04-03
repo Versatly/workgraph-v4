@@ -5,8 +5,8 @@ use std::fmt::Write as _;
 use serde_yaml::Value;
 
 use super::{
-    CapabilitiesOutput, CommandOutput, CreateOutput, InitOutput, QueryOutput, SchemaOutput,
-    ShowOutput, StatusOutput,
+    CapabilitiesOutput, CheckpointOutput, CommandOutput, CreateOutput, InitOutput, MissionOutput,
+    QueryOutput, RunOutput, SchemaOutput, ShowOutput, StatusOutput, ThreadOutput, TriggerOutput,
 };
 use wg_orientation::WorkspaceBrief;
 
@@ -20,6 +20,11 @@ pub fn render(output: &CommandOutput) -> String {
         CommandOutput::Capabilities(output) => render_capabilities(output),
         CommandOutput::Schema(output) => render_schema(output),
         CommandOutput::Create(output) => render_create(output),
+        CommandOutput::Thread(output) => render_thread(output),
+        CommandOutput::Mission(output) => render_mission(output),
+        CommandOutput::Run(output) => render_run(output),
+        CommandOutput::Trigger(output) => render_trigger(output),
+        CommandOutput::Checkpoint(output) => render_checkpoint(output),
         CommandOutput::Query(output) => render_query(output),
         CommandOutput::Show(output) => render_show(output),
     }
@@ -344,6 +349,113 @@ fn render_show(output: &ShowOutput) -> String {
         let _ = writeln!(rendered);
         rendered.push_str(primitive.body.trim_end());
     }
+    rendered
+}
+
+fn render_thread(output: &ThreadOutput) -> String {
+    let mut rendered = String::new();
+    let prefix = if output.dry_run { "Dry run: " } else { "" };
+    let _ = writeln!(
+        rendered,
+        "{prefix}thread {} {}",
+        output.action, output.reference
+    );
+    rendered.push_str(&render_show(&ShowOutput {
+        reference: output.reference.clone(),
+        primitive: output.thread.clone(),
+    }));
+    rendered
+}
+
+fn render_mission(output: &MissionOutput) -> String {
+    let mut rendered = String::new();
+    let prefix = if output.dry_run { "Dry run: " } else { "" };
+    let _ = writeln!(rendered, "{prefix}mission {}", output.action);
+    if let Some(progress) = &output.progress {
+        let _ = writeln!(
+            rendered,
+            "{}: {}/{} threads complete",
+            output.reference, progress.completed_threads, progress.total_threads
+        );
+        return rendered.trim_end().to_owned();
+    }
+    if let Some(mission) = &output.mission {
+        rendered.push_str(&render_show(&ShowOutput {
+            reference: output.reference.clone(),
+            primitive: mission.clone(),
+        }));
+    }
+    rendered
+}
+
+fn render_run(output: &RunOutput) -> String {
+    let mut rendered = String::new();
+    let prefix = if output.dry_run { "Dry run: " } else { "" };
+    let _ = writeln!(rendered, "{prefix}run {} {}", output.action, output.reference);
+    rendered.push_str(&render_show(&ShowOutput {
+        reference: output.reference.clone(),
+        primitive: output.run.clone(),
+    }));
+    rendered
+}
+
+fn render_trigger(output: &TriggerOutput) -> String {
+    let mut rendered = String::new();
+    let prefix = if output.dry_run { "Dry run: " } else { "" };
+    let _ = writeln!(rendered, "{prefix}trigger {}", output.action);
+    if let Some(reference) = &output.reference {
+        let _ = writeln!(rendered, "reference: {reference}");
+    }
+    if let Some(trigger) = &output.trigger {
+        rendered.push_str(&render_show(&ShowOutput {
+            reference: output
+                .reference
+                .clone()
+                .unwrap_or_else(|| format!("{}/{}", trigger.frontmatter.r#type, trigger.frontmatter.id)),
+            primitive: trigger.clone(),
+        }));
+        let _ = writeln!(rendered);
+    }
+    if let Some(entry) = &output.evaluated_entry {
+        let _ = writeln!(
+            rendered,
+            "evaluated ledger entry: {} {} {}/{}",
+            entry.ts.to_rfc3339(),
+            format!("{:?}", entry.op).to_lowercase(),
+            entry.primitive_type,
+            entry.primitive_id
+        );
+    }
+    if output.matches.is_empty() {
+        let _ = writeln!(rendered, "matches: none");
+    } else {
+        let _ = writeln!(rendered, "matches:");
+        for matched in &output.matches {
+            let _ = writeln!(rendered, "- {} ({})", matched.title, matched.trigger_id);
+            for action_plan in &matched.action_plans {
+                let _ = writeln!(
+                    rendered,
+                    "  • {} -> {}",
+                    action_plan.kind, action_plan.instruction
+                );
+            }
+        }
+    }
+    rendered.trim_end().to_owned()
+}
+
+fn render_checkpoint(output: &CheckpointOutput) -> String {
+    let mut rendered = String::new();
+    let prefix = if output.dry_run { "Dry run: " } else { "" };
+    let _ = writeln!(
+        rendered,
+        "{prefix}checkpoint {} {}",
+        output.action, output.reference
+    );
+    rendered.push_str(&render_show(&ShowOutput {
+        reference: output.reference.clone(),
+        primitive: output.checkpoint.clone(),
+    }));
     rendered
 }
 
