@@ -91,10 +91,21 @@ where
                 }),
             }
         }
-        Err(error) => Ok(ExecutionContract {
-            rendered: output::render_failure(None, &error.into(), output_format.is_json())?,
-            success: false,
-        }),
+        Err(error) => {
+            // Clap help/version requests are not failures — render as-is, exit success.
+            if error.kind() == clap::error::ErrorKind::DisplayHelp
+                || error.kind() == clap::error::ErrorKind::DisplayVersion
+            {
+                return Ok(ExecutionContract {
+                    rendered: error.to_string().trim_end().to_owned(),
+                    success: true,
+                });
+            }
+            Ok(ExecutionContract {
+                rendered: output::render_failure(None, &error.into(), output_format.is_json())?,
+                success: false,
+            })
+        }
     }
 }
 
