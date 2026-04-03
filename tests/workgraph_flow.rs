@@ -25,7 +25,7 @@ async fn init_create_query_and_verify_ledger_chain() {
         .expect("workspace initialization should succeed");
     let init_json: serde_json::Value =
         serde_json::from_str(&init_output).expect("init output should be valid JSON");
-    assert_eq!(init_json["schema_version"], "workgraph.cli.v1alpha2");
+    assert_eq!(init_json["schema_version"], "v1");
     assert_eq!(init_json["success"], true);
     assert_eq!(init_json["command"], "init");
     assert_eq!(
@@ -129,10 +129,18 @@ async fn init_create_query_and_verify_ledger_chain() {
         serde_json::from_str(&brief_output).expect("brief output should be valid JSON");
     assert_eq!(brief_json["success"], true);
     assert_eq!(brief_json["command"], "brief");
-    assert_eq!(brief_json["result"]["lens"], "workspace");
+    assert_eq!(brief_json["result"]["orientation"]["lens"], "workspace");
+    assert!(brief_json["result"]["workspace"]["id"].is_string());
     assert_eq!(
-        brief_json["result"]["sections"][0]["items"][0]["title"],
-        "Versatly"
+        brief_json["result"]["workspace"]["root"],
+        temp_dir.path().display().to_string()
+    );
+    assert!(brief_json["result"]["primitive_counts"].is_object());
+    assert!(brief_json["result"]["recent_ledger_entries"].is_array());
+    assert!(
+        brief_json["result"]["orientation"]["sections"]
+            .as_array()
+            .is_some_and(|sections| !sections.is_empty())
     );
 
     let capabilities_output = execute(["workgraph", "--json", "capabilities"], temp_dir.path())
@@ -141,30 +149,28 @@ async fn init_create_query_and_verify_ledger_chain() {
     let capabilities_json: serde_json::Value = serde_json::from_str(&capabilities_output)
         .expect("capabilities output should be valid JSON");
     assert_eq!(capabilities_json["command"], "capabilities");
-    assert!(capabilities_json["result"]["commands"].is_array());
-    assert!(capabilities_json["result"]["primitive_contracts"].is_array());
     assert_eq!(
-        capabilities_json["result"]["primitive_contracts"]
-            .as_array()
-            .expect("primitive contracts should be an array")
-            .len(),
-        Registry::builtins().list_types().len()
+        capabilities_json["result"]["first_command"],
+        "workgraph brief --json"
     );
+    assert!(capabilities_json["result"]["commands"].is_array());
+    assert!(capabilities_json["result"]["commands"][0]["flags"].is_array());
+    assert!(capabilities_json["result"]["commands"][0]["examples"].is_array());
 
-    let schema_output = execute(["workgraph", "--json", "schema", "create"], temp_dir.path())
+    let schema_output = execute(["workgraph", "--json", "schema", "org"], temp_dir.path())
         .await
         .expect("schema should succeed");
     let schema_json: serde_json::Value =
         serde_json::from_str(&schema_output).expect("schema output should be valid JSON");
     assert_eq!(schema_json["command"], "schema");
-    assert_eq!(schema_json["result"]["commands"][0]["name"], "create");
-    assert!(schema_json["result"]["primitive_contracts"].is_array());
+    assert!(schema_json["result"]["envelope_fields"].is_array());
+    assert!(schema_json["result"]["primitive_types"].is_array());
     assert_eq!(
-        schema_json["result"]["primitive_contracts"]
+        schema_json["result"]["primitive_types"]
             .as_array()
-            .expect("primitive contracts should be an array")
+            .expect("primitive types should be an array")
             .len(),
-        Registry::builtins().list_types().len()
+        1
     );
 
     let workspace = WorkspacePath::new(temp_dir.path());

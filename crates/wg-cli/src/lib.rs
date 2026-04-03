@@ -160,7 +160,7 @@ mod tests {
             .expect("init should succeed");
         let init_json: JsonValue =
             serde_json::from_str(&init_output).expect("init output should be valid JSON");
-        assert_eq!(init_json["schema_version"], "workgraph.cli.v1alpha2");
+        assert_eq!(init_json["schema_version"], "v1");
         assert_eq!(init_json["success"], true);
         assert_eq!(init_json["command"], "init");
         assert!(init_json["next_actions"].is_array());
@@ -174,7 +174,8 @@ mod tests {
         let brief_json: JsonValue =
             serde_json::from_str(&brief_output).expect("brief output should be valid JSON");
         assert_eq!(brief_json["command"], "brief");
-        assert_eq!(brief_json["result"]["lens"], "workspace");
+        assert_eq!(brief_json["result"]["orientation"]["lens"], "workspace");
+        assert!(brief_json["result"]["workspace"]["id"].is_string());
 
         let create_output = execute(
             [
@@ -195,7 +196,64 @@ mod tests {
             serde_json::from_str(&create_output).expect("create output should be valid JSON");
         assert_eq!(create_json["command"], "create");
         assert_eq!(create_json["result"]["reference"], "org/versatly");
+        assert_eq!(create_json["result"]["outcome"], "created");
         assert!(create_json["next_actions"].is_array());
+
+        let create_noop_output = execute(
+            [
+                "workgraph",
+                "--json",
+                "create",
+                "org",
+                "--title",
+                "Versatly",
+                "--field",
+                "summary=AI-native company",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("idempotent create should succeed");
+        let create_noop_json: JsonValue = serde_json::from_str(&create_noop_output)
+            .expect("idempotent create output should be valid JSON");
+        assert_eq!(create_noop_json["result"]["outcome"], "noop");
+        assert_eq!(create_noop_json["result"]["reference"], "org/versatly");
+        assert_eq!(create_noop_json["result"]["ledger_entry"], JsonValue::Null);
+
+        let create_dry_run_output = execute(
+            [
+                "workgraph",
+                "--json",
+                "create",
+                "org",
+                "--title",
+                "Versatly Dry Run",
+                "--dry-run",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("dry-run create should succeed");
+        let create_dry_run_json: JsonValue = serde_json::from_str(&create_dry_run_output)
+            .expect("dry-run create output should be valid JSON");
+        assert_eq!(create_dry_run_json["result"]["outcome"], "dry_run");
+        assert_eq!(
+            create_dry_run_json["result"]["reference"],
+            "org/versatly-dry-run"
+        );
+        assert_eq!(
+            create_dry_run_json["result"]["path"],
+            temp_dir
+                .path()
+                .join("orgs")
+                .join("versatly-dry-run.md")
+                .display()
+                .to_string()
+        );
+        assert_eq!(
+            create_dry_run_json["result"]["ledger_entry"],
+            JsonValue::Null
+        );
 
         let status_output = execute(["workgraph", "--json", "status"], temp_dir.path())
             .await
@@ -230,16 +288,104 @@ mod tests {
         let capabilities_json: JsonValue = serde_json::from_str(&capabilities_output)
             .expect("capabilities output should be valid JSON");
         assert_eq!(capabilities_json["command"], "capabilities");
-        assert!(capabilities_json["result"]["workflows"].is_array());
-        assert!(capabilities_json["result"]["primitive_contracts"].is_array());
+        assert_eq!(
+            capabilities_json["result"]["first_command"],
+            "workgraph brief --json"
+        );
+        assert!(capabilities_json["result"]["commands"].is_array());
+        assert!(capabilities_json["result"]["commands"][0]["flags"].is_array());
+        assert!(capabilities_json["result"]["commands"][0]["examples"].is_array());
 
-        let schema_output = execute(["workgraph", "--json", "schema", "create"], temp_dir.path())
+        let schema_output = execute(["workgraph", "--json", "schema", "org"], temp_dir.path())
             .await
             .expect("schema should succeed");
         let schema_json: JsonValue =
             serde_json::from_str(&schema_output).expect("schema output should be valid JSON");
         assert_eq!(schema_json["command"], "schema");
-        assert_eq!(schema_json["result"]["commands"][0]["name"], "create");
-        assert!(schema_json["result"]["primitive_contracts"].is_array());
+        assert!(schema_json["result"]["envelope_fields"].is_array());
+        assert!(schema_json["result"]["primitive_types"].is_array());
+        assert_eq!(schema_json["result"]["primitive_types"][0]["name"], "org");
+    }
+
+    #[tokio::test]
+    async fn create_is_idempotent_for_identical_payload() {
+        let temp_dir = tempdir().expect("temporary directory should be created");
+        execute(["workgraph", "--json", "init"], temp_dir.path())
+            .await
+            .expect("init should succeed");
+
+        let first = execute(
+            [
+                "workgraph",
+                "--json",
+                "create",
+                "org",
+                "--title",
+                "Versatly",
+                "--field",
+                "summary=AI-native company",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("first create should succeed");
+        let first_json: JsonValue =
+            serde_json::from_str(&first).expect("first create output should be valid JSON");
+        assert_eq!(first_json["result"]["outcome"], "created");
+
+        let second = execute(
+            [
+                "workgraph",
+                "--json",
+                "create",
+                "org",
+                "--title",
+                "Versatly",
+                "--field",
+                "summary=AI-native company",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("second create should return idempotent success");
+        let second_json: JsonValue =
+            serde_json::from_str(&second).expect("second create output should be valid JSON");
+        assert_eq!(second_json["success"], true);
+        assert_eq!(second_json["result"]["outcome"], "noop");
+        assert!(second_json["result"]["ledger_entry"].is_null());
+    }
+
+    #[tokio::test]
+    async fn create_dry_run_previews_without_writing() {
+        let temp_dir = tempdir().expect("temporary directory should be created");
+        execute(["workgraph", "--json", "init"], temp_dir.path())
+            .await
+            .expect("init should succeed");
+
+        let dry_run_output = execute(
+            [
+                "workgraph",
+                "--json",
+                "create",
+                "org",
+                "--title",
+                "Preview Org",
+                "--dry-run",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("dry run create should succeed");
+        let dry_run_json: JsonValue =
+            serde_json::from_str(&dry_run_output).expect("dry run output should be valid JSON");
+        assert_eq!(dry_run_json["result"]["outcome"], "dry_run");
+        assert!(dry_run_json["result"]["ledger_entry"].is_null());
+
+        let query_output = execute(["workgraph", "--json", "query", "org"], temp_dir.path())
+            .await
+            .expect("query should succeed");
+        let query_json: JsonValue =
+            serde_json::from_str(&query_output).expect("query output should be valid JSON");
+        assert_eq!(query_json["result"]["count"], 0);
     }
 }

@@ -1,318 +1,214 @@
 //! Structured discovery metadata for agent-native CLI use.
 
 use serde::Serialize;
-use wg_types::{FieldDefinition, Registry};
+use wg_types::Registry;
 
-/// Structured capability and workflow discovery output for the WorkGraph CLI.
+/// Structured command capabilities that agents can use for CLI self-discovery.
 #[derive(Debug, Clone, Serialize)]
 pub struct CapabilitiesCatalog {
-    /// Recommended machine-readable output format for autonomous agents.
-    pub recommended_format: String,
-    /// High-level workflow groupings exposed by the CLI.
-    pub workflows: Vec<WorkflowSkill>,
-    /// Concrete command-level capabilities.
-    pub commands: Vec<CommandSkill>,
-    /// First-class primitive contracts that agents should understand before writing.
-    pub primitive_contracts: Vec<PrimitiveContract>,
+    /// The first command an entering agent should run.
+    pub first_command: String,
+    /// Supported command contracts.
+    pub commands: Vec<CommandCapability>,
 }
 
-/// A grouped workflow oriented around a common agent objective.
+/// Structured metadata for one CLI command.
 #[derive(Debug, Clone, Serialize)]
-pub struct WorkflowSkill {
-    /// Stable workflow key.
-    pub key: String,
-    /// Human-readable workflow title.
-    pub title: String,
-    /// What the workflow helps an agent accomplish.
-    pub description: String,
-    /// The commands commonly used in the workflow.
-    pub commands: Vec<String>,
-    /// Whether this workflow is common and broadly recommended.
-    pub common: bool,
-}
-
-/// Structured metadata for a single CLI command.
-#[derive(Debug, Clone, Serialize)]
-pub struct CommandSkill {
-    /// The command name.
+pub struct CommandCapability {
+    /// Stable command name.
     pub name: String,
-    /// Human-readable description of the command.
+    /// Human-readable summary of intent.
     pub description: String,
-    /// Canonical examples for agents to imitate.
+    /// Required positional arguments.
+    pub required_args: Vec<String>,
+    /// Optional command and global flags.
+    pub flags: Vec<String>,
+    /// Canonical example invocations.
     pub examples: Vec<String>,
-    /// Whether the command supports stable machine-readable output.
-    pub machine_readable: bool,
-    /// The common follow-up commands after this one succeeds.
-    pub next_commands: Vec<String>,
 }
 
-/// Structured schema metadata for the CLI and selected commands.
+/// Structured schema metadata for CLI output envelopes and primitive field contracts.
 #[derive(Debug, Clone, Serialize)]
 pub struct CliSchema {
-    /// The stable schema version for machine-readable result envelopes.
+    /// Stable schema version for machine-readable envelopes.
     pub schema_version: String,
-    /// A description of the top-level envelope fields in JSON mode.
+    /// Description of envelope fields emitted by all commands in JSON mode.
     pub envelope_fields: Vec<SchemaField>,
-    /// Structured command definitions.
-    pub commands: Vec<CommandSchema>,
-    /// Typed primitive contracts discoverable through the CLI.
-    pub primitive_contracts: Vec<PrimitiveContract>,
+    /// Primitive type schemas available for create/query operations.
+    pub primitive_types: Vec<PrimitiveTypeSchema>,
 }
 
-/// A field inside a structured result envelope or command definition.
+/// A field inside a structured result envelope.
 #[derive(Debug, Clone, Serialize)]
 pub struct SchemaField {
-    /// The stable field name.
+    /// Stable field name.
     pub name: String,
-    /// The field type.
+    /// Logical field type.
     pub field_type: String,
-    /// A short human-readable description.
+    /// Human-readable description.
     pub description: String,
     /// Whether the field is always present.
     pub required: bool,
 }
 
-/// Structured description of a durable primitive contract.
+/// Primitive type schema returned by `workgraph schema`.
 #[derive(Debug, Clone, Serialize)]
-pub struct PrimitiveContract {
+pub struct PrimitiveTypeSchema {
     /// Primitive type name.
     pub name: String,
-    /// Human-readable purpose of the primitive.
+    /// On-disk directory for this primitive type.
+    pub directory: String,
+    /// Human-readable primitive description.
     pub description: String,
-    /// Required fields the primitive must carry.
-    pub required_fields: Vec<SchemaField>,
-    /// Optional fields the primitive may carry.
-    pub optional_fields: Vec<SchemaField>,
-    /// Additional semantic notes an agent should preserve.
-    pub notes: Vec<String>,
+    /// Valid field definitions for create/query use.
+    pub fields: Vec<PrimitiveFieldSchema>,
 }
 
-/// A structured description of one command's arguments and behavior.
+/// Primitive field schema contract.
 #[derive(Debug, Clone, Serialize)]
-pub struct CommandSchema {
-    /// The command name.
+pub struct PrimitiveFieldSchema {
+    /// Stable field name.
     pub name: String,
-    /// A concise command description.
+    /// Logical field type.
+    pub field_type: String,
+    /// Human-readable field description.
     pub description: String,
-    /// The arguments supported by the command.
-    pub arguments: Vec<CommandArgument>,
-    /// A machine-readable example invocation.
-    pub example: String,
-}
-
-/// A structured argument description for a command.
-#[derive(Debug, Clone, Serialize)]
-pub struct CommandArgument {
-    /// The argument name or flag.
-    pub name: String,
-    /// A concise explanation of the argument.
-    pub description: String,
-    /// Whether the argument is required.
+    /// Whether this field is required at creation time.
     pub required: bool,
+    /// Whether the field accepts repeated values.
+    pub repeated: bool,
 }
 
 /// Returns the static CLI capabilities catalog.
 #[must_use]
 pub fn capabilities_catalog() -> CapabilitiesCatalog {
+    let global_flags = ["--json", "--format json"];
     CapabilitiesCatalog {
-        recommended_format: "json".to_owned(),
-        workflows: vec![
-            WorkflowSkill {
-                key: "orientation".to_owned(),
-                title: "Workspace orientation".to_owned(),
-                description: "Enter a workspace, inspect the typed graph, and notice active work plus evidence gaps.".to_owned(),
-                commands: vec![
-                    "workgraph --json init".to_owned(),
-                    "workgraph --json brief".to_owned(),
-                    "workgraph --json status".to_owned(),
-                ],
-                common: true,
-            },
-            WorkflowSkill {
-                key: "knowledge_capture".to_owned(),
-                title: "Context capture".to_owned(),
-                description: "Record durable company context and coordination state with provenance in the ledger.".to_owned(),
-                commands: vec![
-                    "workgraph --json create <type> --title ...".to_owned(),
-                    "workgraph --json show <type>/<id>".to_owned(),
-                ],
-                common: true,
-            },
-            WorkflowSkill {
-                key: "coordination".to_owned(),
-                title: "Coordination integrity".to_owned(),
-                description: "Inspect thread, mission, run, and trigger contracts before mutating active work.".to_owned(),
-                commands: vec![
-                    "workgraph --json status".to_owned(),
-                    "workgraph --json schema".to_owned(),
-                    "workgraph --json show thread/<id>".to_owned(),
-                ],
-                common: true,
-            },
-            WorkflowSkill {
-                key: "discovery".to_owned(),
-                title: "Capability discovery".to_owned(),
-                description: "Discover available commands, schemas, and structured agent contracts.".to_owned(),
-                commands: vec![
-                    "workgraph --json capabilities".to_owned(),
-                    "workgraph --json schema".to_owned(),
-                ],
-                common: true,
-            },
-        ],
+        first_command: "workgraph brief --json".to_owned(),
         commands: vec![
-            command_skill(
+            capability(
                 "init",
                 "Initialize registry, config, ledger, and primitive directories.",
-                vec!["workgraph --json init".to_owned()],
-                vec!["brief".to_owned(), "create".to_owned()],
+                vec![],
+                &global_flags,
+                vec!["workgraph init --json", "workgraph init"],
             ),
-            command_skill(
+            capability(
                 "brief",
-                "Produce a structured workspace orientation including typed coordination warnings.",
-                vec![
-                    "workgraph --json brief".to_owned(),
-                    "workgraph --json brief --lens delivery".to_owned(),
+                "Return workspace identity, primitive counts, recent ledger activity, and orientation cues.",
+                vec![],
+                &[
+                    global_flags[0],
+                    global_flags[1],
+                    "--lens <workspace|delivery|policy|agents>",
                 ],
-                vec!["create".to_owned(), "query".to_owned(), "status".to_owned()],
+                vec![
+                    "workgraph brief --json",
+                    "workgraph brief --lens workspace --json",
+                    "workgraph brief --lens delivery",
+                ],
             ),
-            command_skill(
+            capability(
                 "status",
-                "Inspect primitive counts, graph issues, evidence gaps, and the latest immutable ledger event.",
-                vec!["workgraph --json status".to_owned()],
-                vec!["brief".to_owned(), "query".to_owned(), "schema".to_owned()],
+                "Show graph hygiene, evidence gaps, primitive counts, and recent activity.",
+                vec![],
+                &global_flags,
+                vec!["workgraph status --json", "workgraph status"],
             ),
-            command_skill(
-                "create",
-                "Create a markdown primitive and append a matching ledger entry.",
-                vec!["workgraph --json create org --title Versatly".to_owned()],
-                vec!["show".to_owned(), "status".to_owned(), "query".to_owned()],
-            ),
-            command_skill(
-                "query",
-                "List primitives of one type with optional exact-match filters.",
-                vec!["workgraph --json query decision --filter status=decided".to_owned()],
-                vec!["show".to_owned(), "brief".to_owned()],
-            ),
-            command_skill(
-                "show",
-                "Load a single primitive by <type>/<id> with coordination-aware rendering.",
-                vec!["workgraph --json show org/versatly".to_owned()],
-                vec!["query".to_owned(), "status".to_owned()],
-            ),
-            command_skill(
+            capability(
                 "capabilities",
-                "List structured agent workflows, CLI capabilities, and primitive contracts.",
-                vec!["workgraph --json capabilities".to_owned()],
-                vec!["schema".to_owned()],
+                "List command contracts for autonomous self-discovery.",
+                vec![],
+                &global_flags,
+                vec!["workgraph capabilities --json", "workgraph capabilities"],
             ),
-            command_skill(
+            capability(
                 "schema",
-                "Describe JSON result envelopes, command contracts, and primitive contracts.",
-                vec!["workgraph --json schema".to_owned()],
-                vec!["capabilities".to_owned()],
+                "Show primitive field definitions for one type or all types.",
+                vec![],
+                &[global_flags[0], global_flags[1], "[type]"],
+                vec![
+                    "workgraph schema --json",
+                    "workgraph schema org --json",
+                    "workgraph schema",
+                ],
+            ),
+            capability(
+                "create",
+                "Create primitives, support idempotent no-op writes, dry-run previews, and stdin payloads.",
+                vec!["<type>"],
+                &[
+                    global_flags[0],
+                    global_flags[1],
+                    "--title \"<title>\"",
+                    "--field key=value",
+                    "--dry-run",
+                    "--stdin",
+                ],
+                vec![
+                    "workgraph create org --title \"Versatly\" --json",
+                    "workgraph create decision --title \"Use Rust\" --field status=decided --json",
+                    "echo '{\"title\":\"Versatly\",\"fields\":{\"summary\":\"AI-native company\"}}' | workgraph create org --stdin --json",
+                ],
+            ),
+            capability(
+                "query",
+                "Query primitives by type with exact field filters.",
+                vec!["<type>"],
+                &[global_flags[0], global_flags[1], "--filter key=value"],
+                vec![
+                    "workgraph query org --json",
+                    "workgraph query decision --filter status=decided --json",
+                    "workgraph query thread",
+                ],
+            ),
+            capability(
+                "show",
+                "Load one primitive by <type>/<id>.",
+                vec!["<type>/<id>"],
+                &global_flags,
+                vec![
+                    "workgraph show org/versatly --json",
+                    "workgraph show decision/rust-for-workgraph-v4 --json",
+                    "workgraph show thread/kernel-thread-1",
+                ],
             ),
         ],
-        primitive_contracts: primitive_contracts(),
     }
 }
 
-/// Returns a structured CLI schema description, optionally narrowed to one command.
+/// Returns a structured CLI schema description, optionally narrowed to one primitive type.
 #[must_use]
-pub fn cli_schema(schema_version: &str, requested_command: Option<&str>) -> CliSchema {
-    let mut commands = vec![
-        command_schema(
-            "init",
-            "Initialize a workspace.",
-            vec![],
-            "workgraph --json init",
-        ),
-        command_schema(
-            "brief",
-            "Produce a structured workspace brief with graph and coordination warnings.",
-            vec![CommandArgument {
-                name: "--lens".to_owned(),
-                description: "Orientation lens: workspace, delivery, policy, or agents.".to_owned(),
-                required: false,
-            }],
-            "workgraph --json brief --lens workspace",
-        ),
-        command_schema(
-            "status",
-            "Show primitive counts, recent activity, graph issues, and evidence gaps.",
-            vec![],
-            "workgraph --json status",
-        ),
-        command_schema(
-            "create",
-            "Create a primitive and record it in the ledger.",
-            vec![
-                CommandArgument {
-                    name: "<type>".to_owned(),
-                    description: "Primitive type to create.".to_owned(),
-                    required: true,
-                },
-                CommandArgument {
-                    name: "--title".to_owned(),
-                    description: "Human-readable primitive title.".to_owned(),
-                    required: true,
-                },
-                CommandArgument {
-                    name: "--field".to_owned(),
-                    description: "Additional frontmatter as key=value pairs.".to_owned(),
-                    required: false,
-                },
-            ],
-            "workgraph --json create org --title Versatly",
-        ),
-        command_schema(
-            "query",
-            "Query primitives of one type using exact-match filters.",
-            vec![
-                CommandArgument {
-                    name: "<type>".to_owned(),
-                    description: "Primitive type to query.".to_owned(),
-                    required: true,
-                },
-                CommandArgument {
-                    name: "--filter".to_owned(),
-                    description: "Exact frontmatter filter in key=value form.".to_owned(),
-                    required: false,
-                },
-            ],
-            "workgraph --json query decision --filter status=decided",
-        ),
-        command_schema(
-            "show",
-            "Show a single primitive by reference with typed coordination sections when relevant.",
-            vec![CommandArgument {
-                name: "<type>/<id>".to_owned(),
-                description: "Primitive reference to display.".to_owned(),
-                required: true,
-            }],
-            "workgraph --json show org/versatly",
-        ),
-        command_schema(
-            "capabilities",
-            "List structured CLI capabilities.",
-            vec![],
-            "workgraph --json capabilities",
-        ),
-        command_schema(
-            "schema",
-            "Describe CLI command, output, and primitive contracts.",
-            vec![CommandArgument {
-                name: "[command]".to_owned(),
-                description: "Optional command name to narrow the schema view.".to_owned(),
-                required: false,
-            }],
-            "workgraph --json schema create",
-        ),
-    ];
-
-    if let Some(requested_command) = requested_command {
-        commands.retain(|command| command.name == requested_command);
-    }
+pub fn cli_schema(
+    schema_version: &str,
+    registry: &Registry,
+    requested_primitive_type: Option<&str>,
+) -> CliSchema {
+    let primitive_types = registry
+        .list_types()
+        .iter()
+        .filter(|primitive_type| {
+            requested_primitive_type
+                .map(|requested| primitive_type.name == requested)
+                .unwrap_or(true)
+        })
+        .map(|primitive_type| PrimitiveTypeSchema {
+            name: primitive_type.name.clone(),
+            directory: primitive_type.directory.clone(),
+            description: primitive_type.description.clone(),
+            fields: primitive_type
+                .fields
+                .iter()
+                .map(|field| PrimitiveFieldSchema {
+                    name: field.name.clone(),
+                    field_type: field.field_type.clone(),
+                    description: field.description.clone(),
+                    required: field.required,
+                    repeated: field.repeated,
+                })
+                .collect(),
+        })
+        .collect();
 
     CliSchema {
         schema_version: schema_version.to_owned(),
@@ -320,58 +216,63 @@ pub fn cli_schema(schema_version: &str, requested_command: Option<&str>) -> CliS
             schema_field(
                 "schema_version",
                 "string",
-                "Stable JSON envelope version.",
+                "Stable envelope version for machine parsing.",
                 true,
             ),
             schema_field(
                 "success",
                 "boolean",
-                "Whether the command completed successfully.",
+                "True when the command succeeded.",
                 true,
             ),
             schema_field(
                 "command",
                 "string",
-                "The command that produced this response.",
+                "The command that produced the envelope.",
                 true,
             ),
             schema_field(
                 "result",
-                "object|null",
-                "Successful command payload.",
-                false,
+                "object",
+                "Structured command payload for successful responses.",
+                true,
+            ),
+            schema_field(
+                "next_actions",
+                "string[]",
+                "Suggested follow-up command invocations.",
+                true,
             ),
             schema_field(
                 "error",
-                "object|null",
-                "Structured error details when success=false.",
+                "string",
+                "Human-readable error message when success=false.",
                 false,
             ),
-            schema_field("fix", "string|null", "Actionable remediation hint.", false),
             schema_field(
-                "next_actions",
-                "array",
-                "Suggested follow-up commands.",
-                true,
+                "fix",
+                "string",
+                "Actionable recovery command when success=false.",
+                false,
             ),
         ],
-        commands,
-        primitive_contracts: primitive_contracts(),
+        primitive_types,
     }
 }
 
-fn command_skill(
+fn capability(
     name: &str,
     description: &str,
-    examples: Vec<String>,
-    next_commands: Vec<String>,
-) -> CommandSkill {
-    CommandSkill {
+    required_args: Vec<&str>,
+    flags: &[&str],
+    examples: Vec<&str>,
+) -> CommandCapability {
+    CommandCapability {
         name: name.to_owned(),
         description: description.to_owned(),
-        examples,
-        machine_readable: true,
-        next_commands,
+        required_args: required_args.into_iter().map(ToOwned::to_owned).collect(),
+        flags: flags.iter().map(ToString::to_string).collect(),
+        examples: examples.into_iter().map(ToOwned::to_owned).collect(),
     }
 }
 
@@ -381,84 +282,5 @@ fn schema_field(name: &str, field_type: &str, description: &str, required: bool)
         field_type: field_type.to_owned(),
         description: description.to_owned(),
         required,
-    }
-}
-
-fn command_schema(
-    name: &str,
-    description: &str,
-    arguments: Vec<CommandArgument>,
-    example: &str,
-) -> CommandSchema {
-    CommandSchema {
-        name: name.to_owned(),
-        description: description.to_owned(),
-        arguments,
-        example: example.to_owned(),
-    }
-}
-
-fn primitive_contracts() -> Vec<PrimitiveContract> {
-    let registry = Registry::builtins();
-    registry
-        .list_types()
-        .iter()
-        .map(|primitive_type| PrimitiveContract {
-            name: primitive_type.name.clone(),
-            description: primitive_type.description.clone(),
-            required_fields: primitive_type
-                .fields
-                .iter()
-                .filter(|field| field.required)
-                .map(schema_field_from_definition)
-                .collect(),
-            optional_fields: primitive_type
-                .fields
-                .iter()
-                .filter(|field| !field.required)
-                .map(schema_field_from_definition)
-                .collect(),
-            notes: primitive_notes(&primitive_type.name),
-        })
-        .collect()
-}
-
-fn primitive_notes(name: &str) -> Vec<String> {
-    match name {
-        "agent" => vec![
-            "Agents may declare parent and root actor lineage while leaving descendants opaque."
-                .to_owned(),
-        ],
-        "thread" => vec![
-            "Threads close only when required exit criteria are satisfied by recorded evidence."
-                .to_owned(),
-            "Update and completion actions are durable plans, not auto-executed effects."
-                .to_owned(),
-        ],
-        "mission" => vec![
-            "Missions coordinate related threads and runs but are not generic task records."
-                .to_owned(),
-        ],
-        "run" => vec![
-            "Each run belongs to exactly one thread and may optionally reference a mission or parent run."
-                .to_owned(),
-        ],
-        "trigger" => vec![
-            "Triggers match event patterns and emit action plans without mutating state in this foundation pass."
-                .to_owned(),
-        ],
-        "checkpoint" => vec![
-            "Checkpoints preserve resumable working context for future humans or agents.".to_owned(),
-        ],
-        _ => Vec::new(),
-    }
-}
-
-fn schema_field_from_definition(definition: &FieldDefinition) -> SchemaField {
-    SchemaField {
-        name: definition.name.clone(),
-        field_type: definition.field_type.clone(),
-        description: definition.description.clone(),
-        required: definition.required,
     }
 }

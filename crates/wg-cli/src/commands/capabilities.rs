@@ -8,9 +8,7 @@ use crate::services::discovery::capabilities_catalog;
 pub fn handle() -> CapabilitiesOutput {
     let catalog = capabilities_catalog();
     CapabilitiesOutput {
-        recommended_format: catalog.recommended_format,
-        workflows: catalog.workflows,
+        first_command: catalog.first_command,
         commands: catalog.commands,
-        primitive_contracts: catalog.primitive_contracts,
     }
 }
