@@ -15,11 +15,11 @@ If code and docs disagree, stop and reconcile them instead of guessing.
 
 ## Non-Negotiable Invariants
 
-- WorkGraph is the durable context graph, trigger plane, and coordination substrate for AI-native organizations.
+- WorkGraph is the durable system of record for agentic work: a typed context graph, immutable ledger, and evidence-bearing coordination layer for AI-native organizations.
 - WorkGraph is not a generic agent runtime, generic workflow builder, generic task tracker, or generic memory layer.
 - The context graph is first-class and typed. Wiki-links are one edge source, not the graph definition.
 - The ledger is both audit trail and durable event stream.
-- Triggers are core infrastructure, even when only contract-level behavior is implemented.
+- Triggers are core infrastructure, even when the current foundation pass only yields durable planned follow-up actions.
 - Threads are evidence-bearing coordination units, not chat logs or loose tasks.
 - Missions coordinate related work. Runs capture one execution instance. Triggers yield planned follow-up actions.
 - The actor model must scale to hundreds or thousands of actors while allowing opaque subactor lineages.

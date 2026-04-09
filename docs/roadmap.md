@@ -11,7 +11,7 @@ Goal:
 
 Success looks like:
 
-- no fuzzy "context graph" language left in the repo
+- no hand-wavy "context graph" language left in the repo; the term always means a typed graph with durable primitives, semantic edges, and provenance
 - durable coordination contracts in `wg-types`
 - machine-readable discovery surfaces aware of those contracts
 - CLI passes agent-friendly audit: `--json` envelopes, `brief`, `capabilities`, `schema`, examples in `--help`, idempotent creates, `--dry-run`, stdin support, actionable errors
