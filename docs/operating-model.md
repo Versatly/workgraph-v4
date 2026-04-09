@@ -353,6 +353,200 @@ This lets WorkGraph preserve durable delegation meaning while staying neutral
 about the internal orchestration model of tools like Cursor, Claude Code, or
 OpenClaw.
 
+## Modeling Guide v1
+
+This guide translates the actor, surface/runtime, and run contracts into
+concrete modeling choices.
+
+### Scenario 1 - Human using Claude chat for brainstorming
+
+Situation:
+
+- Pedro opens Claude chat
+- Pedro asks for help thinking through messaging
+- Pedro remains the clear responsible worker
+
+Recommended modeling:
+
+- actor = `person/pedro`
+- run `kind` = `research` or `drafting`, if the work session matters enough to
+  record as a run
+- run `source` = `claude-chat`
+- Claude chat is a surface, not automatically a tracked `agent`
+
+### Scenario 2 - Human using ChatGPT to draft an email
+
+Situation:
+
+- Pedro asks ChatGPT to improve a customer email
+- Pedro reviews and sends it himself
+
+Recommended modeling:
+
+- actor = `person/pedro`
+- run `source` = `chatgpt-chat`
+- optional evidence or external reference = link to the draft or exported chat
+- do not create an `agent` actor unless the system is durably delegated beyond
+  one interactive chat
+
+### Scenario 3 - Claude Code doing autonomous repository work
+
+Situation:
+
+- Pedro delegates implementation work to Claude Code
+- Claude Code inspects files, runs commands, edits code, and reports back
+
+Recommended modeling:
+
+- actor = `agent/pedro-claude-code`
+- actor `runtime` = `claude-code`
+- run `source` = `claude-code`
+- integration path = `cli` when the local environment can invoke `workgraph`
+- subagents, sessions, and internal worktree details remain opaque unless they
+  need repeated durable visibility
+
+### Scenario 4 - Cursor assistant in human-led mode
+
+Situation:
+
+- Pedro is in Cursor
+- Pedro remains actively steering the work
+- AI suggestions help, but Pedro is the durable accountable worker
+
+Recommended modeling:
+
+- actor = `person/pedro`
+- run `source` = `cursor`
+- Cursor is the surface
+- do not automatically create `agent/pedro-cursor`
+
+### Scenario 5 - Cursor used as a durable delegated agent
+
+Situation:
+
+- Pedro relies on a recurring Cursor-based agent workflow
+- the system repeatedly performs work under a stable delegated identity
+
+Recommended modeling:
+
+- actor = `agent/pedro-cursor`
+- actor `runtime` = `cursor`
+- run `source` = `cursor`
+- integration path may be `cli` or `mcp` depending on how that environment
+  reaches WorkGraph
+
+The difference from Scenario 4 is not the brand name. The difference is whether
+the system behaves as a durable delegated actor.
+
+### Scenario 6 - Claude Cowork recurring task
+
+Situation:
+
+- Cowork prepares a recurring report from files and external tools
+- in some cases Pedro actively steers each run
+- in other cases Cowork behaves more like an ongoing delegate
+
+Recommended modeling:
+
+- if Pedro remains the direct responsible worker:
+  - actor = `person/pedro`
+  - run `source` = `claude-cowork`
+- if Cowork behaves as a recurring delegated executor:
+  - actor = `agent/pedro-cowork`
+  - actor `runtime` = `claude-cowork`
+  - run `source` = `claude-cowork`
+- integration path may be `mcp`
+
+### Scenario 7 - Hermes scheduled task
+
+Situation:
+
+- Hermes runs a scheduled weekly digest or recurring operational task
+- it has stable identity, repeated behavior, and durable outputs
+
+Recommended modeling:
+
+- actor = `agent/pedro-hermes` or another durable Hermes-backed agent identity
+- actor `runtime` = `hermes`
+- run `kind` = `automation_job`
+- run `source` = `hermes`
+- integration path may be `cli`, `mcp`, `api`, or adapter-mediated receipt,
+  depending on deployment
+
+### Scenario 8 - OpenClaw with spawned subagents
+
+Situation:
+
+- OpenClaw handles work through its own session and subagent model
+- internal descendants may appear during execution
+
+Recommended modeling:
+
+- top-level durable actor = `agent/pedro-openclaw` or another intentionally
+  tracked OpenClaw actor
+- run `source` = `openclaw`
+- spawned descendants remain opaque by default
+- only promote a subagent/session descendant into a tracked actor when it needs
+  independent assignment, policy, repeated graph visibility, or durable handoff
+  accountability
+
+### Scenario 9 - Adapter observes a CRM workflow
+
+Situation:
+
+- no human or agent is directly calling WorkGraph
+- a CRM adapter sees a meaningful event such as proposal sent or renewal review
+  completed
+
+Recommended modeling:
+
+- create or update a run only if the event is bounded, attributable, and
+  coordination-relevant
+- actor may remain a tracked person, team-owned agent, or another durable actor
+- run `source` = `salesforce_adapter`, `hubspot_adapter`, or similar compact
+  label
+- use `external_refs` to point to the authoritative CRM record
+- do not mirror the entire CRM object graph into WorkGraph
+
+### Scenario 10 - Human plus agent handoff
+
+Situation:
+
+- Pedro scopes work in chat
+- a durable coding agent executes implementation
+- Pedro validates the result
+
+Recommended modeling:
+
+- Run 1:
+  - actor = `person/pedro`
+  - run `source` = `claude-chat` or `chatgpt-chat`
+  - purpose = scoping, drafting, or planning
+- Run 2:
+  - actor = `agent/pedro-claude-code`
+  - run `source` = `claude-code`
+  - parent linkage or thread continuity captures the delegation
+- Run 3:
+  - actor = `person/pedro`
+  - run `source` = `cursor` or another review surface
+  - purpose = validation or approval
+
+This pattern is often better than collapsing all activity into one ambiguous run.
+
+### Decision Checklist
+
+When deciding how to model a new case, ask:
+
+1. Who is the durable accountable identity for this work?
+2. Is the AI product acting as a tool/surface or as a durable delegated actor?
+3. What compact surface label best describes where the work happened?
+4. What is the natural integration path: `cli`, `mcp`, `api`, or adapter
+   receipt?
+5. Which external references should be preserved instead of copied into
+   WorkGraph?
+6. Are any sessions or subagents durable enough to promote into tracked actors,
+   or should they remain opaque?
+
 ### Trigger
 
 A trigger is a durable rule that matches an event pattern and yields one or more action plans.
