@@ -6,6 +6,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -23,19 +26,57 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
 
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          TARGET="$(rustc -vV | sed -n 's/^host: //p')"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            EXT=".exe"
+          else
+            EXT=""
+          fi
+          ASSET_NAME="workgraph-v${VERSION}-${TARGET}${EXT}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "target=${TARGET}" >> "$GITHUB_OUTPUT"
+          echo "asset_name=${ASSET_NAME}" >> "$GITHUB_OUTPUT"
+          echo "asset_ext=${EXT}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          test "${GITHUB_REF_NAME}" = "v${{ steps.meta.outputs.version }}"
+
       - name: Build release binary
-        run: cargo build --release --bin workgraph
+        run: cargo build --release -p workgraph --bin workgraph --locked
+
+      - name: Stage release asset
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/release/workgraph${{ steps.meta.outputs.asset_ext }}" "dist/${{ steps.meta.outputs.asset_name }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: |
-            target/release/workgraph
-            target/release/workgraph.exe
+          name: ${{ matrix.artifact }}-${{ steps.meta.outputs.target }}
+          path: dist/${{ steps.meta.outputs.asset_name }}
+
+      - name: Upload GitHub release asset
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ steps.meta.outputs.asset_name }}

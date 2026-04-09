@@ -1,0 +1,48 @@
+{
+  "name": "@versatly/workgraph",
+  "version": "4.0.0-alpha.0",
+  "description": "Durable context graph and coordination CLI for AI-native organizations.",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Versatly/workgraph-v4.git"
+  },
+  "homepage": "https://github.com/Versatly/workgraph-v4#readme",
+  "bugs": {
+    "url": "https://github.com/Versatly/workgraph-v4/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "workgraph": "./npm/bin/workgraph.js"
+  },
+  "scripts": {
+    "postinstall": "node ./npm/install.js",
+    "build:native": "cargo build --release -p workgraph --bin workgraph --locked",
+    "pack:dry-run": "npm pack --dry-run"
+  },
+  "files": [
+    ".cargo/",
+    "bins/",
+    "crates/",
+    "src/",
+    "npm/",
+    "Cargo.toml",
+    "Cargo.lock",
+    "rust-toolchain.toml",
+    "README.md",
+    "LICENSE-APACHE",
+    "LICENSE-MIT"
+  ],
+  "keywords": [
+    "workgraph",
+    "agents",
+    "coordination",
+    "cli",
+    "rust"
+  ]
+}

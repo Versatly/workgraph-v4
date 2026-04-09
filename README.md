@@ -61,7 +61,26 @@ Layer 5  Integration -> optional integrations
 
 Lower layers may not depend on higher layers.
 
-## Quick Start
+## Install
+
+Install the CLI globally from npm:
+
+```bash
+npm install -g @versatly/workgraph
+workgraph --help
+```
+
+Run it one-off with npx:
+
+```bash
+npx @versatly/workgraph --help
+```
+
+The npm package installs a native `workgraph` binary for your platform from GitHub Releases.
+If a matching prebuilt binary is not available yet, it falls back to
+`cargo build --release -p workgraph --bin workgraph` when Rust is installed locally.
+
+## Build From Source
 
 ```bash
 cargo build --release
