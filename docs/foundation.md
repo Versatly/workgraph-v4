@@ -84,11 +84,28 @@ The system must assume:
 The durable contract is:
 
 - `ActorId` remains the stable logical identity
+- tracked actors are the durable accountability boundary, not every runtime boundary
 - `agent` may declare `parent_actor_id`
 - `agent` may declare `root_actor_id`
 - lineage may be `tracked` or `opaque`
 
 Opaque lineage means WorkGraph preserves delegation meaning without forcing every descendant actor into the graph.
+
+That distinction matters because operational runtimes often create short-lived sessions,
+spawned workers, and internal subagents. Those runtime descendants are not first-class
+actors by default. WorkGraph should preserve them as execution context or external
+references unless they become durably meaningful organizational participants.
+
+In practice:
+
+- a tracked actor is something WorkGraph can assign work to, attribute work to, and
+  reason about across many threads or runs
+- a runtime session is an execution detail, not automatically a new actor
+- a spawned subagent may remain operationally opaque unless it needs independent
+  identity, policy, assignment, or repeated graph visibility
+
+This keeps the actor layer stable even when the underlying execution tools, session
+boundaries, or internal orchestration patterns change.
 
 ## Surface Architecture: CLI-first
 

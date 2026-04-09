@@ -4,10 +4,25 @@
 
 - `person` and `agent` are the primary tracked actor primitives
 - `ActorId` is the stable logical actor identity used across ledger, runs, and thread activity
+- tracked actors are durable accountability boundaries, not every runtime boundary
 - subactors may exist below the tracked boundary
 - lineage may be fully `tracked` or intentionally `opaque`
 
 Delegation should preserve meaning even when every subactor is not first-class in the graph.
+
+In practice:
+
+- a tracked actor is something WorkGraph can assign work to, attribute work to,
+  and reason about across many threads or runs
+- a tracked actor should usually reflect a durable organizational identity or
+  role, not a single tool session identifier
+- runtime sessions, spawned workers, and internal subagents are execution
+  details by default, not automatically first-class actors
+- those descendants may remain opaque unless they need independent policy,
+  assignment, repeated graph visibility, or durable handoff semantics
+
+This keeps WorkGraph focused on durable coordination while allowing runtimes to
+use their own internal orchestration models.
 
 ## Primitive Semantics
 
@@ -47,7 +62,26 @@ Threads carry:
 
 ### Run
 
-A run is one execution instance.
+A run is one bounded execution attempt or work session on behalf of a thread.
+
+Runs are not limited to software execution. A run may represent:
+
+- an agent pass
+- a human work session
+- an automation job
+- a review step
+- an approval pass
+- an external tool-mediated action that matters to coordination
+
+A run is the durable receipt that some actor attempted concrete work on a
+thread. It records:
+
+- which thread the work belonged to
+- which tracked actor was responsible
+- which tracked executor performed it when that differs from the responsible actor
+- when the attempt started and ended
+- what the outcome was
+- whether it was delegated from another run
 
 Run rules:
 
@@ -56,6 +90,16 @@ Run rules:
 - one run may optionally reference a parent run
 - logical actor and concrete executor may differ
 - `started_at` and `ended_at` are durable lifecycle timestamps
+
+Execution-specific details such as sessions, spawned subagents, job ids, or
+adapter event ids may be linked as metadata or external references without
+forcing every runtime descendant to become a first-class actor.
+
+`parent_run_id` preserves durable delegation meaning without requiring
+WorkGraph to mirror an orchestrator's full internal execution tree.
+
+By default, WorkGraph should capture the coordination receipt, summary, and
+evidence-bearing outputs of a run rather than every raw runtime log line.
 
 ### Trigger
 

@@ -11,6 +11,10 @@ pub enum LineageMode {
     /// Descendant actors are tracked as explicit first-class entities.
     Tracked,
     /// Descendant actors exist but are intentionally modeled as opaque.
+    ///
+    /// This preserves durable delegation meaning without forcing every runtime
+    /// session, spawned worker, or internal subagent to become a first-class
+    /// actor in the graph.
     Opaque,
 }
 
@@ -243,6 +247,10 @@ pub struct MissionPrimitive {
 }
 
 /// Durable run document model.
+///
+/// A run is one bounded execution attempt or work session on behalf of a
+/// thread. It captures the durable coordination receipt for that attempt rather
+/// than every raw runtime detail.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunPrimitive {
     /// Stable run identifier.
@@ -252,8 +260,12 @@ pub struct RunPrimitive {
     /// Run lifecycle status.
     pub status: crate::RunStatus,
     /// Logical actor responsible for the run.
+    ///
+    /// This points at the durable accountable actor boundary rather than a
+    /// transient runtime session identifier.
     pub actor_id: ActorId,
-    /// Concrete executor that performed the run, when different from the actor.
+    /// Concrete tracked executor that performed the run, when different from
+    /// the responsible actor.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub executor_id: Option<ActorId>,
     /// Thread this run belongs to.
@@ -262,6 +274,9 @@ pub struct RunPrimitive {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mission_id: Option<String>,
     /// Parent run identifier for delegated execution, when any.
+    ///
+    /// This preserves delegation relationships without requiring WorkGraph to
+    /// mirror an external orchestrator's full internal execution tree.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_run_id: Option<String>,
     /// Timestamp when execution started, when known.

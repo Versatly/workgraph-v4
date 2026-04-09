@@ -82,19 +82,27 @@ pub struct Agent {
     /// A concise explanation of what the agent is good at.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// The runtime or adapter used to launch the agent.
+    /// The runtime or adapter commonly used to launch or observe this agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime: Option<String>,
     /// The human or team responsible for the agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
     /// Optional tracked parent actor above this agent.
+    ///
+    /// This preserves durable delegation meaning without requiring WorkGraph to
+    /// first-class every session or spawned worker below the tracked boundary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_actor_id: Option<String>,
     /// Optional root tracked actor for delegated lineages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_actor_id: Option<String>,
     /// Whether descendants are fully tracked or intentionally opaque.
+    ///
+    /// Opaque descendants may still exist operationally, but they remain
+    /// runtime-level execution detail unless promoted into durable actor
+    /// identity because they need independent policy, assignment, or repeated
+    /// graph visibility.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lineage_mode: Option<LineageMode>,
     /// The network node currently associated with the agent.
