@@ -164,6 +164,15 @@ pub enum Command {
         /// The primitive reference in `<type>/<id>` form.
         reference: String,
     },
+    /// Manages durable run receipts and run lifecycle transitions.
+    #[command(
+        after_help = "Examples:\n  workgraph run create --title \"Cursor pass\" --thread-id thread-1\n  workgraph run start cursor-pass\n  workgraph --json run complete cursor-pass --summary \"Finished implementation\""
+    )]
+    Run {
+        /// Run-specific subcommand to execute.
+        #[command(subcommand)]
+        command: RunCommand,
+    },
 }
 
 impl Command {
@@ -183,6 +192,103 @@ impl Command {
             Self::Create { .. } => "create",
             Self::Query { .. } => "query",
             Self::Show { .. } => "show",
+            Self::Run { command } => command.name(),
+        }
+    }
+}
+
+/// Supported `workgraph run` lifecycle subcommands.
+#[derive(Debug, Subcommand)]
+pub enum RunCommand {
+    /// Creates a new queued run bound to a thread.
+    #[command(
+        after_help = "Examples:\n  workgraph run create --title \"Cursor pass\" --thread-id thread-1\n  workgraph run create --title \"Review pass\" --thread-id thread-1 --actor-id agent:reviewer --kind review --source cursor\n  workgraph --json run create --title \"Preview run\" --thread-id thread-1 --dry-run"
+    )]
+    Create {
+        /// Human-readable title for the run.
+        #[arg(long)]
+        title: String,
+        /// Owning thread identifier.
+        #[arg(long = "thread-id")]
+        thread_id: String,
+        /// Tracked actor responsible for the run. Defaults to the configured actor.
+        #[arg(long = "actor-id")]
+        actor_id: Option<String>,
+        /// Optional broad run classification such as `agent_pass` or `review`.
+        #[arg(long)]
+        kind: Option<String>,
+        /// Optional source or surface that created or observed the run receipt.
+        #[arg(long)]
+        source: Option<String>,
+        /// Tracked executor that performed the run when different from actor_id.
+        #[arg(long = "executor-id")]
+        executor_id: Option<String>,
+        /// Related mission identifier, when known.
+        #[arg(long = "mission-id")]
+        mission_id: Option<String>,
+        /// Parent run identifier for delegated execution, when any.
+        #[arg(long = "parent-run-id")]
+        parent_run_id: Option<String>,
+        /// Optional initial summary stored alongside the run.
+        #[arg(long)]
+        summary: Option<String>,
+        /// Previews the run without persisting it.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Marks a queued run as running.
+    #[command(
+        after_help = "Examples:\n  workgraph run start cursor-pass\n  workgraph --json run start review-pass"
+    )]
+    Start {
+        /// Stable run identifier.
+        run_id: String,
+    },
+    /// Marks a run as succeeded.
+    #[command(
+        after_help = "Examples:\n  workgraph run complete cursor-pass\n  workgraph --json run complete cursor-pass --summary \"Delivered final patch\""
+    )]
+    Complete {
+        /// Stable run identifier.
+        run_id: String,
+        /// Optional summary to store with the terminal run state.
+        #[arg(long)]
+        summary: Option<String>,
+    },
+    /// Marks a run as failed.
+    #[command(
+        after_help = "Examples:\n  workgraph run fail cursor-pass\n  workgraph --json run fail cursor-pass --summary \"Blocked by missing dependency\""
+    )]
+    Fail {
+        /// Stable run identifier.
+        run_id: String,
+        /// Optional summary to store with the terminal run state.
+        #[arg(long)]
+        summary: Option<String>,
+    },
+    /// Marks a run as cancelled.
+    #[command(
+        after_help = "Examples:\n  workgraph run cancel cursor-pass\n  workgraph --json run cancel cursor-pass --summary \"Superseded by newer run\""
+    )]
+    Cancel {
+        /// Stable run identifier.
+        run_id: String,
+        /// Optional summary to store with the terminal run state.
+        #[arg(long)]
+        summary: Option<String>,
+    },
+}
+
+impl RunCommand {
+    /// Returns the stable command name associated with this parsed run subcommand.
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::Create { .. } => "run_create",
+            Self::Start { .. } => "run_start",
+            Self::Complete { .. } => "run_complete",
+            Self::Fail { .. } => "run_fail",
+            Self::Cancel { .. } => "run_cancel",
         }
     }
 }

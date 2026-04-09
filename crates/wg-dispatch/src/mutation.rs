@@ -5,7 +5,8 @@ use wg_policy::{PolicyAction, PolicyContext, PolicyDecision, evaluate as evaluat
 use wg_store::AuditedWriteRequest;
 use wg_types::{LedgerOp, RunStatus};
 
-use crate::{DispatchRequest, RUN_TYPE, Run, load_run, save_run_with_audit, system_actor};
+use crate::{DispatchRequest, RUN_TYPE, Run, load_run, save_run_with_audit};
+use wg_types::ActorId;
 
 /// Domain mutation service for run lifecycle changes.
 ///
@@ -29,7 +30,12 @@ impl<'a> RunMutationService<'a> {
     /// # Errors
     ///
     /// Returns an error when required identifiers are invalid or persistence fails.
-    pub async fn create_run(self, id: &str, request: DispatchRequest) -> Result<Run> {
+    pub async fn create_run_as(
+        self,
+        id: &str,
+        request: DispatchRequest,
+        audit_actor: ActorId,
+    ) -> Result<Run> {
         if id.trim().is_empty() {
             return Err(WorkgraphError::ValidationError(
                 "run id must not be empty".to_owned(),
@@ -64,7 +70,7 @@ impl<'a> RunMutationService<'a> {
         };
         self.persist(
             &run,
-            AuditedWriteRequest::new(system_actor(), LedgerOp::Create)
+            AuditedWriteRequest::new(audit_actor, LedgerOp::Create)
                 .with_note(format!("Created run '{}'", run.id)),
         )
         .await?;
@@ -76,9 +82,15 @@ impl<'a> RunMutationService<'a> {
     /// # Errors
     ///
     /// Returns an error when the transition is invalid or persistence fails.
-    pub async fn start_run(self, run_id: &str) -> Result<Run> {
-        self.transition_run(run_id, RunStatus::Running, LedgerOp::Start, None)
-            .await
+    pub async fn start_run_as(self, audit_actor: ActorId, run_id: &str) -> Result<Run> {
+        self.transition_run(
+            run_id,
+            RunStatus::Running,
+            LedgerOp::Start,
+            None,
+            audit_actor,
+        )
+        .await
     }
 
     /// Marks a run succeeded.
@@ -86,9 +98,20 @@ impl<'a> RunMutationService<'a> {
     /// # Errors
     ///
     /// Returns an error when the transition is invalid or persistence fails.
-    pub async fn complete_run(self, run_id: &str, summary: Option<&str>) -> Result<Run> {
-        self.transition_run(run_id, RunStatus::Succeeded, LedgerOp::Done, summary)
-            .await
+    pub async fn complete_run_as(
+        self,
+        audit_actor: ActorId,
+        run_id: &str,
+        summary: Option<&str>,
+    ) -> Result<Run> {
+        self.transition_run(
+            run_id,
+            RunStatus::Succeeded,
+            LedgerOp::Done,
+            summary,
+            audit_actor,
+        )
+        .await
     }
 
     /// Marks a run failed.
@@ -96,9 +119,20 @@ impl<'a> RunMutationService<'a> {
     /// # Errors
     ///
     /// Returns an error when the transition is invalid or persistence fails.
-    pub async fn fail_run(self, run_id: &str, summary: Option<&str>) -> Result<Run> {
-        self.transition_run(run_id, RunStatus::Failed, LedgerOp::Update, summary)
-            .await
+    pub async fn fail_run_as(
+        self,
+        audit_actor: ActorId,
+        run_id: &str,
+        summary: Option<&str>,
+    ) -> Result<Run> {
+        self.transition_run(
+            run_id,
+            RunStatus::Failed,
+            LedgerOp::Update,
+            summary,
+            audit_actor,
+        )
+        .await
     }
 
     /// Marks a run cancelled.
@@ -106,9 +140,20 @@ impl<'a> RunMutationService<'a> {
     /// # Errors
     ///
     /// Returns an error when the transition is invalid or persistence fails.
-    pub async fn cancel_run(self, run_id: &str, summary: Option<&str>) -> Result<Run> {
-        self.transition_run(run_id, RunStatus::Cancelled, LedgerOp::Cancel, summary)
-            .await
+    pub async fn cancel_run_as(
+        self,
+        audit_actor: ActorId,
+        run_id: &str,
+        summary: Option<&str>,
+    ) -> Result<Run> {
+        self.transition_run(
+            run_id,
+            RunStatus::Cancelled,
+            LedgerOp::Cancel,
+            summary,
+            audit_actor,
+        )
+        .await
     }
 
     async fn transition_run(
@@ -117,6 +162,7 @@ impl<'a> RunMutationService<'a> {
         next: RunStatus,
         op: LedgerOp,
         summary: Option<&str>,
+        audit_actor: ActorId,
     ) -> Result<Run> {
         let mut run = load_run(self.workspace, run_id).await?;
         run.status = run
@@ -149,7 +195,7 @@ impl<'a> RunMutationService<'a> {
         }
         self.persist(
             &run,
-            AuditedWriteRequest::new(system_actor(), op).with_note(format!(
+            AuditedWriteRequest::new(audit_actor, op).with_note(format!(
                 "Transitioned run '{}' to '{}'",
                 run.id,
                 run.status.as_str()

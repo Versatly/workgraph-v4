@@ -597,6 +597,8 @@ Coordination commands now include:
 
 - `workgraph claim <thread-id>` — claim and activate a thread
 - `workgraph complete <thread-id>` — complete a thread with evidence validation
+- `workgraph run create --title ... --thread-id ...` — create a bounded run receipt for one thread
+- `workgraph run start|complete|fail|cancel <run-id>` — transition run lifecycle state
 - `workgraph checkpoint --working-on ... --focus ...` — persist working context
 - `workgraph ledger [--last N]` — inspect recent immutable ledger entries
 

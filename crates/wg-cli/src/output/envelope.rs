@@ -106,6 +106,11 @@ fn fix_for_clap_error(command: Option<&str>, _error: &clap::Error) -> String {
     match command {
         Some("claim") => "workgraph claim <thread-id>",
         Some("complete") => "workgraph complete <thread-id>",
+        Some("run_create") => "workgraph run create --title \"<title>\" --thread-id <thread-id>",
+        Some("run_start") => "workgraph run start <run-id>",
+        Some("run_complete") => "workgraph run complete <run-id> --summary \"<summary>\"",
+        Some("run_fail") => "workgraph run fail <run-id> --summary \"<summary>\"",
+        Some("run_cancel") => "workgraph run cancel <run-id> --summary \"<summary>\"",
         Some("checkpoint") => {
             "workgraph checkpoint --working-on \"<work item>\" --focus \"<focus>\""
         }
@@ -146,6 +151,11 @@ fn default_fix(command: Option<&str>) -> &'static str {
         Some("status") => "workgraph status",
         Some("claim") => "workgraph claim <thread-id>",
         Some("complete") => "workgraph complete <thread-id>",
+        Some("run_create") => "workgraph run create --title \"<title>\" --thread-id <thread-id>",
+        Some("run_start") => "workgraph run start <run-id>",
+        Some("run_complete") => "workgraph run complete <run-id>",
+        Some("run_fail") => "workgraph run fail <run-id>",
+        Some("run_cancel") => "workgraph run cancel <run-id>",
         Some("checkpoint") => {
             "workgraph checkpoint --working-on \"<work item>\" --focus \"<focus>\""
         }

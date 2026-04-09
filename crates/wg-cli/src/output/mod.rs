@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 use serde_json::Value as JsonValue;
+use wg_dispatch::Run;
 use wg_orientation::{GraphIssue, GraphOrphan, RecentActivity, ThreadEvidenceGap, WorkspaceBrief};
 use wg_store::StoredPrimitive;
 use wg_types::{LedgerEntry, ThreadPrimitive, WorkgraphConfig};
@@ -43,6 +44,10 @@ pub enum CommandOutput {
     Query(QueryOutput),
     /// Result of `workgraph show`.
     Show(ShowOutput),
+    /// Result of `workgraph run create`.
+    RunCreate(RunCreateOutput),
+    /// Result of run lifecycle transitions.
+    RunLifecycle(RunLifecycleOutput),
 }
 
 /// Output model produced by the `init` command.
@@ -186,6 +191,42 @@ pub struct CreateOutput {
     pub ledger_entry: Option<LedgerEntry>,
 }
 
+/// Structured outcome for `run create` mutations.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunCreateOutcome {
+    /// A new run was persisted and ledgered.
+    Created,
+    /// The existing run already matched the requested payload.
+    Noop,
+    /// A run preview was returned without writing.
+    DryRun,
+}
+
+/// Output model produced by `workgraph run create`.
+#[derive(Debug, Serialize)]
+pub struct RunCreateOutput {
+    /// Whether this run create call persisted state, noop'd, or was a dry-run preview.
+    pub outcome: RunCreateOutcome,
+    /// The created run reference in `run/<id>` form.
+    pub reference: String,
+    /// The filesystem path where the run primitive was stored or would be stored.
+    pub path: String,
+    /// The typed run payload.
+    pub run: Run,
+    /// The appended ledger entry corresponding to the creation event, when persisted.
+    pub ledger_entry: Option<LedgerEntry>,
+}
+
+/// Output model produced by run lifecycle commands.
+#[derive(Debug, Serialize)]
+pub struct RunLifecycleOutput {
+    /// Human-readable lifecycle action label.
+    pub action: String,
+    /// Updated run after the requested lifecycle transition.
+    pub run: Run,
+}
+
 /// Output model produced by the `query` command.
 #[derive(Debug, Serialize)]
 pub struct QueryOutput {
@@ -241,7 +282,7 @@ pub fn render_failure(
 impl CommandOutput {
     /// Returns the stable command name associated with this output.
     #[must_use]
-    pub const fn command_name(&self) -> &'static str {
+    pub fn command_name(&self) -> &'static str {
         match self {
             Self::Init(_) => "init",
             Self::Brief(_) => "brief",
@@ -255,6 +296,14 @@ impl CommandOutput {
             Self::Create(_) => "create",
             Self::Query(_) => "query",
             Self::Show(_) => "show",
+            Self::RunCreate(_) => "run_create",
+            Self::RunLifecycle(output) => match output.action.as_str() {
+                "Started" => "run_start",
+                "Completed" => "run_complete",
+                "Failed" => "run_fail",
+                "Cancelled" => "run_cancel",
+                _ => "run_lifecycle",
+            },
         }
     }
 
@@ -277,6 +326,8 @@ impl CommandOutput {
             Self::Create(output) => serde_json::to_value(output),
             Self::Query(output) => serde_json::to_value(output),
             Self::Show(output) => serde_json::to_value(output),
+            Self::RunCreate(output) => serde_json::to_value(output),
+            Self::RunLifecycle(output) => serde_json::to_value(output),
         }
         .map_err(Into::into)
     }
@@ -349,6 +400,31 @@ impl CommandOutput {
                 format!("workgraph query {}", output.primitive.frontmatter.r#type),
                 "workgraph status".to_owned(),
             ],
+            Self::RunCreate(output) => vec![
+                format!("workgraph show {}", output.reference),
+                "workgraph query run".to_owned(),
+                format!("workgraph run start {}", output.run.id),
+            ],
+            Self::RunLifecycle(output) => match output.run.status {
+                wg_types::RunStatus::Queued => vec![
+                    format!("workgraph show run/{}", output.run.id),
+                    format!("workgraph run start {}", output.run.id),
+                    "workgraph query run".to_owned(),
+                ],
+                wg_types::RunStatus::Running => vec![
+                    format!("workgraph show run/{}", output.run.id),
+                    format!("workgraph run complete {}", output.run.id),
+                    format!("workgraph run fail {}", output.run.id),
+                ],
+                wg_types::RunStatus::Succeeded
+                | wg_types::RunStatus::Failed
+                | wg_types::RunStatus::TimedOut
+                | wg_types::RunStatus::Cancelled => vec![
+                    format!("workgraph show run/{}", output.run.id),
+                    "workgraph query run".to_owned(),
+                    "workgraph ledger --last 10".to_owned(),
+                ],
+            },
         }
     }
 }
