@@ -104,6 +104,12 @@ fn classify_fix(command: Option<&str>, error: &anyhow::Error) -> String {
 
 fn fix_for_clap_error(command: Option<&str>, _error: &clap::Error) -> String {
     match command {
+        Some("claim") => "workgraph claim <thread-id>",
+        Some("complete") => "workgraph complete <thread-id>",
+        Some("checkpoint") => {
+            "workgraph checkpoint --working-on \"<work item>\" --focus \"<focus>\""
+        }
+        Some("ledger") => "workgraph ledger --last <n>",
         Some("create") => "workgraph create <type> --title \"<title>\" --field key=value",
         Some("query") => "workgraph query <type> --filter key=value",
         Some("show") => "workgraph show <type>/<id>",
@@ -138,6 +144,12 @@ fn default_fix(command: Option<&str>) -> &'static str {
         Some("init") => "workgraph init",
         Some("brief") => "workgraph brief --lens workspace",
         Some("status") => "workgraph status",
+        Some("claim") => "workgraph claim <thread-id>",
+        Some("complete") => "workgraph complete <thread-id>",
+        Some("checkpoint") => {
+            "workgraph checkpoint --working-on \"<work item>\" --focus \"<focus>\""
+        }
+        Some("ledger") => "workgraph ledger --last <n>",
         Some("capabilities") => "workgraph capabilities",
         Some("schema") => "workgraph schema <type>",
         Some("create") => "workgraph create <type> --title \"<title>\"",

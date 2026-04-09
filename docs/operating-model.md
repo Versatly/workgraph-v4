@@ -17,6 +17,19 @@ A mission is a coordinated objective. It may require many threads and many runs.
 
 Mission is not synonymous with task.
 
+Mission lifecycle is explicit and durable:
+
+- `draft` — mission shell exists
+- `planned` — milestones are declared and milestone threads are auto-created
+- `approved` — plan is accepted and ready to start
+- `active` — execution in progress
+- `validating` — completion readiness is being checked
+- `completed` / `cancelled` — terminal outcomes
+
+Mission planning is evidence-bearing by structure: milestones carry durable
+`thread_id` bindings so completion and progress are evaluated over concrete
+thread state rather than inferred from narrative text.
+
 ### Thread
 
 A thread is a scoped coordination workstream around a concrete problem or slice of work.
@@ -42,6 +55,7 @@ Run rules:
 - one run may optionally reference a mission
 - one run may optionally reference a parent run
 - logical actor and concrete executor may differ
+- `started_at` and `ended_at` are durable lifecycle timestamps
 
 ### Trigger
 
@@ -88,6 +102,16 @@ Agent-facing CLI expectations:
 - `workgraph schema [type]` for field definitions
 - idempotent creates, `--dry-run` on writes, stdin for pipelines
 - actionable error messages with fix suggestions
+
+Coordination commands now include:
+
+- `workgraph claim <thread-id>` — claim and activate a thread
+- `workgraph complete <thread-id>` — complete a thread with evidence validation
+- `workgraph checkpoint --working-on ... --focus ...` — persist working context
+- `workgraph ledger [--last N]` — inspect recent immutable ledger entries
+
+`workgraph status` also surfaces graph hygiene (`graph_issues`, `orphan_nodes`)
+and thread evidence gaps in both human and JSON output.
 
 ## Delegation And Handoff
 

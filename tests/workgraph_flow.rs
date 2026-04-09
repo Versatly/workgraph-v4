@@ -8,7 +8,10 @@ use tokio::fs;
 use wg_cli::execute;
 use wg_graph::{NeighborDirection, NodeRef, build_graph};
 use wg_ledger::verify_chain;
-use wg_mission::{add_thread_to_mission, create_mission, mission_progress};
+use wg_mission::{
+    MissionMilestoneInput, approve_mission, complete_mission, create_mission, mission_progress,
+    plan_mission, start_mission, validate_mission,
+};
 use wg_orientation::{brief, checkpoint, status};
 use wg_paths::WorkspacePath;
 use wg_policy::{PolicyAction, PolicyContext, PolicyDecision, PolicyEngine};
@@ -209,9 +212,44 @@ async fn init_create_query_and_verify_ledger_chain() {
     )
     .await
     .expect("mission should be created");
-    add_thread_to_mission(&workspace, "phase-1-kernel", "kernel-thread-1")
+    let planned = plan_mission(
+        &workspace,
+        "phase-1-kernel",
+        vec![MissionMilestoneInput {
+            id: "verification".into(),
+            title: "Kernel implementation thread".into(),
+            description: None,
+        }],
+    )
+    .await
+    .expect("mission should be planned");
+    assert_eq!(planned.thread_ids, vec!["phase-1-kernel-verification"]);
+    assert_eq!(
+        planned.milestones[0].thread_id,
+        "phase-1-kernel-verification"
+    );
+    approve_mission(&workspace, "phase-1-kernel")
         .await
-        .expect("thread should be attached to mission");
+        .expect("mission should be approved");
+    start_mission(&workspace, "phase-1-kernel")
+        .await
+        .expect("mission should start");
+    claim_thread(
+        &workspace,
+        "phase-1-kernel-verification",
+        ActorId::new("pedro"),
+    )
+    .await
+    .expect("planned milestone thread should be claimed");
+    complete_thread(&workspace, "phase-1-kernel-verification")
+        .await
+        .expect("planned milestone thread should complete");
+    validate_mission(&workspace, "phase-1-kernel")
+        .await
+        .expect("mission should validate");
+    complete_mission(&workspace, "phase-1-kernel")
+        .await
+        .expect("mission should complete");
     let progress = mission_progress(&workspace, "phase-1-kernel")
         .await
         .expect("mission progress should compute");
@@ -311,13 +349,13 @@ async fn init_create_query_and_verify_ledger_chain() {
     let workspace_status = status(&workspace)
         .await
         .expect("orientation status should load");
-    assert_eq!(workspace_status.type_counts.get("thread"), Some(&1));
+    assert_eq!(workspace_status.type_counts.get("thread"), Some(&2));
     assert_eq!(workspace_status.type_counts.get("mission"), Some(&1));
 
     let actor_brief = brief(&workspace, &ActorId::new("pedro"))
         .await
         .expect("orientation brief should load");
-    assert_eq!(actor_brief.assigned_threads.len(), 1);
+    assert_eq!(actor_brief.assigned_threads.len(), 2);
     assert_eq!(actor_brief.assigned_missions.len(), 1);
     assert!(
         actor_brief

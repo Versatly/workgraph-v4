@@ -299,6 +299,20 @@ fn emit_thread_edges(
             }
         }
     }
+    for run_id in runs_for_thread(source, primitive) {
+        resolve_and_record_edge(
+            source,
+            source,
+            &run_id,
+            Some("run"),
+            GraphEdgeKind::Containment,
+            GraphEdgeSource::Field,
+            nodes,
+            id_index,
+            edges,
+            broken_links,
+        );
+    }
 }
 
 fn emit_mission_edges(
@@ -660,6 +674,17 @@ fn string_list_field(value: Option<&Value>) -> Vec<String> {
     }
 }
 
+fn runs_for_thread(_source: &NodeRef, primitive: &StoredPrimitive) -> Vec<String> {
+    let mut run_ids = BTreeSet::new();
+    for run_id in string_list_field(primitive.frontmatter.extra_fields.get("runs")) {
+        run_ids.insert(run_id);
+    }
+    for run_id in string_list_field(primitive.frontmatter.extra_fields.get("run_ids")) {
+        run_ids.insert(run_id);
+    }
+    run_ids.into_iter().collect()
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
@@ -807,6 +832,7 @@ mod tests {
             edge.source == NodeRef::new("thread", "thread-1")
                 && edge.target == NodeRef::new("run", "run-1")
                 && edge.kind == GraphEdgeKind::Containment
+                && edge.provenance == GraphEdgeSource::Field
         }));
     }
 

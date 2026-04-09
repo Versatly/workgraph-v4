@@ -1009,6 +1009,7 @@ dependencies = [
  "wg-policy",
  "wg-registry",
  "wg-store",
+ "wg-thread",
  "wg-types",
 ]
 
@@ -1034,6 +1035,7 @@ dependencies = [
 name = "wg-dispatch"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "serde",
  "serde_yaml",
  "tempfile",
@@ -1115,6 +1117,7 @@ version = "0.1.0"
 name = "wg-mission"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "serde",
  "serde_yaml",
  "tempfile",
@@ -1124,6 +1127,7 @@ dependencies = [
  "wg-paths",
  "wg-policy",
  "wg-store",
+ "wg-thread",
  "wg-types",
 ]
 

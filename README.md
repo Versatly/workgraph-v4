@@ -23,7 +23,7 @@ The current workspace encodes the durable foundation rather than only describing
 - audited kernel writes for threads, missions, runs, triggers, checkpoints, and CLI-created primitives
 - first-class thread, mission, run, trigger, checkpoint, and actor-lineage contracts in `wg-types`
 - evidence-bearing thread persistence in `wg-thread`
-- mission and run persistence in `wg-mission` and `wg-dispatch`
+- mission and run persistence in `wg-mission` and `wg-dispatch`, including mission planning/approval/validation states, milestone thread auto-creation, and run start/end timestamps
 - typed graph edges in `wg-graph`, including assignment, containment, evidence, trigger, reference, and actor-lineage edges derived from agent metadata
 - orientation and CLI surfaces that expose evidence gaps, graph issues, coordination contracts, and full primitive discovery metadata
 

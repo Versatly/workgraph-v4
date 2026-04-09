@@ -1,3 +1,4 @@
+use chrono::Utc;
 use wg_error::{Result, WorkgraphError};
 use wg_paths::WorkspacePath;
 use wg_policy::{PolicyAction, PolicyContext, PolicyDecision, evaluate as evaluate_policy};
@@ -54,6 +55,8 @@ impl<'a> RunMutationService<'a> {
             thread_id: request.thread_id,
             mission_id: request.mission_id,
             parent_run_id: request.parent_run_id,
+            started_at: None,
+            ended_at: None,
             summary: request.summary,
         };
         self.persist(
@@ -117,6 +120,27 @@ impl<'a> RunMutationService<'a> {
             .status
             .transition_to(next)
             .map_err(WorkgraphError::ValidationError)?;
+        let now = Utc::now();
+        match run.status {
+            RunStatus::Running => {
+                if run.started_at.is_none() {
+                    run.started_at = Some(now);
+                }
+                run.ended_at = None;
+            }
+            RunStatus::Succeeded
+            | RunStatus::Failed
+            | RunStatus::TimedOut
+            | RunStatus::Cancelled => {
+                if run.started_at.is_none() {
+                    run.started_at = Some(now);
+                }
+                run.ended_at = Some(now);
+            }
+            RunStatus::Queued => {
+                run.ended_at = None;
+            }
+        }
         if let Some(summary) = summary {
             run.summary = Some(summary.to_owned());
         }

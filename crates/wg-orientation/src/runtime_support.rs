@@ -6,7 +6,7 @@ use wg_paths::WorkspacePath;
 use wg_thread::Thread;
 use wg_types::{GraphEdgeKind, GraphEdgeSource, LedgerEntry};
 
-use crate::{RecentActivity, ThreadEvidenceGap};
+use crate::{GraphOrphan, RecentActivity, ThreadEvidenceGap};
 
 pub(crate) async fn load_recent_activity(
     workspace: &WorkspacePath,
@@ -91,4 +91,14 @@ pub(crate) fn edge_source_label(source: GraphEdgeSource) -> &'static str {
         GraphEdgeSource::EvidenceRecord => "evidence_record",
         GraphEdgeSource::TriggerRule => "trigger_rule",
     }
+}
+
+pub(crate) fn orphan_nodes(graph: &wg_graph::GraphSnapshot) -> Vec<GraphOrphan> {
+    graph
+        .orphans()
+        .into_iter()
+        .map(|node| GraphOrphan {
+            reference: node.reference(),
+        })
+        .collect()
 }

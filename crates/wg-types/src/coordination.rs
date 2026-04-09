@@ -18,10 +18,16 @@ pub enum LineageMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MissionStatus {
-    /// The mission is still being defined.
+    /// The mission shell has been created but not yet planned.
+    Draft,
+    /// The mission plan and milestone threads have been declared.
     Planned,
+    /// The mission plan has been approved and can be started.
+    Approved,
     /// The mission is actively in progress.
     Active,
+    /// The mission is validating completion readiness.
+    Validating,
     /// The mission is blocked on a dependency or policy gate.
     Blocked,
     /// The mission has completed successfully.
@@ -35,8 +41,11 @@ impl MissionStatus {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::Draft => "draft",
             Self::Planned => "planned",
+            Self::Approved => "approved",
             Self::Active => "active",
+            Self::Validating => "validating",
             Self::Blocked => "blocked",
             Self::Completed => "completed",
             Self::Cancelled => "cancelled",
@@ -187,6 +196,20 @@ pub struct ThreadPrimitive {
 
 /// Durable mission document model.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MissionMilestone {
+    /// Stable milestone identifier scoped to the mission.
+    pub id: String,
+    /// Human-readable milestone title.
+    pub title: String,
+    /// Optional longer description.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Thread identifier auto-created for this milestone.
+    pub thread_id: String,
+}
+
+/// Durable mission document model.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MissionPrimitive {
     /// Stable mission identifier.
     pub id: String,
@@ -196,12 +219,27 @@ pub struct MissionPrimitive {
     pub status: MissionStatus,
     /// Markdown objective for the mission.
     pub objective: String,
+    /// Planned milestones that scope mission execution and thread creation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub milestones: Vec<MissionMilestone>,
     /// Child thread identifiers coordinated by this mission.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub thread_ids: Vec<String>,
     /// Runs related to this mission.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub run_ids: Vec<String>,
+    /// Timestamp when the mission was approved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approved_at: Option<DateTime<Utc>>,
+    /// Timestamp when active execution started.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<DateTime<Utc>>,
+    /// Timestamp when validation started.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validated_at: Option<DateTime<Utc>>,
+    /// Timestamp when completion was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<DateTime<Utc>>,
 }
 
 /// Durable run document model.
@@ -226,6 +264,12 @@ pub struct RunPrimitive {
     /// Parent run identifier for delegated execution, when any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_run_id: Option<String>,
+    /// Timestamp when execution started, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<DateTime<Utc>>,
+    /// Timestamp when execution ended, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<DateTime<Utc>>,
     /// Optional human-readable summary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
@@ -370,7 +414,7 @@ mod tests {
     use super::{
         CheckpointPrimitive, ConversationMessage, CoordinationAction, EventPattern,
         EventSourceKind, EvidenceItem, GraphEdgeKind, GraphEdgeReference, GraphEdgeSource,
-        LineageMode, MessageKind, MissionPrimitive, MissionStatus, RunPrimitive,
+        LineageMode, MessageKind, MissionMilestone, MissionPrimitive, MissionStatus, RunPrimitive,
         ThreadExitCriterion, ThreadPrimitive, TriggerActionPlan, TriggerPrimitive, TriggerStatus,
     };
     use crate::{ActorId, RunStatus, ThreadStatus};
@@ -442,8 +486,26 @@ mod tests {
             title: "Dealer portal launch".into(),
             status: MissionStatus::Active,
             objective: "Ship the migration safely.".into(),
+            milestones: vec![MissionMilestone {
+                id: "m1".into(),
+                title: "External verification".into(),
+                description: Some("Gather external signoff evidence".into()),
+                thread_id: "mission-1-m1".into(),
+            }],
             thread_ids: vec!["thread-1".into()],
             run_ids: vec!["run-1".into()],
+            approved_at: Some(
+                Utc.with_ymd_and_hms(2026, 3, 22, 7, 45, 0)
+                    .single()
+                    .expect("valid timestamp"),
+            ),
+            started_at: Some(
+                Utc.with_ymd_and_hms(2026, 3, 22, 8, 10, 0)
+                    .single()
+                    .expect("valid timestamp"),
+            ),
+            validated_at: None,
+            completed_at: None,
         };
         let run = RunPrimitive {
             id: "run-1".into(),
@@ -454,6 +516,12 @@ mod tests {
             thread_id: "thread-1".into(),
             mission_id: Some("mission-1".into()),
             parent_run_id: None,
+            started_at: Some(
+                Utc.with_ymd_and_hms(2026, 3, 22, 8, 12, 0)
+                    .single()
+                    .expect("valid timestamp"),
+            ),
+            ended_at: None,
             summary: Some("Collecting external verification evidence".into()),
         };
         let trigger = TriggerPrimitive {

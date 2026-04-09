@@ -73,6 +73,43 @@ pub enum Command {
         after_help = "Examples:\n  workgraph status\n  workgraph --json status\n  workgraph --format json status"
     )]
     Status,
+    /// Claims an open thread for the configured actor.
+    #[command(
+        after_help = "Examples:\n  workgraph claim thread-1\n  workgraph --json claim launch-scoping"
+    )]
+    Claim {
+        /// Stable thread identifier.
+        thread_id: String,
+    },
+    /// Completes a thread after validating required evidence.
+    #[command(
+        after_help = "Examples:\n  workgraph complete thread-1\n  workgraph --json complete launch-verification"
+    )]
+    Complete {
+        /// Stable thread identifier.
+        thread_id: String,
+    },
+    /// Saves a durable working-context checkpoint.
+    #[command(
+        after_help = "Examples:\n  workgraph checkpoint --working-on \"Kernel hardening\" --focus \"Finish tests\"\n  workgraph --json checkpoint --working-on \"Phase 2\" --focus \"Evidence gaps\""
+    )]
+    Checkpoint {
+        /// Current work item.
+        #[arg(long)]
+        working_on: String,
+        /// Current focus.
+        #[arg(long)]
+        focus: String,
+    },
+    /// Views recent immutable ledger entries.
+    #[command(
+        after_help = "Examples:\n  workgraph ledger\n  workgraph ledger --last 20\n  workgraph --json ledger --last 5"
+    )]
+    Ledger {
+        /// Number of most recent entries to include.
+        #[arg(long)]
+        last: Option<usize>,
+    },
     /// Lists the structured capabilities and workflows exposed by this CLI.
     #[command(
         after_help = "Examples:\n  workgraph capabilities\n  workgraph --json capabilities\n  workgraph --format json capabilities"
@@ -137,6 +174,10 @@ impl Command {
             Self::Init => "init",
             Self::Brief { .. } => "brief",
             Self::Status => "status",
+            Self::Claim { .. } => "claim",
+            Self::Complete { .. } => "complete",
+            Self::Checkpoint { .. } => "checkpoint",
+            Self::Ledger { .. } => "ledger",
             Self::Capabilities => "capabilities",
             Self::Schema { .. } => "schema",
             Self::Create { .. } => "create",

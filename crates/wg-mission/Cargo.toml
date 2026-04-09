@@ -7,12 +7,14 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+chrono.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true
 wg-error = { path = "../wg-error" }
 wg-paths = { path = "../wg-paths" }
 wg-policy = { path = "../wg-policy" }
 wg-store = { path = "../wg-store" }
+wg-thread = { path = "../wg-thread" }
 wg-types = { path = "../wg-types" }
 
 [dev-dependencies]

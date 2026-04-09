@@ -116,6 +116,52 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
                 vec!["workgraph status --json", "workgraph status"],
             ),
             capability(
+                "claim",
+                "Claim a thread for the configured actor and mark it active.",
+                vec!["<thread-id>"],
+                &global_flags,
+                vec![
+                    "workgraph claim thread-1 --json",
+                    "workgraph claim launch-scoping",
+                ],
+            ),
+            capability(
+                "complete",
+                "Complete a thread after validating required evidence coverage.",
+                vec!["<thread-id>"],
+                &global_flags,
+                vec![
+                    "workgraph complete thread-1 --json",
+                    "workgraph complete launch-verification",
+                ],
+            ),
+            capability(
+                "checkpoint",
+                "Save a durable working-context checkpoint for handoff and resume.",
+                vec![],
+                &[
+                    global_flags[0],
+                    global_flags[1],
+                    "--working-on \"<work item>\"",
+                    "--focus \"<focus>\"",
+                ],
+                vec![
+                    "workgraph checkpoint --working-on \"Kernel hardening\" --focus \"Finish tests\" --json",
+                    "workgraph checkpoint --working-on \"Phase 2\" --focus \"Evidence gaps\"",
+                ],
+            ),
+            capability(
+                "ledger",
+                "View recent immutable ledger entries.",
+                vec![],
+                &[global_flags[0], global_flags[1], "--last <n>"],
+                vec![
+                    "workgraph ledger --json",
+                    "workgraph ledger --last 20",
+                    "workgraph ledger --last 5 --json",
+                ],
+            ),
+            capability(
                 "capabilities",
                 "List command contracts for autonomous self-discovery.",
                 vec![],

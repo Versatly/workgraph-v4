@@ -2,12 +2,16 @@
 
 mod brief;
 mod capabilities;
+mod checkpoint;
+mod claim;
 mod create;
 mod init;
+mod ledger;
 mod query;
 mod schema;
 mod show;
 mod status;
+mod thread_complete;
 
 use crate::app::AppContext;
 use crate::args::Command;
@@ -23,6 +27,16 @@ pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<Comma
         Command::Init => Ok(CommandOutput::Init(init::handle(app).await?)),
         Command::Brief { lens } => Ok(CommandOutput::Brief(brief::handle(app, lens.0).await?)),
         Command::Status => Ok(CommandOutput::Status(status::handle(app).await?)),
+        Command::Claim { thread_id } => {
+            Ok(CommandOutput::Claim(claim::handle(app, &thread_id).await?))
+        }
+        Command::Complete { thread_id } => Ok(CommandOutput::Complete(
+            thread_complete::handle(app, &thread_id).await?,
+        )),
+        Command::Checkpoint { working_on, focus } => Ok(CommandOutput::Checkpoint(
+            checkpoint::handle(app, &working_on, &focus).await?,
+        )),
+        Command::Ledger { last } => Ok(CommandOutput::Ledger(ledger::handle(app, last).await?)),
         Command::Capabilities => Ok(CommandOutput::Capabilities(capabilities::handle())),
         Command::Schema { primitive_type } => Ok(CommandOutput::Schema(
             schema::handle(app, primitive_type.as_deref()).await?,
