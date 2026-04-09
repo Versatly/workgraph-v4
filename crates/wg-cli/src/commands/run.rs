@@ -41,20 +41,78 @@ pub struct RunCreateArgs {
 /// Returns an error when configuration cannot be loaded, the run payload is
 /// invalid, or persistence fails.
 pub async fn create(app: &AppContext, args: RunCreateArgs) -> anyhow::Result<RunCreateOutput> {
-    handle_create(
-        app,
-        &args.title,
-        &args.thread_id,
-        args.actor_id.as_deref(),
-        args.kind.as_deref(),
-        args.source.as_deref(),
-        args.executor_id.as_deref(),
-        args.mission_id.as_deref(),
-        args.parent_run_id.as_deref(),
-        args.summary.as_deref(),
-        args.dry_run,
-    )
-    .await
+    let invoking_actor = default_actor(app).await?;
+    let responsible_actor = args
+        .actor_id
+        .as_deref()
+        .map(ActorId::new)
+        .unwrap_or_else(|| invoking_actor.clone());
+    let request = build_request(&args, responsible_actor);
+    let mut run = Run {
+        id: slugify(&args.title),
+        title: request.title.clone(),
+        status: RunStatus::Queued,
+        kind: request.kind.clone(),
+        source: request.source.clone(),
+        actor_id: request.actor_id.clone(),
+        executor_id: request.executor_id.clone(),
+        thread_id: request.thread_id.clone(),
+        mission_id: request.mission_id.clone(),
+        parent_run_id: request.parent_run_id.clone(),
+        started_at: None,
+        ended_at: None,
+        summary: request.summary.clone(),
+        external_refs: request.external_refs.clone(),
+    };
+    let mut run_path = app.workspace().primitive_path("run", &run.id);
+
+    if fs::try_exists(run_path.as_path())
+        .await
+        .context("failed to inspect existing run path")?
+    {
+        let reference = format!("run/{}", run.id);
+        let existing = load_run(app.workspace(), &run.id)
+            .await
+            .with_context(|| format!("failed to read existing run '{reference}'"))?;
+        if existing == run {
+            return Ok(RunCreateOutput {
+                outcome: RunCreateOutcome::Noop,
+                reference,
+                path: run_path.as_path().display().to_string(),
+                run,
+                ledger_entry: None,
+            });
+        }
+
+        let unique_id = unique_slug(app.workspace(), "run", &args.title).await?;
+        run.id = unique_id;
+        run_path = app.workspace().primitive_path("run", &run.id);
+    }
+
+    let reference = format!("run/{}", run.id);
+    let path = run_path.as_path().display().to_string();
+    if args.dry_run {
+        return Ok(RunCreateOutput {
+            outcome: RunCreateOutcome::DryRun,
+            reference,
+            path,
+            run,
+            ledger_entry: None,
+        });
+    }
+
+    let created = wg_dispatch::create_run_as(app.workspace(), invoking_actor, &run.id, request)
+        .await
+        .with_context(|| format!("failed to create run '{}'", run.id))?;
+    let entry = latest_run_ledger_entry(app, &created.id).await?;
+
+    Ok(RunCreateOutput {
+        outcome: RunCreateOutcome::Created,
+        reference,
+        path,
+        run: created,
+        ledger_entry: Some(entry),
+    })
 }
 
 /// Starts a queued run.
@@ -121,101 +179,6 @@ pub async fn cancel(
     Ok(run_transition_output("Cancelled", run))
 }
 
-async fn handle_create(
-    app: &AppContext,
-    title: &str,
-    thread_id: &str,
-    actor_id: Option<&str>,
-    kind: Option<&str>,
-    source: Option<&str>,
-    executor_id: Option<&str>,
-    mission_id: Option<&str>,
-    parent_run_id: Option<&str>,
-    summary: Option<&str>,
-    dry_run: bool,
-) -> anyhow::Result<RunCreateOutput> {
-    let invoking_actor = default_actor(app).await?;
-    let responsible_actor = actor_id
-        .map(ActorId::new)
-        .unwrap_or_else(|| invoking_actor.clone());
-    let request = build_request(
-        title,
-        thread_id,
-        responsible_actor,
-        kind,
-        source,
-        executor_id,
-        mission_id,
-        parent_run_id,
-        summary,
-    );
-    let mut run = Run {
-        id: slugify(title),
-        title: request.title.clone(),
-        status: RunStatus::Queued,
-        kind: request.kind.clone(),
-        source: request.source.clone(),
-        actor_id: request.actor_id.clone(),
-        executor_id: request.executor_id.clone(),
-        thread_id: request.thread_id.clone(),
-        mission_id: request.mission_id.clone(),
-        parent_run_id: request.parent_run_id.clone(),
-        started_at: None,
-        ended_at: None,
-        summary: request.summary.clone(),
-        external_refs: request.external_refs.clone(),
-    };
-    let mut run_path = app.workspace().primitive_path("run", &run.id);
-
-    if fs::try_exists(run_path.as_path())
-        .await
-        .context("failed to inspect existing run path")?
-    {
-        let reference = format!("run/{}", run.id);
-        let existing = load_run(app.workspace(), &run.id)
-            .await
-            .with_context(|| format!("failed to read existing run '{reference}'"))?;
-        if existing == run {
-            return Ok(RunCreateOutput {
-                outcome: RunCreateOutcome::Noop,
-                reference,
-                path: run_path.as_path().display().to_string(),
-                run,
-                ledger_entry: None,
-            });
-        }
-
-        let unique_id = unique_slug(app.workspace(), "run", title).await?;
-        run.id = unique_id;
-        run_path = app.workspace().primitive_path("run", &run.id);
-    }
-
-    let reference = format!("run/{}", run.id);
-    let path = run_path.as_path().display().to_string();
-    if dry_run {
-        return Ok(RunCreateOutput {
-            outcome: RunCreateOutcome::DryRun,
-            reference,
-            path,
-            run,
-            ledger_entry: None,
-        });
-    }
-
-    let created = wg_dispatch::create_run_as(app.workspace(), invoking_actor, &run.id, request)
-        .await
-        .with_context(|| format!("failed to create run '{}'", run.id))?;
-    let entry = latest_run_ledger_entry(app, &created.id).await?;
-
-    Ok(RunCreateOutput {
-        outcome: RunCreateOutcome::Created,
-        reference,
-        path,
-        run: created,
-        ledger_entry: Some(entry),
-    })
-}
-
 async fn resolve_actor(app: &AppContext, actor_id: Option<&str>) -> anyhow::Result<ActorId> {
     if let Some(actor_id) = actor_id {
         return Ok(ActorId::new(actor_id));
@@ -231,27 +194,17 @@ async fn default_actor(app: &AppContext) -> anyhow::Result<ActorId> {
         .unwrap_or_else(|| ActorId::new("cli")))
 }
 
-fn build_request(
-    title: &str,
-    thread_id: &str,
-    actor_id: ActorId,
-    kind: Option<&str>,
-    source: Option<&str>,
-    executor_id: Option<&str>,
-    mission_id: Option<&str>,
-    parent_run_id: Option<&str>,
-    summary: Option<&str>,
-) -> DispatchRequest {
+fn build_request(args: &RunCreateArgs, actor_id: ActorId) -> DispatchRequest {
     DispatchRequest {
-        title: title.to_owned(),
-        kind: kind.map(ToOwned::to_owned),
-        source: source.map(ToOwned::to_owned),
+        title: args.title.clone(),
+        kind: args.kind.clone(),
+        source: args.source.clone(),
         actor_id,
-        executor_id: executor_id.map(ActorId::new),
-        thread_id: thread_id.to_owned(),
-        mission_id: mission_id.map(ToOwned::to_owned),
-        parent_run_id: parent_run_id.map(ToOwned::to_owned),
-        summary: summary.map(ToOwned::to_owned),
+        executor_id: args.executor_id.as_deref().map(ActorId::new),
+        thread_id: args.thread_id.clone(),
+        mission_id: args.mission_id.clone(),
+        parent_run_id: args.parent_run_id.clone(),
+        summary: args.summary.clone(),
         external_refs: Vec::new(),
     }
 }
