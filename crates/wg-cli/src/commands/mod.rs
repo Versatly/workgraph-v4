@@ -98,9 +98,9 @@ pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<Comma
                 )
                 .await?,
             )),
-            RunCommand::Start { run_id } => Ok(CommandOutput::RunLifecycle(
-                run::start(app, &run_id).await?,
-            )),
+            RunCommand::Start { run_id } => {
+                Ok(CommandOutput::RunLifecycle(run::start(app, &run_id).await?))
+            }
             RunCommand::Complete { run_id, summary } => Ok(CommandOutput::RunLifecycle(
                 run::complete(app, &run_id, summary.as_deref()).await?,
             )),

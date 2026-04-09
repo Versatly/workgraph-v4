@@ -83,8 +83,14 @@ impl<'a> RunMutationService<'a> {
     ///
     /// Returns an error when the transition is invalid or persistence fails.
     pub async fn start_run_as(self, audit_actor: ActorId, run_id: &str) -> Result<Run> {
-        self.transition_run(run_id, RunStatus::Running, LedgerOp::Start, None, audit_actor)
-            .await
+        self.transition_run(
+            run_id,
+            RunStatus::Running,
+            LedgerOp::Start,
+            None,
+            audit_actor,
+        )
+        .await
     }
 
     /// Marks a run succeeded.

@@ -1001,6 +1001,7 @@ dependencies = [
  "tokio",
  "tracing",
  "wg-clock",
+ "wg-dispatch",
  "wg-error",
  "wg-fs",
  "wg-ledger",

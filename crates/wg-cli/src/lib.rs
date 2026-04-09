@@ -406,8 +406,8 @@ mod tests {
         )
         .await
         .expect("run start should succeed");
-        let run_start_json: JsonValue = serde_json::from_str(&run_start_output)
-            .expect("run start output should be valid JSON");
+        let run_start_json: JsonValue =
+            serde_json::from_str(&run_start_output).expect("run start output should be valid JSON");
         assert_eq!(run_start_json["command"], "run_start");
         assert_eq!(run_start_json["result"]["run"]["status"], "running");
 
@@ -440,16 +440,16 @@ mod tests {
         )
         .await
         .expect("show run should succeed");
-        let show_run_json: JsonValue = serde_json::from_str(&show_run_output)
-            .expect("show run output should be valid JSON");
+        let show_run_json: JsonValue =
+            serde_json::from_str(&show_run_output).expect("show run output should be valid JSON");
         assert_eq!(show_run_json["command"], "show");
         assert_eq!(show_run_json["result"]["reference"], "run/kernel-run");
 
         let query_run_output = execute(["workgraph", "--json", "query", "run"], temp_dir.path())
             .await
             .expect("query run should succeed");
-        let query_run_json: JsonValue = serde_json::from_str(&query_run_output)
-            .expect("query run output should be valid JSON");
+        let query_run_json: JsonValue =
+            serde_json::from_str(&query_run_output).expect("query run output should be valid JSON");
         assert_eq!(query_run_json["result"]["count"], 1);
 
         let ledger_output = execute(

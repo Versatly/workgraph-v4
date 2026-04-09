@@ -453,8 +453,8 @@ mod tests {
     use wg_types::{ActorId, ExternalRef, LedgerOp, RunStatus};
 
     use crate::{
-        cancel_run, complete_run, create_run, create_run_as, fail_run, load_run,
-        prepare_dispatch, start_run, start_run_as,
+        cancel_run, complete_run, create_run, create_run_as, fail_run, load_run, prepare_dispatch,
+        start_run, start_run_as,
     };
 
     #[tokio::test]

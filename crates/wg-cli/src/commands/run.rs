@@ -226,7 +226,9 @@ async fn resolve_actor(app: &AppContext, actor_id: Option<&str>) -> anyhow::Resu
 
 async fn default_actor(app: &AppContext) -> anyhow::Result<ActorId> {
     let config = app.load_config().await?;
-    Ok(config.default_actor_id.unwrap_or_else(|| ActorId::new("cli")))
+    Ok(config
+        .default_actor_id
+        .unwrap_or_else(|| ActorId::new("cli")))
 }
 
 fn build_request(
@@ -254,10 +256,7 @@ fn build_request(
     }
 }
 
-async fn latest_run_ledger_entry(
-    app: &AppContext,
-    run_id: &str,
-) -> anyhow::Result<LedgerEntry> {
+async fn latest_run_ledger_entry(app: &AppContext, run_id: &str) -> anyhow::Result<LedgerEntry> {
     let entries = app.read_ledger_entries().await?;
     entries
         .into_iter()

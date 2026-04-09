@@ -6,8 +6,8 @@ use serde_yaml::Value;
 
 use super::{
     CapabilitiesOutput, CheckpointOutput, CommandOutput, CreateOutcome, CreateOutput, InitOutput,
-    LedgerOutput, QueryOutput, RunCreateOutcome, RunCreateOutput, RunLifecycleOutput,
-    SchemaOutput, ShowOutput, StatusOutput, ThreadClaimOutput, ThreadCompleteOutput,
+    LedgerOutput, QueryOutput, RunCreateOutcome, RunCreateOutput, RunLifecycleOutput, SchemaOutput,
+    ShowOutput, StatusOutput, ThreadClaimOutput, ThreadCompleteOutput,
 };
 
 /// Renders a structured command output to human-readable text.
