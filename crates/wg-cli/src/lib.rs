@@ -378,8 +378,82 @@ mod tests {
             "checkpoint"
         );
 
+        let run_create_output = execute(
+            [
+                "workgraph",
+                "--json",
+                "run",
+                "create",
+                "--title",
+                "Kernel Run",
+                "--thread-id",
+                "kernel-thread",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("run create should succeed");
+        let run_create_json: JsonValue = serde_json::from_str(&run_create_output)
+            .expect("run create output should be valid JSON");
+        assert_eq!(run_create_json["command"], "run_create");
+        assert_eq!(run_create_json["result"]["reference"], "run/kernel-run");
+        assert_eq!(run_create_json["result"]["run"]["actor_id"], "cli");
+        assert_eq!(run_create_json["result"]["run"]["status"], "queued");
+
+        let run_start_output = execute(
+            ["workgraph", "--json", "run", "start", "kernel-run"],
+            temp_dir.path(),
+        )
+        .await
+        .expect("run start should succeed");
+        let run_start_json: JsonValue = serde_json::from_str(&run_start_output)
+            .expect("run start output should be valid JSON");
+        assert_eq!(run_start_json["command"], "run_start");
+        assert_eq!(run_start_json["result"]["run"]["status"], "running");
+
+        let run_complete_output = execute(
+            [
+                "workgraph",
+                "--json",
+                "run",
+                "complete",
+                "kernel-run",
+                "--summary",
+                "Finished implementation",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("run complete should succeed");
+        let run_complete_json: JsonValue = serde_json::from_str(&run_complete_output)
+            .expect("run complete output should be valid JSON");
+        assert_eq!(run_complete_json["command"], "run_complete");
+        assert_eq!(run_complete_json["result"]["run"]["status"], "succeeded");
+        assert_eq!(
+            run_complete_json["result"]["run"]["summary"],
+            "Finished implementation"
+        );
+
+        let show_run_output = execute(
+            ["workgraph", "--json", "show", "run/kernel-run"],
+            temp_dir.path(),
+        )
+        .await
+        .expect("show run should succeed");
+        let show_run_json: JsonValue = serde_json::from_str(&show_run_output)
+            .expect("show run output should be valid JSON");
+        assert_eq!(show_run_json["command"], "show");
+        assert_eq!(show_run_json["result"]["reference"], "run/kernel-run");
+
+        let query_run_output = execute(["workgraph", "--json", "query", "run"], temp_dir.path())
+            .await
+            .expect("query run should succeed");
+        let query_run_json: JsonValue = serde_json::from_str(&query_run_output)
+            .expect("query run output should be valid JSON");
+        assert_eq!(query_run_json["result"]["count"], 1);
+
         let ledger_output = execute(
-            ["workgraph", "--json", "ledger", "--last", "5"],
+            ["workgraph", "--json", "ledger", "--last", "10"],
             temp_dir.path(),
         )
         .await
@@ -388,6 +462,13 @@ mod tests {
             serde_json::from_str(&ledger_output).expect("ledger output should be valid JSON");
         assert_eq!(ledger_json["command"], "ledger");
         assert!(ledger_json["result"]["entries"].is_array());
+        assert!(
+            capabilities_json["result"]["commands"]
+                .as_array()
+                .expect("commands should be an array")
+                .iter()
+                .any(|command| command["name"] == "run create")
+        );
     }
 
     #[tokio::test]
@@ -470,5 +551,189 @@ mod tests {
         let query_json: JsonValue =
             serde_json::from_str(&query_output).expect("query output should be valid JSON");
         assert_eq!(query_json["result"]["count"], 0);
+    }
+
+    #[tokio::test]
+    async fn run_create_supports_actor_override_and_dry_run() {
+        let temp_dir = tempdir().expect("temporary directory should be created");
+        execute(["workgraph", "--json", "init"], temp_dir.path())
+            .await
+            .expect("init should succeed");
+
+        execute(
+            [
+                "workgraph",
+                "--json",
+                "create",
+                "thread",
+                "--title",
+                "Run Thread",
+                "--field",
+                "status=ready",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("thread create should succeed");
+
+        let dry_run_output = execute(
+            [
+                "workgraph",
+                "--json",
+                "run",
+                "create",
+                "--title",
+                "Preview Run",
+                "--thread-id",
+                "run-thread",
+                "--dry-run",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("dry run create should succeed");
+        let dry_run_json: JsonValue = serde_json::from_str(&dry_run_output)
+            .expect("dry run create output should be valid JSON");
+        assert_eq!(dry_run_json["command"], "run_create");
+        assert_eq!(dry_run_json["result"]["outcome"], "dry_run");
+        assert!(dry_run_json["result"]["ledger_entry"].is_null());
+
+        let query_empty_output = execute(["workgraph", "--json", "query", "run"], temp_dir.path())
+            .await
+            .expect("query run should succeed");
+        let query_empty_json: JsonValue = serde_json::from_str(&query_empty_output)
+            .expect("query run output should be valid JSON");
+        assert_eq!(query_empty_json["result"]["count"], 0);
+
+        let override_output = execute(
+            [
+                "workgraph",
+                "--json",
+                "run",
+                "create",
+                "--title",
+                "Reviewer Run",
+                "--thread-id",
+                "run-thread",
+                "--actor-id",
+                "agent:reviewer",
+                "--kind",
+                "review",
+                "--source",
+                "cursor",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("actor override create should succeed");
+        let override_json: JsonValue = serde_json::from_str(&override_output)
+            .expect("actor override output should be valid JSON");
+        assert_eq!(override_json["result"]["run"]["actor_id"], "agent:reviewer");
+        assert_eq!(override_json["result"]["run"]["kind"], "review");
+        assert_eq!(override_json["result"]["run"]["source"], "cursor");
+    }
+
+    #[tokio::test]
+    async fn run_fail_and_cancel_commands_transition_runs() {
+        let temp_dir = tempdir().expect("temporary directory should be created");
+        execute(["workgraph", "--json", "init"], temp_dir.path())
+            .await
+            .expect("init should succeed");
+
+        execute(
+            [
+                "workgraph",
+                "--json",
+                "create",
+                "thread",
+                "--title",
+                "Failure Thread",
+                "--field",
+                "status=ready",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("thread create should succeed");
+
+        execute(
+            [
+                "workgraph",
+                "--json",
+                "run",
+                "create",
+                "--title",
+                "Failure Run",
+                "--thread-id",
+                "failure-thread",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("failure run create should succeed");
+        execute(
+            ["workgraph", "--json", "run", "start", "failure-run"],
+            temp_dir.path(),
+        )
+        .await
+        .expect("failure run start should succeed");
+        let fail_output = execute(
+            [
+                "workgraph",
+                "--json",
+                "run",
+                "fail",
+                "failure-run",
+                "--summary",
+                "Dependency missing",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("run fail should succeed");
+        let fail_json: JsonValue =
+            serde_json::from_str(&fail_output).expect("fail output should be valid JSON");
+        assert_eq!(fail_json["command"], "run_fail");
+        assert_eq!(fail_json["result"]["run"]["status"], "failed");
+
+        execute(
+            [
+                "workgraph",
+                "--json",
+                "run",
+                "create",
+                "--title",
+                "Cancel Run",
+                "--thread-id",
+                "failure-thread",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("cancel run create should succeed");
+        execute(
+            ["workgraph", "--json", "run", "start", "cancel-run"],
+            temp_dir.path(),
+        )
+        .await
+        .expect("cancel run start should succeed");
+        let cancel_output = execute(
+            [
+                "workgraph",
+                "--json",
+                "run",
+                "cancel",
+                "cancel-run",
+                "--summary",
+                "Superseded",
+            ],
+            temp_dir.path(),
+        )
+        .await
+        .expect("run cancel should succeed");
+        let cancel_json: JsonValue =
+            serde_json::from_str(&cancel_output).expect("cancel output should be valid JSON");
+        assert_eq!(cancel_json["command"], "run_cancel");
+        assert_eq!(cancel_json["result"]["run"]["status"], "cancelled");
     }
 }

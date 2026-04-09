@@ -6,8 +6,8 @@ use serde_yaml::Value;
 
 use super::{
     CapabilitiesOutput, CheckpointOutput, CommandOutput, CreateOutcome, CreateOutput, InitOutput,
-    LedgerOutput, QueryOutput, SchemaOutput, ShowOutput, StatusOutput, ThreadClaimOutput,
-    ThreadCompleteOutput,
+    LedgerOutput, QueryOutput, RunCreateOutcome, RunCreateOutput, RunLifecycleOutput,
+    SchemaOutput, ShowOutput, StatusOutput, ThreadClaimOutput, ThreadCompleteOutput,
 };
 
 /// Renders a structured command output to human-readable text.
@@ -24,6 +24,8 @@ pub fn render(output: &CommandOutput, next_actions: &[String]) -> String {
         CommandOutput::Capabilities(output) => render_capabilities(output),
         CommandOutput::Schema(output) => render_schema(output),
         CommandOutput::Create(output) => render_create(output),
+        CommandOutput::RunCreate(output) => render_run_create(output),
+        CommandOutput::RunLifecycle(output) => render_run_lifecycle(output),
         CommandOutput::Query(output) => render_query(output),
         CommandOutput::Show(output) => render_show(output),
     };
@@ -289,6 +291,40 @@ fn render_create(output: &CreateOutput) -> String {
         let _ = writeln!(rendered, "Ledger hash: {}", ledger_entry.hash);
     } else {
         let _ = writeln!(rendered, "Ledger hash: n/a");
+    }
+    rendered.trim_end().to_owned()
+}
+
+fn render_run_create(output: &RunCreateOutput) -> String {
+    let mut rendered = String::new();
+    let action = match output.outcome {
+        RunCreateOutcome::Created => "Created",
+        RunCreateOutcome::Noop => "No-op (already exists)",
+        RunCreateOutcome::DryRun => "Dry run preview",
+    };
+    let _ = writeln!(rendered, "{action} run: {}", output.reference);
+    let _ = writeln!(rendered, "title: {}", output.run.title);
+    let _ = writeln!(rendered, "status: {}", output.run.status.as_str());
+    let _ = writeln!(rendered, "thread_id: {}", output.run.thread_id);
+    let _ = writeln!(rendered, "actor_id: {}", output.run.actor_id);
+    let _ = writeln!(rendered, "Path: {}", output.path);
+    if let Some(ledger_entry) = &output.ledger_entry {
+        let _ = writeln!(rendered, "Ledger hash: {}", ledger_entry.hash);
+    } else {
+        let _ = writeln!(rendered, "Ledger hash: n/a");
+    }
+    rendered.trim_end().to_owned()
+}
+
+fn render_run_lifecycle(output: &RunLifecycleOutput) -> String {
+    let mut rendered = String::new();
+    let _ = writeln!(rendered, "{} run: {}", output.action, output.run.id);
+    let _ = writeln!(rendered, "title: {}", output.run.title);
+    let _ = writeln!(rendered, "status: {}", output.run.status.as_str());
+    let _ = writeln!(rendered, "thread_id: {}", output.run.thread_id);
+    let _ = writeln!(rendered, "actor_id: {}", output.run.actor_id);
+    if let Some(summary) = &output.run.summary {
+        let _ = writeln!(rendered, "summary: {summary}");
     }
     rendered.trim_end().to_owned()
 }

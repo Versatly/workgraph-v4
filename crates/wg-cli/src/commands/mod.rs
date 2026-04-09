@@ -8,13 +8,14 @@ mod create;
 mod init;
 mod ledger;
 mod query;
+mod run;
 mod schema;
 mod show;
 mod status;
 mod thread_complete;
 
 use crate::app::AppContext;
-use crate::args::Command;
+use crate::args::{Command, RunCommand};
 use crate::output::CommandOutput;
 
 /// Executes the selected CLI command using the shared application context.
@@ -67,5 +68,48 @@ pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<Comma
         Command::Show { reference } => {
             Ok(CommandOutput::Show(show::handle(app, &reference).await?))
         }
+        Command::Run { command } => match command {
+            RunCommand::Create {
+                title,
+                thread_id,
+                actor_id,
+                kind,
+                source,
+                executor_id,
+                mission_id,
+                parent_run_id,
+                summary,
+                dry_run,
+            } => Ok(CommandOutput::RunCreate(
+                run::create(
+                    app,
+                    run::RunCreateArgs {
+                        title,
+                        thread_id,
+                        actor_id,
+                        kind,
+                        source,
+                        executor_id,
+                        mission_id,
+                        parent_run_id,
+                        summary,
+                        dry_run,
+                    },
+                )
+                .await?,
+            )),
+            RunCommand::Start { run_id } => Ok(CommandOutput::RunLifecycle(
+                run::start(app, &run_id).await?,
+            )),
+            RunCommand::Complete { run_id, summary } => Ok(CommandOutput::RunLifecycle(
+                run::complete(app, &run_id, summary.as_deref()).await?,
+            )),
+            RunCommand::Fail { run_id, summary } => Ok(CommandOutput::RunLifecycle(
+                run::fail(app, &run_id, summary.as_deref()).await?,
+            )),
+            RunCommand::Cancel { run_id, summary } => Ok(CommandOutput::RunLifecycle(
+                run::cancel(app, &run_id, summary.as_deref()).await?,
+            )),
+        },
     }
 }

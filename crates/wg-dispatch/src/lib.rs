@@ -76,7 +76,23 @@ pub async fn create_run(
     request: DispatchRequest,
 ) -> Result<Run> {
     RunMutationService::new(workspace)
-        .create_run(id, request)
+        .create_run_as(id, request, system_actor())
+        .await
+}
+
+/// Creates and persists a queued run, auditing as the supplied invoking actor.
+///
+/// # Errors
+///
+/// Returns an error when required identifiers are invalid or persistence fails.
+pub async fn create_run_as(
+    workspace: &WorkspacePath,
+    audit_actor: ActorId,
+    id: &str,
+    request: DispatchRequest,
+) -> Result<Run> {
+    RunMutationService::new(workspace)
+        .create_run_as(id, request, audit_actor)
         .await
 }
 
@@ -109,7 +125,24 @@ pub async fn list_runs(workspace: &WorkspacePath) -> Result<Vec<Run>> {
 ///
 /// Returns an error when the transition is invalid or persistence fails.
 pub async fn start_run(workspace: &WorkspacePath, run_id: &str) -> Result<Run> {
-    RunMutationService::new(workspace).start_run(run_id).await
+    RunMutationService::new(workspace)
+        .start_run_as(system_actor(), run_id)
+        .await
+}
+
+/// Marks a queued or retryable run as running, auditing as the supplied invoking actor.
+///
+/// # Errors
+///
+/// Returns an error when the transition is invalid or persistence fails.
+pub async fn start_run_as(
+    workspace: &WorkspacePath,
+    audit_actor: ActorId,
+    run_id: &str,
+) -> Result<Run> {
+    RunMutationService::new(workspace)
+        .start_run_as(audit_actor, run_id)
+        .await
 }
 
 /// Marks a run succeeded.
@@ -123,7 +156,23 @@ pub async fn complete_run(
     summary: Option<&str>,
 ) -> Result<Run> {
     RunMutationService::new(workspace)
-        .complete_run(run_id, summary)
+        .complete_run_as(system_actor(), run_id, summary)
+        .await
+}
+
+/// Marks a run succeeded, auditing as the supplied invoking actor.
+///
+/// # Errors
+///
+/// Returns an error when the transition is invalid or persistence fails.
+pub async fn complete_run_as(
+    workspace: &WorkspacePath,
+    audit_actor: ActorId,
+    run_id: &str,
+    summary: Option<&str>,
+) -> Result<Run> {
+    RunMutationService::new(workspace)
+        .complete_run_as(audit_actor, run_id, summary)
         .await
 }
 
@@ -138,7 +187,23 @@ pub async fn fail_run(
     summary: Option<&str>,
 ) -> Result<Run> {
     RunMutationService::new(workspace)
-        .fail_run(run_id, summary)
+        .fail_run_as(system_actor(), run_id, summary)
+        .await
+}
+
+/// Marks a run failed, auditing as the supplied invoking actor.
+///
+/// # Errors
+///
+/// Returns an error when the transition is invalid or persistence fails.
+pub async fn fail_run_as(
+    workspace: &WorkspacePath,
+    audit_actor: ActorId,
+    run_id: &str,
+    summary: Option<&str>,
+) -> Result<Run> {
+    RunMutationService::new(workspace)
+        .fail_run_as(audit_actor, run_id, summary)
         .await
 }
 
@@ -153,7 +218,23 @@ pub async fn cancel_run(
     summary: Option<&str>,
 ) -> Result<Run> {
     RunMutationService::new(workspace)
-        .cancel_run(run_id, summary)
+        .cancel_run_as(system_actor(), run_id, summary)
+        .await
+}
+
+/// Marks a run cancelled, auditing as the supplied invoking actor.
+///
+/// # Errors
+///
+/// Returns an error when the transition is invalid or persistence fails.
+pub async fn cancel_run_as(
+    workspace: &WorkspacePath,
+    audit_actor: ActorId,
+    run_id: &str,
+    summary: Option<&str>,
+) -> Result<Run> {
+    RunMutationService::new(workspace)
+        .cancel_run_as(audit_actor, run_id, summary)
         .await
 }
 
@@ -372,7 +453,8 @@ mod tests {
     use wg_types::{ActorId, ExternalRef, LedgerOp, RunStatus};
 
     use crate::{
-        cancel_run, complete_run, create_run, fail_run, load_run, prepare_dispatch, start_run,
+        cancel_run, complete_run, create_run, create_run_as, fail_run, load_run,
+        prepare_dispatch, start_run, start_run_as,
     };
 
     #[tokio::test]
@@ -472,5 +554,36 @@ mod tests {
             .await
             .expect_err("failed run should not be directly cancellable");
         assert!(cancelled_error.to_string().contains("cannot transition"));
+    }
+
+    #[tokio::test]
+    async fn actor_aware_audit_helpers_record_invoking_actor() {
+        let temp_dir = tempdir().expect("temporary directory should be created");
+        let workspace = WorkspacePath::new(temp_dir.path());
+
+        let request = prepare_dispatch("Audit run", ActorId::new("agent:cursor"), "thread-3");
+        create_run_as(
+            &workspace,
+            ActorId::new("person:pedro"),
+            "audit-run",
+            request,
+        )
+        .await
+        .expect("run should be created");
+
+        start_run_as(&workspace, ActorId::new("person:pedro"), "audit-run")
+            .await
+            .expect("run should start");
+
+        let (entries, _) = LedgerReader::new(temp_dir.path().to_path_buf())
+            .read_from(Default::default())
+            .await
+            .expect("ledger should be readable");
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].actor.as_str(), "person:pedro");
+        assert_eq!(entries[1].actor.as_str(), "person:pedro");
+        assert_eq!(entries[0].op, LedgerOp::Create);
+        assert_eq!(entries[1].op, LedgerOp::Start);
     }
 }

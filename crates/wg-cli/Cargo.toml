@@ -15,6 +15,7 @@ serde_yaml.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 wg-clock = { path = "../wg-clock" }
+wg-dispatch = { path = "../wg-dispatch" }
 wg-thread = { path = "../wg-thread" }
 wg-fs = { path = "../wg-fs" }
 wg-ledger = { path = "../wg-ledger" }
