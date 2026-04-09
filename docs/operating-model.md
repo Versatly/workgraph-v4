@@ -61,7 +61,7 @@ Use `person` when:
 - a human is the durable accountable party
 - the human is directly performing or steering the work
 - an AI surface is being used as a tool or assistant rather than as an
-  independently delegated agent
+independently delegated agent
 
 Examples:
 
@@ -118,6 +118,75 @@ These may appear as:
 but they are not first-class actors unless WorkGraph intentionally tracks a
 durable `agent` identity that uses them.
 
+### Surface / Runtime Contract v1
+
+Surface / Runtime Contract v1 exists to separate:
+
+- who did the work (`actor`)
+- where the work was carried out (`surface` / `runtime`)
+- how WorkGraph received the durable receipt (`integration path`)
+
+Definitions:
+
+- **surface** — the human-facing or agent-facing interface through which work was
+  conducted, such as `claude-chat`, `chatgpt-chat`, `cursor`, `claude-code`,
+  `claude-cowork`, `openclaw`, or `hermes`
+- **runtime** — the execution environment commonly associated with a durable
+  actor or run, such as a CLI tool, desktop app, gateway, VM, or hosted service
+- **integration path** — how WorkGraph is reached from that environment, such as
+  `cli`, `mcp`, `api`, or adapter-mediated receipt emission
+
+Rules:
+
+- surfaces and runtimes are execution context, not automatically tracked actors
+- a durable `agent` actor may use one or more surfaces over time
+- the same surface may be used in different modes, including human-led assistant
+  use and delegated agentic execution
+- WorkGraph should preserve surface and runtime context compactly without
+  mirroring every internal session tree or transport detail
+
+How to record this in the current foundation pass:
+
+- use run `source` for the compact label of the surface or receipt source that
+  created or observed the run
+- use run `external_refs` for authoritative links to external conversations,
+  tasks, workflows, tickets, sessions, or records
+- use actor `runtime` for the common or default runtime associated with a
+  durable tracked agent actor
+
+Current integration-path guidance:
+
+- use **CLI** as the reference path when the acting system has reliable shell
+  access to `workgraph`
+- use **MCP** when the acting system cannot reliably exec the CLI but can call
+  remote or local tools through the protocol
+- use **API** for remote programmatic contexts that are not best served by CLI
+  or MCP
+- use **adapter-emitted receipts** when WorkGraph is observing or importing
+  meaningful work from another system rather than being called directly
+
+Illustrative examples:
+
+- Pedro using Claude chat interactively:
+  - actor = `person/pedro`
+  - run `source` = `claude-chat`
+  - Claude is a surface, not automatically an actor
+- Claude Code doing autonomous repository work:
+  - actor = `agent/pedro-claude-code`
+  - actor `runtime` may be `claude-code`
+  - run `source` = `claude-code`
+  - integration path may be `cli`
+- Claude Cowork producing a recurring report:
+  - actor may remain `person/pedro` when Pedro is directly steering it, or may
+    become `agent/pedro-cowork` if it behaves as a durable delegated executor
+  - run `source` = `claude-cowork`
+  - integration path may be `mcp`
+- ChatGPT app or deep research workflow:
+  - actor may remain the person unless a durable delegated machine actor is
+    intentionally modeled
+  - run `source` = `chatgpt-chat` or another compact ChatGPT-related surface label
+  - integration path may be `mcp` or `api`
+
 ### Human-Led Versus Agent-Led Work
 
 The same product may appear in different roles.
@@ -143,11 +212,11 @@ between:
 In practice:
 
 - a tracked actor should usually reflect a durable organizational identity or
-  role, not a single tool session identifier
+role, not a single tool session identifier
 - runtime sessions, spawned workers, and internal subagents are execution
-  details by default, not automatically first-class actors
+details by default, not automatically first-class actors
 - those descendants may remain opaque unless they need independent policy,
-  assignment, repeated graph visibility, or durable handoff semantics
+assignment, repeated graph visibility, or durable handoff semantics
 
 This keeps WorkGraph focused on durable coordination while allowing runtimes to
 use their own internal orchestration models.
@@ -254,11 +323,11 @@ Operational lifecycle fields:
 Optional integration and SDK fields:
 
 - `kind` — broad run classification such as `agent_pass`, `review`, `approval`,
-  `call`, or `automation_job`
+`call`, or `automation_job`
 - `source` — which surface created or observed the run receipt, such as
-  `manual`, `sdk`, `cursor`, `calendar_adapter`, or `salesforce_adapter`
+`manual`, `sdk`, `cursor`, `calendar_adapter`, or `salesforce_adapter`
 - `external_refs` — authoritative links back to external records such as a tool
-  session, workflow execution, meeting, ticket, CRM record, or support case
+session, workflow execution, meeting, ticket, CRM record, or support case
 
 SDKs and adapters should prefer emitting normalized run receipts over dumping
 raw logs. A useful adapter-created run should say:
@@ -276,9 +345,9 @@ background event deserves a run.
 Recommended promotion rule:
 
 - keep sessions, spawned workers, and internal subagents as opaque execution
-  detail by default
+detail by default
 - promote them into tracked actors only when they need independent assignment,
-  policy, repeated graph visibility, or durable handoff accountability
+policy, repeated graph visibility, or durable handoff accountability
 
 This lets WorkGraph preserve durable delegation meaning while staying neutral
 about the internal orchestration model of tools like Cursor, Claude Code, or

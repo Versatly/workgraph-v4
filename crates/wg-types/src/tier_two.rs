@@ -92,7 +92,11 @@ pub struct Agent {
     /// A concise explanation of what the agent is good at.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// The runtime or adapter commonly used to launch or observe this agent.
+    /// The runtime or surface commonly used to launch or observe this agent.
+    ///
+    /// This describes operational context, not actor identity. For example, a
+    /// durable agent actor may commonly run via `claude-code`, `hermes`, or
+    /// `openclaw`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime: Option<String>,
     /// The human or team responsible for the agent.

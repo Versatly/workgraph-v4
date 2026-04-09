@@ -265,10 +265,11 @@ pub struct RunPrimitive {
     /// `automation_job`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
-    /// Optional source that created or observed the run receipt.
+    /// Optional surface or integration path that created or observed the run
+    /// receipt.
     ///
-    /// Examples include `manual`, `sdk`, `cursor`, `calendar_adapter`, or
-    /// `salesforce_adapter`.
+    /// Examples include `manual`, `cli`, `mcp`, `api`, `cursor`,
+    /// `claude-chat`, `calendar_adapter`, or `salesforce_adapter`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     /// Logical actor responsible for the run.

@@ -177,7 +177,7 @@ fn builtin_types() -> Vec<PrimitiveType> {
                 field(
                     "runtime",
                     "string",
-                    "Optional runtime or surface commonly used by this tracked agent actor",
+                    "Optional runtime or surface family commonly used by this tracked agent actor",
                     false,
                     false,
                 ),
@@ -403,7 +403,7 @@ fn builtin_types() -> Vec<PrimitiveType> {
                 field(
                     "source",
                     "string",
-                    "Optional source that created or observed the run receipt",
+                    "Optional surface or integration path that created or observed the run receipt",
                     false,
                     false,
                 ),

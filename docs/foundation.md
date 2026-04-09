@@ -162,6 +162,52 @@ durable work receipts tied to tracked actors and threads, then attach compact
 external references when more runtime detail exists elsewhere. WorkGraph should
 ingest normalized coordination facts, not every raw runtime trace by default.
 
+### Surface / Runtime Contract v1
+
+WorkGraph must also distinguish actors from the surfaces and runtimes through
+which work happens.
+
+A surface or runtime answers questions like:
+
+- where was the work performed?
+- how did the actor reach WorkGraph?
+- what product, host, or adapter mediated the work?
+
+That is different from actor identity.
+
+In this contract:
+
+- an actor is who WorkGraph attributes work to
+- a surface is the interaction or product layer through which work occurred
+- a runtime is the execution environment or host that carried out the work
+- an integration path is how that surface/runtime reaches WorkGraph, such as
+  CLI, MCP, API, or imported adapter receipts
+
+Examples:
+
+- `claude-chat` is a surface
+- `chatgpt-chat` is a surface
+- `cursor` is usually a surface and may also be the local runtime host
+- `claude-code` is a surface/runtime family, not automatically an actor
+- `claude-cowork` is a surface/runtime family, not automatically an actor
+- `openclaw` and `hermes` are runtime families that may host tracked agent
+  actors
+
+These should usually appear as run metadata, run `source`, or external
+references unless WorkGraph intentionally tracks a durable actor that uses them.
+
+Integration-path guidance in this foundation pass:
+
+- prefer CLI when the acting system has shell access and can invoke `workgraph`
+  directly
+- use MCP when the acting system cannot reliably exec the CLI but can call
+  remote tools
+- use API or imported adapter receipts when neither CLI nor MCP is the natural
+  path
+
+This keeps actor identity stable while allowing the same actor to work through
+many surfaces over time.
+
 ## Surface Architecture: CLI-first
 
 The CLI is the **primary interface** for all agents with shell access. It is the reference surface — every feature lands here first.
