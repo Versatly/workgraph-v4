@@ -159,7 +159,7 @@ fn builtin_types() -> Vec<PrimitiveType> {
         builtin_type(
             "person",
             "people",
-            "Human collaborator profile.",
+            "Tracked human actor profile.",
             vec![
                 field("id", "string", "Stable person identifier", true, false),
                 field("title", "string", "Display name", true, false),
@@ -170,14 +170,14 @@ fn builtin_types() -> Vec<PrimitiveType> {
         builtin_type(
             "agent",
             "agents",
-            "Tracked agent profile representing a durable organizational actor.",
+            "Tracked machine actor profile representing a durable delegated execution identity.",
             vec![
                 field("id", "string", "Stable agent identifier", true, false),
                 field("title", "string", "Agent display name", true, false),
                 field(
                     "runtime",
                     "string",
-                    "Optional runtime or adapter used by this durable actor",
+                    "Optional runtime or surface commonly used by this tracked agent actor",
                     false,
                     false,
                 ),

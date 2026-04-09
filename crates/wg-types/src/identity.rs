@@ -3,12 +3,15 @@
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display, Formatter};
 
-/// Identifies the durable person or agent accountable for work.
+/// Identifies a durable tracked actor accountable for work.
 ///
 /// `ActorId` is the stable logical identity boundary used across coordination,
-/// graph, and ledger surfaces. Runtime sessions, spawned subagents, and other
-/// short-lived execution details may be recorded as metadata elsewhere without
-/// requiring a new first-class actor node for every ephemeral descendant.
+/// graph, and ledger surfaces. In the current foundation pass, tracked actors
+/// are usually materialized through `person` and `agent` primitives.
+///
+/// Runtime sessions, chat surfaces, spawned subagents, and other short-lived
+/// execution details may be recorded as metadata elsewhere without requiring a
+/// new first-class actor node for every ephemeral descendant.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ActorId(String);

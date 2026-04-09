@@ -48,7 +48,11 @@ pub struct Team {
     pub external_refs: Vec<ExternalRef>,
 }
 
-/// Captures a human collaborator profile.
+/// Captures a human actor profile.
+///
+/// People are first-class tracked actors and remain the default accountable
+/// boundary when a human is using a chat surface or AI assistant interactively
+/// rather than delegating work to a durable machine actor.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Person {
     /// The stable person identifier.
@@ -72,7 +76,13 @@ pub struct Person {
     pub external_refs: Vec<ExternalRef>,
 }
 
-/// Captures an AI agent profile and runtime metadata.
+/// Captures a durable machine actor profile and runtime metadata.
+///
+/// Agents are a subtype of actor, not the umbrella identity concept. A surface
+/// such as ChatGPT chat, Claude chat, or an IDE assistant is not automatically
+/// an agent actor merely because AI is involved. Agent profiles are for durable
+/// delegated machine identities that WorkGraph can assign work to and reason
+/// about across many runs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Agent {
     /// The stable agent identifier.

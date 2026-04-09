@@ -75,6 +75,10 @@ These are different product shapes, not different skins over the same assumption
 
 Tracked actors are represented by stable logical `ActorId` values and usually materialized through `person` and `agent` primitives.
 
+Actor is the umbrella category. It answers: "who or what can WorkGraph durably
+attribute work to, assign work to, or reason about across many threads and
+runs?"
+
 The system must assume:
 
 - hundreds or thousands of actors
@@ -84,6 +88,7 @@ The system must assume:
 The durable contract is:
 
 - `ActorId` remains the stable logical identity
+- `actor` is the umbrella concept; `person` and `agent` are tracked actor subtypes
 - tracked actors are the durable accountability boundary, not every runtime boundary
 - `agent` may declare `parent_actor_id`
 - `agent` may declare `root_actor_id`
@@ -100,12 +105,57 @@ In practice:
 
 - a tracked actor is something WorkGraph can assign work to, attribute work to, and
   reason about across many threads or runs
+- a `person` actor represents a durable human collaborator identity
+- an `agent` actor represents a durable delegated machine actor, not every AI
+  chat surface by default
 - a runtime session is an execution detail, not automatically a new actor
 - a spawned subagent may remain operationally opaque unless it needs independent
   identity, policy, assignment, or repeated graph visibility
 
 This keeps the actor layer stable even when the underlying execution tools, session
 boundaries, or internal orchestration patterns change.
+
+### Actor Contract v1
+
+Actor Contract v1 keeps WorkGraph focused on durable coordination rather than
+brand names, chat surfaces, or runtime internals.
+
+An actor is:
+
+- durable enough to matter across many threads or runs
+- assignable or attributable in a meaningful organizational sense
+- part of the graph and ledger surface, not just transient execution detail
+
+Primary tracked actor subtypes in this foundation pass:
+
+- `person` - a human actor
+- `agent` - a durable delegated machine actor
+
+What is not an actor by default:
+
+- a normal chat surface such as plain Claude chat or ChatGPT chat
+- an IDE or app surface such as Cursor or Claude Desktop, when acting only as the
+  interface a person is using
+- a runtime session id
+- a spawned worker or internal subagent
+- a tool invocation or raw execution trace
+
+Those belong in run metadata, external references, or future surface/runtime
+contracts unless they become durably meaningful.
+
+Promotion rule for AI systems:
+
+- if the human remains the clear responsible worker and the AI is mainly an
+  interactive assistant surface, keep the `person` as the actor
+- if the AI system operates as a durable delegated executor across many runs,
+  represent it as an `agent` actor
+
+Examples:
+
+- Pedro chatting with Claude for brainstorming: actor is `person/pedro`; Claude
+  is a surface, not automatically an agent actor
+- Pedro delegating repo work to Claude Code: actor may be `agent/pedro-claude-code`
+- Hermes running recurring background tasks: actor may be `agent/pedro-hermes`
 
 Programmatic SDKs and adapters should follow the same rule. They should emit
 durable work receipts tied to tracked actors and threads, then attach compact

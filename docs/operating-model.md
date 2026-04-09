@@ -2,18 +2,146 @@
 
 ## Actor And Delegation Semantics
 
-- `person` and `agent` are the primary tracked actor primitives
-- `ActorId` is the stable logical actor identity used across ledger, runs, and thread activity
-- tracked actors are durable accountability boundaries, not every runtime boundary
-- subactors may exist below the tracked boundary
-- lineage may be fully `tracked` or intentionally `opaque`
+`actor` is the umbrella coordination concept.
 
-Delegation should preserve meaning even when every subactor is not first-class in the graph.
+An actor is any durable identity that WorkGraph can:
+
+- assign work to
+- attribute work to
+- reason about across many threads, runs, and ledger events
+
+The tracked actor primitives in this foundation pass are:
+
+- `person`
+- `agent`
+
+`ActorId` is the stable logical actor identity used across ledger, runs, thread
+activity, assignment, and lineage.
+
+Tracked actors are durable accountability boundaries, not every runtime
+boundary. Subactors may exist below the tracked boundary, and lineage may be
+fully `tracked` or intentionally `opaque`.
+
+Delegation should preserve meaning even when every subactor is not first-class
+in the graph.
+
+### Actor Contract v1
+
+Actor Contract v1 exists to keep WorkGraph centered on durable accountability
+rather than vendor-specific runtime internals.
+
+An identity should be represented as a tracked actor only when it is durable
+enough that WorkGraph needs to reason about it repeatedly over time.
+
+Tracked actors should usually have some combination of:
+
+- independent assignment or ownership of work
+- repeated appearance across many threads or runs
+- durable policy or approval relevance
+- durable graph visibility beyond one session
+- durable handoff or evidence accountability
+
+Execution details are not automatically actors. By default, these remain
+runtime/surface context, metadata, or external references:
+
+- chat surfaces such as plain Claude chat or plain ChatGPT chat
+- IDE surfaces such as Cursor or editor tabs
+- runtime sessions
+- spawned workers
+- internal subagents
+- workflow execution ids
+- temporary background jobs
+
+### Person As Actor
+
+A `person` is a human actor.
+
+Use `person` when:
+
+- a human is the durable accountable party
+- the human is directly performing or steering the work
+- an AI surface is being used as a tool or assistant rather than as an
+  independently delegated agent
+
+Examples:
+
+- Pedro brainstorming in Claude chat
+- Pedro drafting an email with ChatGPT
+- Pedro reviewing a report in an editor with AI assistance
+
+In those cases, the actor is usually still the person. The AI product appears
+as source or surface context, not automatically as a tracked agent actor.
+
+### Agent As Actor
+
+An `agent` is a non-human actor subtype representing a durable delegated
+machine participant.
+
+Use `agent` when the system is acting more like a durable delegate than a
+one-off assistant surface.
+
+Typical signals:
+
+- it can take delegated work and execute with some autonomy
+- it persists across many tasks or runs
+- it has its own tools, permissions, or policies
+- humans repeatedly reason about it as a distinct participant
+- it produces durable handoffs, checkpoints, or evidence under its own identity
+
+Examples:
+
+- Claude Code working autonomously in a repository
+- Hermes running scheduled or gateway-mediated tasks
+- OpenClaw acting as a persistent personal or team agent
+- a recurring internal research or review agent with its own role and policy
+
+### Surface Is Not Actor
+
+A surface, runtime, or tool is not automatically an actor.
+
+Examples:
+
+- `claude-chat`
+- `chatgpt-chat`
+- `cursor`
+- `claude-code`
+- `claude-cowork`
+- `openclaw`
+- `hermes`
+
+These may appear as:
+
+- run `source`
+- external references
+- runtime metadata
+
+but they are not first-class actors unless WorkGraph intentionally tracks a
+durable `agent` identity that uses them.
+
+### Human-Led Versus Agent-Led Work
+
+The same product may appear in different roles.
+
+Human-led assistant use:
+
+- actor is usually the `person`
+- the AI product is a surface or tool
+
+Delegated agentic use:
+
+- actor may be a tracked `agent`
+- the runtime or product remains surface context for the run
+
+This keeps WorkGraph neutral about vendor branding while still distinguishing
+between:
+
+- a human using an AI surface
+- a durable delegated agent acting on behalf of a person, team, or org
+
+### Lineage Rules
 
 In practice:
 
-- a tracked actor is something WorkGraph can assign work to, attribute work to,
-  and reason about across many threads or runs
 - a tracked actor should usually reflect a durable organizational identity or
   role, not a single tool session identifier
 - runtime sessions, spawned workers, and internal subagents are execution
