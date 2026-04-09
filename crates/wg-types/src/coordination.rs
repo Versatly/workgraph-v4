@@ -1,6 +1,6 @@
 //! Coordination, graph, and trigger contracts shared across WorkGraph crates.
 
-use crate::{ActorId, LedgerOp};
+use crate::{ActorId, ExternalRef, LedgerOp};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +11,10 @@ pub enum LineageMode {
     /// Descendant actors are tracked as explicit first-class entities.
     Tracked,
     /// Descendant actors exist but are intentionally modeled as opaque.
+    ///
+    /// This preserves durable delegation meaning without forcing every runtime
+    /// session, spawned worker, or internal subagent to become a first-class
+    /// actor in the graph.
     Opaque,
 }
 
@@ -243,6 +247,10 @@ pub struct MissionPrimitive {
 }
 
 /// Durable run document model.
+///
+/// A run is one bounded execution attempt or work session on behalf of a
+/// thread. It captures the durable coordination receipt for that attempt rather
+/// than every raw runtime detail.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunPrimitive {
     /// Stable run identifier.
@@ -251,9 +259,26 @@ pub struct RunPrimitive {
     pub title: String,
     /// Run lifecycle status.
     pub status: crate::RunStatus,
+    /// Optional classification for the kind of bounded work attempt.
+    ///
+    /// Examples include `agent_pass`, `review`, `approval`, `call`, or
+    /// `automation_job`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Optional surface or integration path that created or observed the run
+    /// receipt.
+    ///
+    /// Examples include `manual`, `cli`, `mcp`, `api`, `cursor`,
+    /// `claude-chat`, `calendar_adapter`, or `salesforce_adapter`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
     /// Logical actor responsible for the run.
+    ///
+    /// This points at the durable accountable actor boundary rather than a
+    /// transient runtime session identifier.
     pub actor_id: ActorId,
-    /// Concrete executor that performed the run, when different from the actor.
+    /// Concrete tracked executor that performed the run, when different from
+    /// the responsible actor.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub executor_id: Option<ActorId>,
     /// Thread this run belongs to.
@@ -262,6 +287,9 @@ pub struct RunPrimitive {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mission_id: Option<String>,
     /// Parent run identifier for delegated execution, when any.
+    ///
+    /// This preserves delegation relationships without requiring WorkGraph to
+    /// mirror an external orchestrator's full internal execution tree.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_run_id: Option<String>,
     /// Timestamp when execution started, when known.
@@ -273,6 +301,9 @@ pub struct RunPrimitive {
     /// Optional human-readable summary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// Links back to authoritative external records related to this run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub external_refs: Vec<ExternalRef>,
 }
 
 /// Event source supported by trigger patterns.
@@ -417,8 +448,9 @@ mod tests {
         LineageMode, MessageKind, MissionMilestone, MissionPrimitive, MissionStatus, RunPrimitive,
         ThreadExitCriterion, ThreadPrimitive, TriggerActionPlan, TriggerPrimitive, TriggerStatus,
     };
-    use crate::{ActorId, RunStatus, ThreadStatus};
+    use crate::{ActorId, ExternalRef, RunStatus, ThreadStatus};
     use chrono::{TimeZone, Utc};
+    use std::collections::BTreeMap;
 
     fn roundtrip<T>(value: &T)
     where
@@ -511,6 +543,8 @@ mod tests {
             id: "run-1".into(),
             title: "Cursor investigation run".into(),
             status: RunStatus::Running,
+            kind: Some("agent_pass".into()),
+            source: Some("cursor".into()),
             actor_id: ActorId::new("agent:cursor"),
             executor_id: Some(ActorId::new("agent:cursor/subtask")),
             thread_id: "thread-1".into(),
@@ -523,6 +557,13 @@ mod tests {
             ),
             ended_at: None,
             summary: Some("Collecting external verification evidence".into()),
+            external_refs: vec![ExternalRef {
+                provider: "cursor".into(),
+                kind: "session".into(),
+                url: "cursor://sessions/abc123".into(),
+                id: Some("abc123".into()),
+                metadata: BTreeMap::from([("workspace".into(), "workgraph-v4".into())]),
+            }],
         };
         let trigger = TriggerPrimitive {
             id: "trigger-1".into(),

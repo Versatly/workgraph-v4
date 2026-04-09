@@ -31,6 +31,8 @@ The graph uses semantic edge kinds. Wiki-links are only one source.
 
 Agent lineage references such as `parent_actor_id` and `root_actor_id` are part of the durable
 assignment/lineage surface and should appear in graph-derived orientation outputs when present.
+Runtime sessions, spawned workers, and other ephemeral execution details should appear as linked
+context or external references when needed, not as automatic first-class graph nodes by default.
 
 ## Edge Provenance
 
@@ -62,11 +64,13 @@ Status surfaces should expose at least:
 - durable coordination state
 - durable policy and decision constraints
 - durable evidence and durable receipts of delegation
+- durable work receipts such as runs and checkpoints
 
 ### What does not belong in the graph by default
 
 - every raw external object
 - transient runtime internals from other tools
+- every session, subagent, or process emitted by an external runtime
 - duplicated sources of truth when a compact external reference is enough
 
 ## Events And The Graph

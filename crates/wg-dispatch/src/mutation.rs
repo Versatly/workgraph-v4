@@ -50,6 +50,8 @@ impl<'a> RunMutationService<'a> {
             id: id.to_owned(),
             title: request.title,
             status: RunStatus::Queued,
+            kind: request.kind,
+            source: request.source,
             actor_id: request.actor_id,
             executor_id: request.executor_id,
             thread_id: request.thread_id,
@@ -58,6 +60,7 @@ impl<'a> RunMutationService<'a> {
             started_at: None,
             ended_at: None,
             summary: request.summary,
+            external_refs: request.external_refs,
         };
         self.persist(
             &run,

@@ -48,7 +48,11 @@ pub struct Team {
     pub external_refs: Vec<ExternalRef>,
 }
 
-/// Captures a human collaborator profile.
+/// Captures a human actor profile.
+///
+/// People are first-class tracked actors and remain the default accountable
+/// boundary when a human is using a chat surface or AI assistant interactively
+/// rather than delegating work to a durable machine actor.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Person {
     /// The stable person identifier.
@@ -72,7 +76,13 @@ pub struct Person {
     pub external_refs: Vec<ExternalRef>,
 }
 
-/// Captures an AI agent profile and runtime metadata.
+/// Captures a durable machine actor profile and runtime metadata.
+///
+/// Agents are a subtype of actor, not the umbrella identity concept. A surface
+/// such as ChatGPT chat, Claude chat, or an IDE assistant is not automatically
+/// an agent actor merely because AI is involved. Agent profiles are for durable
+/// delegated machine identities that WorkGraph can assign work to and reason
+/// about across many runs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Agent {
     /// The stable agent identifier.
@@ -82,19 +92,31 @@ pub struct Agent {
     /// A concise explanation of what the agent is good at.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// The runtime or adapter used to launch the agent.
+    /// The runtime or surface commonly used to launch or observe this agent.
+    ///
+    /// This describes operational context, not actor identity. For example, a
+    /// durable agent actor may commonly run via `claude-code`, `hermes`, or
+    /// `openclaw`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime: Option<String>,
     /// The human or team responsible for the agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
     /// Optional tracked parent actor above this agent.
+    ///
+    /// This preserves durable delegation meaning without requiring WorkGraph to
+    /// first-class every session or spawned worker below the tracked boundary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_actor_id: Option<String>,
     /// Optional root tracked actor for delegated lineages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_actor_id: Option<String>,
     /// Whether descendants are fully tracked or intentionally opaque.
+    ///
+    /// Opaque descendants may still exist operationally, but they remain
+    /// runtime-level execution detail unless promoted into durable actor
+    /// identity because they need independent policy, assignment, or repeated
+    /// graph visibility.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lineage_mode: Option<LineageMode>,
     /// The network node currently associated with the agent.
