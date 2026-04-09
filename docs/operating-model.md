@@ -101,6 +101,61 @@ WorkGraph to mirror an orchestrator's full internal execution tree.
 By default, WorkGraph should capture the coordination receipt, summary, and
 evidence-bearing outputs of a run rather than every raw runtime log line.
 
+#### Run Contract v1
+
+Run Contract v1 exists to keep runs useful across general work, agent work, and
+adapter-mediated workflows without turning WorkGraph into a runtime log sink.
+
+Minimum durable fields:
+
+- `id` — stable run identifier
+- `title` — human-readable label for the attempt
+- `actor_id` — durable tracked actor responsible for the run
+- `thread_id` — the thread this run belongs to
+- `status` — lifecycle state of the run
+
+Operational lifecycle fields:
+
+- `started_at`
+- `ended_at`
+- `summary`
+- `mission_id`
+- `parent_run_id`
+- `executor_id`
+
+Optional integration and SDK fields:
+
+- `kind` — broad run classification such as `agent_pass`, `review`, `approval`,
+  `call`, or `automation_job`
+- `source` — which surface created or observed the run receipt, such as
+  `manual`, `sdk`, `cursor`, `calendar_adapter`, or `salesforce_adapter`
+- `external_refs` — authoritative links back to external records such as a tool
+  session, workflow execution, meeting, ticket, CRM record, or support case
+
+SDKs and adapters should prefer emitting normalized run receipts over dumping
+raw logs. A useful adapter-created run should say:
+
+- who was responsible
+- what thread the work belonged to
+- what kind of bounded attempt happened
+- when it started and ended, when known
+- what authoritative external record can be followed for more detail
+
+Adapters should create or update runs only for activities that are bounded,
+attributable, and coordination-relevant. Not every click, note edit, email, or
+background event deserves a run.
+
+Recommended promotion rule:
+
+- keep sessions, spawned workers, and internal subagents as opaque execution
+  detail by default
+- promote them into tracked actors only when they need independent assignment,
+  policy, repeated graph visibility, or durable handoff accountability
+
+This lets WorkGraph preserve durable delegation meaning while staying neutral
+about the internal orchestration model of tools like Cursor, Claude Code, or
+OpenClaw.
+
 ### Trigger
 
 A trigger is a durable rule that matches an event pattern and yields one or more action plans.

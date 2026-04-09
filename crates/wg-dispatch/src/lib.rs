@@ -11,7 +11,7 @@ use wg_store::{
     AuditedWriteRequest, PrimitiveFrontmatter, StoredPrimitive, list_primitives, read_primitive,
     write_primitive_audited_now,
 };
-use wg_types::{ActorId, Registry, RunPrimitive, RunStatus};
+use wg_types::{ActorId, ExternalRef, Registry, RunPrimitive, RunStatus};
 
 mod mutation;
 
@@ -28,6 +28,10 @@ pub use mutation::RunMutationService;
 pub struct DispatchRequest {
     /// Run title.
     pub title: String,
+    /// Optional classification for the kind of bounded work attempt.
+    pub kind: Option<String>,
+    /// Optional source that created or observed the run receipt.
+    pub source: Option<String>,
     /// Logical actor responsible for the run.
     pub actor_id: ActorId,
     /// Concrete executor performing the run, when different.
@@ -40,6 +44,8 @@ pub struct DispatchRequest {
     pub parent_run_id: Option<String>,
     /// Optional summary stored alongside the run.
     pub summary: Option<String>,
+    /// Links back to authoritative external records related to this run.
+    pub external_refs: Vec<ExternalRef>,
 }
 
 /// Builds a minimal dispatch request.
@@ -47,12 +53,15 @@ pub struct DispatchRequest {
 pub fn prepare_dispatch(title: &str, actor_id: ActorId, thread_id: &str) -> DispatchRequest {
     DispatchRequest {
         title: title.to_owned(),
+        kind: None,
+        source: None,
         actor_id,
         executor_id: None,
         thread_id: thread_id.to_owned(),
         mission_id: None,
         parent_run_id: None,
         summary: None,
+        external_refs: Vec::new(),
     }
 }
 
@@ -164,6 +173,12 @@ fn run_to_primitive(run: &Run) -> Result<StoredPrimitive> {
         "status".to_owned(),
         serde_yaml::to_value(run.status).map_err(encoding_error)?,
     );
+    if let Some(kind) = &run.kind {
+        extra_fields.insert("kind".to_owned(), Value::String(kind.clone()));
+    }
+    if let Some(source) = &run.source {
+        extra_fields.insert("source".to_owned(), Value::String(source.clone()));
+    }
     extra_fields.insert(
         "actor_id".to_owned(),
         Value::String(run.actor_id.to_string()),
@@ -186,6 +201,12 @@ fn run_to_primitive(run: &Run) -> Result<StoredPrimitive> {
     }
     set_datetime_field(&mut extra_fields, "started_at", run.started_at);
     set_datetime_field(&mut extra_fields, "ended_at", run.ended_at);
+    if !run.external_refs.is_empty() {
+        extra_fields.insert(
+            "external_refs".to_owned(),
+            serde_yaml::to_value(&run.external_refs).map_err(encoding_error)?,
+        );
+    }
 
     Ok(StoredPrimitive {
         frontmatter: PrimitiveFrontmatter {
@@ -239,6 +260,18 @@ fn run_from_primitive(primitive: &StoredPrimitive) -> Result<Run> {
             .extra_fields
             .get("status")
             .map_or(Ok(RunStatus::Queued), parse_yaml_value)?,
+        kind: primitive
+            .frontmatter
+            .extra_fields
+            .get("kind")
+            .and_then(string_value)
+            .map(str::to_owned),
+        source: primitive
+            .frontmatter
+            .extra_fields
+            .get("source")
+            .and_then(string_value)
+            .map(str::to_owned),
         actor_id,
         executor_id: primitive
             .frontmatter
@@ -270,6 +303,11 @@ fn run_from_primitive(primitive: &StoredPrimitive) -> Result<Run> {
             .get("ended_at")
             .map_or(Ok(None), parse_optional_datetime)?,
         summary: (!primitive.body.trim().is_empty()).then(|| primitive.body.clone()),
+        external_refs: primitive
+            .frontmatter
+            .extra_fields
+            .get("external_refs")
+            .map_or(Ok(Vec::new()), parse_yaml_value)?,
     })
 }
 
@@ -325,11 +363,13 @@ fn system_actor() -> ActorId {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use tempfile::tempdir;
     use wg_ledger::LedgerReader;
     use wg_paths::WorkspacePath;
     use wg_store::read_primitive;
-    use wg_types::{ActorId, LedgerOp, RunStatus};
+    use wg_types::{ActorId, ExternalRef, LedgerOp, RunStatus};
 
     use crate::{
         cancel_run, complete_run, create_run, fail_run, load_run, prepare_dispatch, start_run,
@@ -342,12 +382,21 @@ mod tests {
 
         let request = crate::DispatchRequest {
             title: "Cursor analysis run".into(),
+            kind: Some("agent_pass".into()),
+            source: Some("sdk".into()),
             actor_id: ActorId::new("agent:cursor"),
             executor_id: Some(ActorId::new("agent:cursor/subtask")),
             thread_id: "thread-1".into(),
             mission_id: Some("mission-1".into()),
             parent_run_id: Some("run-parent".into()),
             summary: Some("Queued for analysis".into()),
+            external_refs: vec![ExternalRef {
+                provider: "cursor".into(),
+                kind: "session".into(),
+                url: "cursor://sessions/abc123".into(),
+                id: Some("abc123".into()),
+                metadata: BTreeMap::from([("workspace".into(), "workgraph-v4".into())]),
+            }],
         };
         let created = create_run(&workspace, "run-1", request)
             .await
@@ -365,9 +414,12 @@ mod tests {
             .await
             .expect("run should complete");
         assert_eq!(completed.status, RunStatus::Succeeded);
+        assert_eq!(completed.kind.as_deref(), Some("agent_pass"));
+        assert_eq!(completed.source.as_deref(), Some("sdk"));
         assert_eq!(completed.parent_run_id.as_deref(), Some("run-parent"));
         assert!(completed.started_at.is_some());
         assert!(completed.ended_at.is_some());
+        assert_eq!(completed.external_refs.len(), 1);
 
         let stored = read_primitive(&workspace, "run", "run-1")
             .await
@@ -385,6 +437,7 @@ mod tests {
             .await
             .expect("run should roundtrip");
         assert_eq!(loaded.summary.as_deref(), Some("Completed successfully"));
+        assert_eq!(loaded.external_refs[0].provider, "cursor");
 
         let (entries, _) = LedgerReader::new(temp_dir.path().to_path_buf())
             .read_from(Default::default())

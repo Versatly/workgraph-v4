@@ -107,6 +107,11 @@ In practice:
 This keeps the actor layer stable even when the underlying execution tools, session
 boundaries, or internal orchestration patterns change.
 
+Programmatic SDKs and adapters should follow the same rule. They should emit
+durable work receipts tied to tracked actors and threads, then attach compact
+external references when more runtime detail exists elsewhere. WorkGraph should
+ingest normalized coordination facts, not every raw runtime trace by default.
+
 ## Surface Architecture: CLI-first
 
 The CLI is the **primary interface** for all agents with shell access. It is the reference surface — every feature lands here first.

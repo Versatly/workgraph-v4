@@ -1,6 +1,6 @@
 //! Coordination, graph, and trigger contracts shared across WorkGraph crates.
 
-use crate::{ActorId, LedgerOp};
+use crate::{ActorId, ExternalRef, LedgerOp};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -259,6 +259,18 @@ pub struct RunPrimitive {
     pub title: String,
     /// Run lifecycle status.
     pub status: crate::RunStatus,
+    /// Optional classification for the kind of bounded work attempt.
+    ///
+    /// Examples include `agent_pass`, `review`, `approval`, `call`, or
+    /// `automation_job`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Optional source that created or observed the run receipt.
+    ///
+    /// Examples include `manual`, `sdk`, `cursor`, `calendar_adapter`, or
+    /// `salesforce_adapter`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
     /// Logical actor responsible for the run.
     ///
     /// This points at the durable accountable actor boundary rather than a
@@ -288,6 +300,9 @@ pub struct RunPrimitive {
     /// Optional human-readable summary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// Links back to authoritative external records related to this run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub external_refs: Vec<ExternalRef>,
 }
 
 /// Event source supported by trigger patterns.
@@ -432,8 +447,9 @@ mod tests {
         LineageMode, MessageKind, MissionMilestone, MissionPrimitive, MissionStatus, RunPrimitive,
         ThreadExitCriterion, ThreadPrimitive, TriggerActionPlan, TriggerPrimitive, TriggerStatus,
     };
-    use crate::{ActorId, RunStatus, ThreadStatus};
+    use crate::{ActorId, ExternalRef, RunStatus, ThreadStatus};
     use chrono::{TimeZone, Utc};
+    use std::collections::BTreeMap;
 
     fn roundtrip<T>(value: &T)
     where
@@ -526,6 +542,8 @@ mod tests {
             id: "run-1".into(),
             title: "Cursor investigation run".into(),
             status: RunStatus::Running,
+            kind: Some("agent_pass".into()),
+            source: Some("cursor".into()),
             actor_id: ActorId::new("agent:cursor"),
             executor_id: Some(ActorId::new("agent:cursor/subtask")),
             thread_id: "thread-1".into(),
@@ -538,6 +556,13 @@ mod tests {
             ),
             ended_at: None,
             summary: Some("Collecting external verification evidence".into()),
+            external_refs: vec![ExternalRef {
+                provider: "cursor".into(),
+                kind: "session".into(),
+                url: "cursor://sessions/abc123".into(),
+                id: Some("abc123".into()),
+                metadata: BTreeMap::from([("workspace".into(), "workgraph-v4".into())]),
+            }],
         };
         let trigger = TriggerPrimitive {
             id: "trigger-1".into(),
