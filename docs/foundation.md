@@ -2,9 +2,11 @@
 
 ## Identity
 
-WorkGraph is the durable context graph, trigger plane, and coordination substrate for AI-native organizations.
+WorkGraph is the durable system of record for agentic work.
 
-It exists to hold the organizational semantics that execution tools do not naturally preserve:
+It combines a typed context graph, immutable ledger, and evidence-bearing coordination layer so humans and AI tools can share durable context, accountability, and handoff state across the same workspace.
+
+Execution tools can do work, but they do not naturally preserve the organizational facts that matter over time:
 
 - decisions and why they were made
 - patterns, policies, lessons, and relationships
@@ -12,14 +14,16 @@ It exists to hold the organizational semantics that execution tools do not natur
 - durable actor lineage and delegation context
 - durable event history and planned downstream actions
 
+In this repo, "context graph" means a typed graph built from durable primitives and provenanced edges. It does not mean a fuzzy wiki-link memory map. Likewise, the current trigger substrate evaluates durable events into planned follow-up actions; live execution loops are a later layer.
+
 ## Product Boundary
 
 WorkGraph is:
 
-- the organizational semantic layer
-- the durable coordination layer
-- the durable trigger evaluation substrate
-- the graph and ledger that heterogeneous agents can consult and act through
+- the durable system of record for organizational context and agentic work
+- the durable coordination layer for missions, threads, runs, checkpoints, and evidence-backed handoffs
+- the typed graph and immutable ledger that heterogeneous agents can consult and act through
+- the durable trigger evaluation substrate that turns events into planned actions
 
 WorkGraph is not:
 
@@ -29,7 +33,17 @@ WorkGraph is not:
 - a general-purpose memory database
 - a replacement for execution tools such as Cursor, ChatGPT, Claude, OpenHands, OpenClaw, or shell runtimes
 
-Those tools may execute work. WorkGraph exists to give that work context, continuity, governance, and durable handoff semantics.
+Those tools may execute work. WorkGraph exists to give that work context, continuity, governance, evidence, and durable handoff semantics.
+
+## Why It Exists
+
+WorkGraph exists for teams and operators whose work already spans humans, coding agents, chats, automations, and handoffs. Its job is to make that work:
+
+- accountable - clear actor, ownership, and lineage
+- resumable - future humans and agents inherit thread, run, and checkpoint state
+- auditable - immutable ledger-backed history of durable writes
+- evidence-backed - completion is validated against recorded criteria and evidence
+- governable - policies and triggers act on durable coordination facts, not only chat logs
 
 ## Strategic Position
 

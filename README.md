@@ -1,8 +1,24 @@
 # WorkGraph v4
 
-WorkGraph is the durable context graph, trigger plane, and coordination substrate for AI-native organizations.
+WorkGraph is the durable system of record for agentic work.
 
-It is not trying to replace Cursor, ChatGPT, Claude, OpenHands, OpenClaw, or other execution tools. It is the shared organizational system those tools should be able to consult and act through.
+It combines a typed context graph, immutable ledger, and evidence-bearing coordination layer so humans and AI tools can share durable context, accountability, and handoff state across the same workspace.
+
+Execution tools can do work, but they do not naturally preserve the durable organizational facts that make work reusable and governable over time: who owned it, what happened, why it mattered, what evidence supports completion, what policy applied, and what should happen next.
+
+WorkGraph is not trying to replace Cursor, ChatGPT, Claude, OpenHands, OpenClaw, or other execution tools. It is the shared organizational system those tools should be able to consult and act through.
+
+In this repo, "context graph" does not mean a fuzzy wiki-link memory map. It means a typed graph built from durable primitives and provenanced edges. Likewise, the current trigger substrate turns durable events into planned follow-up actions; live execution loops are a later layer.
+
+## Why It Exists
+
+WorkGraph exists for teams and operators whose work already spans humans, coding agents, chats, automations, and handoffs. Its job is to make that work:
+
+- accountable - clear actor, ownership, and lineage
+- resumable - future humans and agents inherit thread, run, and checkpoint state
+- auditable - immutable ledger-backed history of durable writes
+- evidence-backed - completion is validated against recorded criteria and evidence
+- governable - policies and triggers act on durable coordination facts, not only chat logs
 
 ## Start Here
 
@@ -16,7 +32,7 @@ The canonical definition lives in `docs/`, not in scattered comments or one-off 
 
 ## What Exists In The Repo Today
 
-The current workspace encodes the durable foundation rather than only describing it:
+The current workspace encodes that durable foundation rather than only describing it:
 
 - markdown-native primitive storage with YAML frontmatter
 - immutable ledger entries with hash-chain verification
@@ -35,10 +51,10 @@ CLI creation paths now evaluate persisted policy primitives before writing. Trig
 
 WorkGraph is:
 
-- the durable record of organizational context
-- the coordination system for missions, threads, runs, checkpoints, and handoffs
+- the durable system of record for organizational context and agentic work
+- the coordination layer for missions, threads, runs, checkpoints, and evidence-backed handoffs
+- the typed graph and immutable ledger that future humans and agents inherit
 - the trigger substrate that evaluates durable events into planned actions
-- the graph and ledger that future agents inherit
 
 WorkGraph is not:
 
@@ -46,7 +62,7 @@ WorkGraph is not:
 - a generic workflow builder
 - a generic task tracker
 - a generic memory database
-- “just” an MCP server
+- "just" an MCP server or API wrapper
 
 ## Repository Shape
 
