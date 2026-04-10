@@ -239,10 +239,11 @@ pub(crate) async fn save_mission_with_audit(
     workspace: &WorkspacePath,
     mission: &Mission,
     audit: AuditedWriteRequest,
-) -> Result<()> {
+) -> Result<wg_types::LedgerEntry> {
     let primitive = mission_to_primitive(mission)?;
-    write_primitive_audited_now(workspace, &Registry::builtins(), &primitive, audit).await?;
-    Ok(())
+    let (_, ledger_entry) =
+        write_primitive_audited_now(workspace, &Registry::builtins(), &primitive, audit).await?;
+    Ok(ledger_entry)
 }
 
 pub(crate) fn system_actor() -> ActorId {

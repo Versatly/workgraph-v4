@@ -135,6 +135,59 @@ pub struct ThreadEvidenceGap {
     pub missing_criteria: Vec<String>,
 }
 
+/// Health and replay summary for one trigger subscription.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TriggerHealth {
+    /// Trigger reference in `type/id` form.
+    pub trigger_reference: String,
+    /// Trigger lifecycle status.
+    pub status: String,
+    /// Most recent evaluated event id, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_event_id: Option<String>,
+    /// Most recent receipt id, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_receipt_id: Option<String>,
+    /// Most recent event timestamp, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_evaluated_at: Option<String>,
+    /// Most recent match timestamp, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_matched_at: Option<String>,
+}
+
+/// Summary of durable planned actions emitted by trigger receipts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TriggerPlannedActionSummary {
+    /// Number of pending/allowed plans across receipts.
+    pub pending_count: usize,
+    /// Number of policy-suppressed plans across receipts.
+    pub suppressed_count: usize,
+}
+
+/// Recent durable trigger receipt surfaced for orientation and status output.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TriggerReceiptSummary {
+    /// Receipt reference in `type/id` form.
+    pub receipt_reference: String,
+    /// Trigger reference in `type/id` form.
+    pub trigger_reference: String,
+    /// Event source for the matched event.
+    pub event_source: String,
+    /// Event name when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_name: Option<String>,
+    /// Subject reference when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject_reference: Option<String>,
+    /// Receipt timestamp.
+    pub occurred_at: String,
+    /// Count of allowed/pending plans in this receipt.
+    pub pending_plans: usize,
+    /// Count of suppressed plans in this receipt.
+    pub suppressed_plans: usize,
+}
+
 /// A structured, reusable workspace brief suitable for humans, agents, and future MCP resources.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkspaceBrief {
@@ -158,6 +211,14 @@ pub struct WorkspaceBrief {
     /// Recent immutable ledger activity.
     #[serde(default)]
     pub recent_activity: Vec<RecentActivity>,
+    /// Trigger subscription health summaries.
+    #[serde(default)]
+    pub trigger_health: Vec<TriggerHealth>,
+    /// Recent durable trigger receipts.
+    #[serde(default)]
+    pub trigger_receipts: Vec<TriggerReceiptSummary>,
+    /// Aggregate trigger-planned action summary.
+    pub trigger_planned_actions: TriggerPlannedActionSummary,
     /// Warnings or gaps an entering agent should notice immediately.
     #[serde(default)]
     pub warnings: Vec<String>,
@@ -197,7 +258,10 @@ impl Briefing {
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{BriefItem, BriefSection, ContextLens, RecentActivity, WorkspaceBrief};
+    use super::{
+        BriefItem, BriefSection, ContextLens, RecentActivity, TriggerHealth,
+        TriggerPlannedActionSummary, TriggerReceiptSummary, WorkspaceBrief,
+    };
 
     #[test]
     fn context_lens_parses_supported_values() {
@@ -238,6 +302,28 @@ mod tests {
                 op: "create".to_owned(),
                 reference: "org/versatly".to_owned(),
             }],
+            trigger_health: vec![TriggerHealth {
+                trigger_reference: "trigger/demo".to_owned(),
+                status: "active".to_owned(),
+                last_event_id: Some("event-1".to_owned()),
+                last_receipt_id: Some("trigger_receipt/demo".to_owned()),
+                last_evaluated_at: Some("2026-03-15T16:37:24Z".to_owned()),
+                last_matched_at: Some("2026-03-15T16:37:24Z".to_owned()),
+            }],
+            trigger_receipts: vec![TriggerReceiptSummary {
+                receipt_reference: "trigger_receipt/demo".to_owned(),
+                trigger_reference: "trigger/demo".to_owned(),
+                event_source: "ledger".to_owned(),
+                event_name: Some("thread.done".to_owned()),
+                subject_reference: Some("thread/thread-1".to_owned()),
+                occurred_at: "2026-03-15T16:37:24Z".to_owned(),
+                pending_plans: 1,
+                suppressed_plans: 0,
+            }],
+            trigger_planned_actions: TriggerPlannedActionSummary {
+                pending_count: 1,
+                suppressed_count: 0,
+            },
             warnings: vec!["No policies recorded yet".to_owned()],
         };
 

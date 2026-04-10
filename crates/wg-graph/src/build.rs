@@ -10,7 +10,8 @@ use wg_fs::list_md_files;
 use wg_paths::WorkspacePath;
 use wg_store::{PrimitiveFrontmatter, StoredPrimitive, list_primitives};
 use wg_types::{
-    EventPattern, EvidenceItem, GraphEdgeKind, GraphEdgeSource, Registry, TriggerActionPlan,
+    EventPattern, EvidenceItem, GraphEdgeKind, GraphEdgeSource, Registry, TriggerActionOutcome,
+    TriggerActionPlan,
 };
 
 use crate::model::{BrokenLink, Edge, GraphSnapshot, NodeRef};
@@ -140,6 +141,9 @@ fn emit_structured_edges(
         "mission" => emit_mission_edges(source, primitive, nodes, id_index, edges, broken_links),
         "run" => emit_run_edges(source, primitive, nodes, id_index, edges, broken_links),
         "trigger" => emit_trigger_edges(source, primitive, nodes, id_index, edges, broken_links),
+        "trigger_receipt" => {
+            emit_trigger_receipt_edges(source, primitive, nodes, id_index, edges, broken_links)
+        }
         _ => {}
     }
 }
@@ -495,6 +499,76 @@ fn emit_trigger_edges(
                         source,
                         &primitive_id,
                         Some(pattern.primitive_types[0].as_str()),
+                        GraphEdgeKind::Trigger,
+                        GraphEdgeSource::TriggerRule,
+                        nodes,
+                        id_index,
+                        edges,
+                        broken_links,
+                    );
+                }
+            }
+        }
+    }
+}
+
+fn emit_trigger_receipt_edges(
+    source: &NodeRef,
+    primitive: &StoredPrimitive,
+    nodes: &BTreeSet<NodeRef>,
+    id_index: &BTreeMap<String, Vec<NodeRef>>,
+    edges: &mut BTreeSet<Edge>,
+    broken_links: &mut BTreeSet<BrokenLink>,
+) {
+    if let Some(trigger_id) = primitive
+        .frontmatter
+        .extra_fields
+        .get("trigger_id")
+        .and_then(string_value)
+    {
+        resolve_and_record_edge(
+            source,
+            &NodeRef::new("trigger", trigger_id),
+            source.id.as_str(),
+            Some("trigger_receipt"),
+            GraphEdgeKind::Trigger,
+            GraphEdgeSource::Field,
+            nodes,
+            id_index,
+            edges,
+            broken_links,
+        );
+    }
+    if let Some(subject_reference) = primitive
+        .frontmatter
+        .extra_fields
+        .get("subject_reference")
+        .and_then(string_value)
+    {
+        resolve_and_record_edge(
+            source,
+            source,
+            subject_reference,
+            None,
+            GraphEdgeKind::Trigger,
+            GraphEdgeSource::Field,
+            nodes,
+            id_index,
+            edges,
+            broken_links,
+        );
+    }
+    if let Some(value) = primitive.frontmatter.extra_fields.get("action_outcomes") {
+        if let Ok(action_outcomes) =
+            serde_yaml::from_value::<Vec<TriggerActionOutcome>>(value.clone())
+        {
+            for action_outcome in action_outcomes {
+                if let Some(target_reference) = action_outcome.plan.target_reference {
+                    resolve_and_record_edge(
+                        source,
+                        source,
+                        &target_reference,
+                        None,
                         GraphEdgeKind::Trigger,
                         GraphEdgeSource::TriggerRule,
                         nodes,

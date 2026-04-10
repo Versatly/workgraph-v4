@@ -173,6 +173,15 @@ pub enum Command {
         #[command(subcommand)]
         command: RunCommand,
     },
+    /// Manages trigger validation, replay, and event ingestion workflows.
+    #[command(
+        after_help = "Examples:\n  workgraph trigger validate trigger/react-to-thread-complete\n  workgraph trigger replay --last 20\n  workgraph trigger ingest --source internal --event-name signal.sent --field subject_reference=thread/thread-1 --field actor_id=agent:cursor"
+    )]
+    Trigger {
+        /// Trigger-specific subcommand to execute.
+        #[command(subcommand)]
+        command: TriggerCommand,
+    },
 }
 
 impl Command {
@@ -193,6 +202,7 @@ impl Command {
             Self::Query { .. } => "query",
             Self::Show { .. } => "show",
             Self::Run { command } => command.name(),
+            Self::Trigger { command } => command.name(),
         }
     }
 }
@@ -289,6 +299,61 @@ impl RunCommand {
             Self::Complete { .. } => "run_complete",
             Self::Fail { .. } => "run_fail",
             Self::Cancel { .. } => "run_cancel",
+        }
+    }
+}
+
+/// Supported `workgraph trigger` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum TriggerCommand {
+    /// Validates a stored trigger definition by `<type>/<id>` reference.
+    #[command(
+        after_help = "Examples:\n  workgraph trigger validate trigger/react-to-thread-complete\n  workgraph --json trigger validate trigger/react-to-thread-complete"
+    )]
+    Validate {
+        /// Trigger reference in `<type>/<id>` form.
+        reference: String,
+    },
+    /// Replays recent ledger entries through the trigger plane.
+    #[command(
+        after_help = "Examples:\n  workgraph trigger replay\n  workgraph trigger replay --last 20\n  workgraph --json trigger replay --last 5"
+    )]
+    Replay {
+        /// Number of most recent ledger entries to replay.
+        #[arg(long)]
+        last: Option<usize>,
+    },
+    /// Ingests one normalized event into the trigger plane without a live runtime.
+    #[command(
+        after_help = "Examples:\n  workgraph trigger ingest --source internal --event-name signal.sent --field subject_reference=thread/thread-1\n  workgraph --json trigger ingest --source webhook --provider github --event-name pull_request.merged --field subject_reference=project/dealer-portal"
+    )]
+    Ingest {
+        /// Event source kind.
+        #[arg(long)]
+        source: String,
+        /// Stable event name.
+        #[arg(long = "event-name")]
+        event_name: Option<String>,
+        /// Provider or emitter for webhook/internal events.
+        #[arg(long)]
+        provider: Option<String>,
+        /// Explicit event id. When omitted, a deterministic id is derived from fields.
+        #[arg(long = "event-id")]
+        event_id: Option<String>,
+        /// Event payload fields expressed as `key=value`.
+        #[arg(long = "field", value_parser = parse_key_value_input)]
+        fields: Vec<KeyValueInput>,
+    },
+}
+
+impl TriggerCommand {
+    /// Returns the stable command name associated with this parsed trigger subcommand.
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::Validate { .. } => "trigger_validate",
+            Self::Replay { .. } => "trigger_replay",
+            Self::Ingest { .. } => "trigger_ingest",
         }
     }
 }

@@ -14,7 +14,7 @@ Important node classes include:
 
 - Tier 1 knowledge primitives: `decision`, `pattern`, `lesson`, `policy`, `relationship`, `strategic_note`
 - Tier 2 context primitives: `org`, `team`, `person`, `agent`, `client`, `project`
-- Coordination primitives: `thread`, `mission`, `run`, `trigger`, `checkpoint`
+- Coordination primitives: `thread`, `mission`, `run`, `trigger`, `trigger_receipt`, `checkpoint`
 
 External systems remain authoritative unless WorkGraph has an explicit reason to cache or model their state locally.
 
@@ -27,7 +27,7 @@ The graph uses semantic edge kinds. Wiki-links are only one source.
 - `assignment` — actor-to-thread, actor-to-run, or equivalent ownership/assignment edges
 - `containment` — mission-to-thread, thread-to-run, or mission-to-run structure
 - `evidence` — evidence support edges from threads to supporting records
-- `trigger` — trigger-rule edges to relevant targets or action targets
+- `trigger` — trigger-rule edges to relevant targets, subjects, or action targets
 
 Agent lineage references such as `parent_actor_id` and `root_actor_id` are part of the durable
 assignment/lineage surface and should appear in graph-derived orientation outputs when present.
@@ -75,7 +75,7 @@ Status surfaces should expose at least:
 
 ## Events And The Graph
 
-Ledger events are graph-adjacent coordination facts.
+Ledger events and normalized ingested events are graph-adjacent coordination facts.
 
 They are not themselves the graph, but they are durable signals that:
 
@@ -83,15 +83,15 @@ They are not themselves the graph, but they are durable signals that:
 - orientation surfaces summarize
 - future automation planes react to
 
-The graph holds state. The ledger records state change. Both matter.
+The graph holds state. The ledger records state change. Trigger receipts preserve durable event-to-plan outcomes. All three matter.
 
 Durable primitive mutation paths should emit ledger events consistently so status, trigger
-evaluation, and auditability observe the same state transitions.
+evaluation, trigger receipt persistence, and auditability observe the same state transitions.
 
 Coordination-family writes should flow through explicit domain mutation services above the
 audited store layer. Those services own operation-specific semantics, policy checks, audited
-writes, and future trigger hook integration so the graph and ledger observe one coherent mutation
-contract per primitive family instead of scattered persistence helpers.
+writes, and trigger hook integration so the graph, ledger, and trigger receipt plane observe one
+coherent mutation contract per primitive family instead of scattered persistence helpers.
 
 ## Query Expectations
 
@@ -102,5 +102,6 @@ A useful WorkGraph query should be able to answer not only “what links to this
 - what evidence supports completion?
 - what durable relationship makes this relevant?
 - what trigger rule reacts to this kind of change?
+- what trigger receipts and pending planned actions were produced by recent events?
 
 If the graph cannot answer those questions, the semantics are not yet first-class enough.

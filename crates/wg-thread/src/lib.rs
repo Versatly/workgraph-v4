@@ -243,16 +243,16 @@ async fn save_thread_with_audit(
     workspace: &WorkspacePath,
     thread: &Thread,
     audit: AuditedWriteRequest,
-) -> Result<()> {
+) -> Result<wg_types::LedgerEntry> {
     let primitive = thread_to_primitive(thread)?;
-    wg_store::write_primitive_audited_now(
+    let (_, ledger_entry) = wg_store::write_primitive_audited_now(
         workspace,
         &wg_types::Registry::builtins(),
         &primitive,
         audit,
     )
     .await?;
-    Ok(())
+    Ok(ledger_entry)
 }
 
 #[cfg(test)]

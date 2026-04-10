@@ -7,7 +7,8 @@ use serde_yaml::Value;
 use super::{
     CapabilitiesOutput, CheckpointOutput, CommandOutput, CreateOutcome, CreateOutput, InitOutput,
     LedgerOutput, QueryOutput, RunCreateOutcome, RunCreateOutput, RunLifecycleOutput, SchemaOutput,
-    ShowOutput, StatusOutput, ThreadClaimOutput, ThreadCompleteOutput,
+    ShowOutput, StatusOutput, ThreadClaimOutput, ThreadCompleteOutput, TriggerIngestOutput,
+    TriggerReplayOutput, TriggerValidateOutput,
 };
 
 /// Renders a structured command output to human-readable text.
@@ -26,6 +27,9 @@ pub fn render(output: &CommandOutput, next_actions: &[String]) -> String {
         CommandOutput::Create(output) => render_create(output),
         CommandOutput::RunCreate(output) => render_run_create(output),
         CommandOutput::RunLifecycle(output) => render_run_lifecycle(output),
+        CommandOutput::TriggerValidate(output) => render_trigger_validate(output),
+        CommandOutput::TriggerReplay(output) => render_trigger_replay(output),
+        CommandOutput::TriggerIngest(output) => render_trigger_ingest(output),
         CommandOutput::Query(output) => render_query(output),
         CommandOutput::Show(output) => render_show(output),
     };
@@ -193,6 +197,44 @@ fn render_status(output: &StatusOutput) -> String {
         }
     }
 
+    let _ = writeln!(rendered, "Trigger health:");
+    if output.trigger_health.is_empty() {
+        let _ = writeln!(rendered, "- none");
+    } else {
+        for trigger in &output.trigger_health {
+            let _ = writeln!(
+                rendered,
+                "- {} [{}] last_event={} last_receipt={}",
+                trigger.trigger_reference,
+                trigger.status,
+                trigger.last_event_id.as_deref().unwrap_or("none"),
+                trigger.last_receipt_id.as_deref().unwrap_or("none")
+            );
+        }
+    }
+
+    let _ = writeln!(rendered, "Recent trigger receipts:");
+    if output.recent_trigger_receipts.is_empty() {
+        let _ = writeln!(rendered, "- none");
+    } else {
+        for receipt in &output.recent_trigger_receipts {
+            let _ = writeln!(
+                rendered,
+                "- {} trigger={} source={} pending={}",
+                receipt.receipt_reference,
+                receipt.trigger_reference,
+                receipt.event_source,
+                receipt.pending_plans
+            );
+        }
+    }
+
+    let _ = writeln!(
+        rendered,
+        "Pending trigger actions: {}",
+        output.pending_trigger_actions
+    );
+
     let _ = writeln!(rendered, "Graph issues:");
     if output.graph_issues.is_empty() {
         let _ = writeln!(rendered, "- none");
@@ -329,6 +371,99 @@ fn render_run_lifecycle(output: &RunLifecycleOutput) -> String {
     rendered.trim_end().to_owned()
 }
 
+fn render_trigger_validate(output: &TriggerValidateOutput) -> String {
+    let mut rendered = String::new();
+    let _ = writeln!(rendered, "Validated trigger: {}", output.reference);
+    let _ = writeln!(
+        rendered,
+        "matches source: {}",
+        output.trigger.event_pattern.source.as_str()
+    );
+    let _ = writeln!(
+        rendered,
+        "action plans: {}",
+        output.trigger.action_plans.len()
+    );
+    rendered.trim_end().to_owned()
+}
+
+fn render_trigger_replay(output: &TriggerReplayOutput) -> String {
+    let mut rendered = String::new();
+    let emitted_receipts = output
+        .results
+        .iter()
+        .map(|result| result.receipts.len())
+        .sum::<usize>();
+    let _ = writeln!(
+        rendered,
+        "Replayed ledger events: {}",
+        output.events_replayed
+    );
+    let _ = writeln!(rendered, "Receipts emitted: {}", emitted_receipts);
+    if output.results.is_empty() {
+        let _ = writeln!(rendered, "- none");
+    } else {
+        for result in &output.results {
+            let _ = writeln!(
+                rendered,
+                "- event {} [{}] receipts={}",
+                result.event.id,
+                result.event.source.as_str(),
+                result.receipts.len()
+            );
+            for receipt in &result.receipts {
+                let _ = writeln!(
+                    rendered,
+                    "  • trigger_receipt/{} — trigger={} pending={}",
+                    receipt.id,
+                    receipt.trigger_id,
+                    receipt
+                        .action_outcomes
+                        .iter()
+                        .filter(|outcome| matches!(
+                            outcome.decision,
+                            wg_types::TriggerPlanDecision::Allow
+                        ))
+                        .count()
+                );
+            }
+        }
+    }
+    rendered.trim_end().to_owned()
+}
+
+fn render_trigger_ingest(output: &TriggerIngestOutput) -> String {
+    let mut rendered = String::new();
+    let _ = writeln!(
+        rendered,
+        "Ingested trigger event: {} [{}]",
+        output.event.id,
+        output.event.source.as_str()
+    );
+    let _ = writeln!(rendered, "Receipts emitted: {}", output.receipts.len());
+    if output.receipts.is_empty() {
+        let _ = writeln!(rendered, "- none");
+    } else {
+        for receipt in &output.receipts {
+            let _ = writeln!(
+                rendered,
+                "- trigger_receipt/{} — trigger={} pending={}",
+                receipt.id,
+                receipt.trigger_id,
+                receipt
+                    .action_outcomes
+                    .iter()
+                    .filter(|outcome| matches!(
+                        outcome.decision,
+                        wg_types::TriggerPlanDecision::Allow
+                    ))
+                    .count()
+            );
+        }
+    }
+    rendered.trim_end().to_owned()
+}
+
 fn render_capabilities(output: &CapabilitiesOutput) -> String {
     let mut rendered = String::new();
     let _ = writeln!(rendered, "WorkGraph CLI capabilities");
@@ -422,6 +557,7 @@ fn render_show(output: &ShowOutput) -> String {
         "mission" => render_mission_sections(&mut rendered, primitive),
         "run" => render_run_sections(&mut rendered, primitive),
         "trigger" => render_trigger_sections(&mut rendered, primitive),
+        "trigger_receipt" => render_trigger_receipt_sections(&mut rendered, primitive),
         _ => render_generic_fields(&mut rendered, primitive),
     }
 
@@ -536,6 +672,43 @@ fn render_trigger_sections(rendered: &mut String, primitive: &wg_store::StoredPr
         rendered,
         "action_plans",
         primitive.frontmatter.extra_fields.get("action_plans"),
+    );
+    render_section_list(
+        rendered,
+        "subscription_state",
+        primitive.frontmatter.extra_fields.get("subscription_state"),
+    );
+}
+
+fn render_trigger_receipt_sections(rendered: &mut String, primitive: &wg_store::StoredPrimitive) {
+    for key in [
+        "trigger_id",
+        "trigger_title",
+        "event_id",
+        "event_source",
+        "event_name",
+        "provider",
+        "actor_id",
+        "subject_reference",
+        "occurred_at",
+        "dedup_key",
+    ] {
+        render_field(rendered, key, primitive.frontmatter.extra_fields.get(key));
+    }
+    render_section_list(
+        rendered,
+        "field_names",
+        primitive.frontmatter.extra_fields.get("field_names"),
+    );
+    render_section_list(
+        rendered,
+        "payload_fields",
+        primitive.frontmatter.extra_fields.get("payload_fields"),
+    );
+    render_section_list(
+        rendered,
+        "action_outcomes",
+        primitive.frontmatter.extra_fields.get("action_outcomes"),
     );
 }
 

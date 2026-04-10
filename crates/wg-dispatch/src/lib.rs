@@ -242,10 +242,11 @@ pub(crate) async fn save_run_with_audit(
     workspace: &WorkspacePath,
     run: &Run,
     audit: AuditedWriteRequest,
-) -> Result<()> {
+) -> Result<wg_types::LedgerEntry> {
     let primitive = run_to_primitive(run)?;
-    write_primitive_audited_now(workspace, &Registry::builtins(), &primitive, audit).await?;
-    Ok(())
+    let (_, ledger_entry) =
+        write_primitive_audited_now(workspace, &Registry::builtins(), &primitive, audit).await?;
+    Ok(ledger_entry)
 }
 
 fn run_to_primitive(run: &Run) -> Result<StoredPrimitive> {

@@ -9,7 +9,7 @@ use wg_types::ActorId;
 
 use crate::{
     BriefItem, CheckpointMutationService, GraphIssue, GraphOrphan, RecentActivity,
-    ThreadEvidenceGap, brief_runtime, status_runtime,
+    ThreadEvidenceGap, TriggerHealth, TriggerReceiptSummary, brief_runtime, status_runtime,
 };
 
 /// Workspace orientation summary derived from real persisted data.
@@ -25,6 +25,12 @@ pub struct WorkspaceStatus {
     pub orphan_nodes: Vec<GraphOrphan>,
     /// Threads with unsatisfied required exit criteria.
     pub thread_evidence_gaps: Vec<ThreadEvidenceGap>,
+    /// Trigger health summaries recorded for active and draft trigger subscriptions.
+    pub trigger_health: Vec<TriggerHealth>,
+    /// Recent durable trigger receipts emitted by the trigger plane.
+    pub recent_trigger_receipts: Vec<TriggerReceiptSummary>,
+    /// Count of planned trigger actions that remain pending policy allow.
+    pub pending_trigger_actions: usize,
 }
 
 /// Actor-specific orientation brief based on assignment and recent activity.
@@ -317,6 +323,9 @@ mod tests {
                             primitive_id: None,
                             field_names: vec!["evidence".to_owned()],
                             provider: None,
+                            actor_id: None,
+                            subject_reference: None,
+                            payload_fields: BTreeMap::new(),
                         })
                         .expect("event pattern should serialize"),
                     ),

@@ -3,6 +3,7 @@ use wg_error::{Result, WorkgraphError};
 use wg_paths::WorkspacePath;
 use wg_policy::{PolicyAction, PolicyContext, PolicyDecision, evaluate as evaluate_policy};
 use wg_store::AuditedWriteRequest;
+use wg_trigger::ingest_ledger_entry;
 use wg_types::{LedgerOp, RunStatus};
 
 use crate::{DispatchRequest, RUN_TYPE, Run, load_run, save_run_with_audit};
@@ -207,8 +208,8 @@ impl<'a> RunMutationService<'a> {
 
     async fn persist(self, run: &Run, audit: AuditedWriteRequest) -> Result<()> {
         self.authorize(run.id.as_str(), &audit).await?;
-        save_run_with_audit(self.workspace, run, audit.clone()).await?;
-        self.after_mutation(run, &audit).await
+        let ledger_entry = save_run_with_audit(self.workspace, run, audit.clone()).await?;
+        self.after_mutation(run, &audit, &ledger_entry).await
     }
 
     async fn authorize(self, run_id: &str, audit: &AuditedWriteRequest) -> Result<()> {
@@ -231,8 +232,13 @@ impl<'a> RunMutationService<'a> {
         Ok(())
     }
 
-    async fn after_mutation(self, _run: &Run, _audit: &AuditedWriteRequest) -> Result<()> {
-        // Reserved for future trigger-aware follow-up hooks.
+    async fn after_mutation(
+        self,
+        _run: &Run,
+        _audit: &AuditedWriteRequest,
+        ledger_entry: &wg_types::LedgerEntry,
+    ) -> Result<()> {
+        ingest_ledger_entry(self.workspace, ledger_entry).await?;
         Ok(())
     }
 }

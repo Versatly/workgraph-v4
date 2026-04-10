@@ -3,6 +3,7 @@
 use anyhow::{Context, anyhow, bail};
 use tokio::fs;
 use wg_store::{PrimitiveFrontmatter, StoredPrimitive, read_primitive};
+use wg_trigger::{TriggerMutationService, load_trigger};
 use wg_types::ActorId;
 
 use crate::app::AppContext;
@@ -99,9 +100,41 @@ pub async fn handle(
         .default_actor_id
         .unwrap_or_else(|| ActorId::new("cli"));
 
-    let (path, ledger_entry) = PrimitiveMutationService::new(app, &registry)
-        .create(actor, &primitive)
-        .await?;
+    let (path, ledger_entry) = if primitive_type == "trigger" {
+        let trigger = load_trigger_payload(&primitive)?;
+        TriggerMutationService::new(app.workspace())
+            .save_trigger_as(&trigger, actor.clone())
+            .await?;
+        let stored_trigger = load_trigger(app.workspace(), &trigger.id).await?;
+        let stored_primitive = read_primitive(app.workspace(), "trigger", &stored_trigger.id)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to read stored trigger 'trigger/{}'",
+                    stored_trigger.id
+                )
+            })?;
+        primitive = stored_primitive;
+        let ledger_entry = app
+            .read_ledger_entries()
+            .await?
+            .into_iter()
+            .rev()
+            .find(|entry| entry.primitive_type == "trigger" && entry.primitive_id == trigger.id)
+            .ok_or_else(|| anyhow!("failed to locate ledger entry for trigger/{}", trigger.id))?;
+        (
+            app.workspace()
+                .primitive_path("trigger", &trigger.id)
+                .as_path()
+                .display()
+                .to_string(),
+            ledger_entry,
+        )
+    } else {
+        PrimitiveMutationService::new(app, &registry)
+            .create(actor, &primitive)
+            .await?
+    };
 
     Ok(CreateOutput {
         outcome: CreateOutcome::Created,
@@ -140,4 +173,10 @@ fn resolve_create_inputs(
         cli_fields.to_vec()
     };
     Ok((title, fields))
+}
+
+fn load_trigger_payload(primitive: &StoredPrimitive) -> anyhow::Result<wg_trigger::Trigger> {
+    let trigger = wg_trigger::trigger_from_primitive(primitive)
+        .context("failed to decode trigger payload from create request")?;
+    Ok(trigger)
 }

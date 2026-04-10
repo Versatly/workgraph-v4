@@ -40,12 +40,13 @@ The current workspace encodes that durable foundation rather than only describin
 - first-class thread, mission, run, trigger, checkpoint, and actor-lineage contracts in `wg-types`
 - evidence-bearing thread persistence in `wg-thread`
 - mission and run persistence in `wg-mission` and `wg-dispatch`, including mission planning/approval/validation states, milestone thread auto-creation, and run start/end timestamps
-- typed graph edges in `wg-graph`, including assignment, containment, evidence, trigger, reference, and actor-lineage edges derived from agent metadata
+- typed graph edges in `wg-graph`, including assignment, containment, evidence, trigger, reference, actor-lineage, and trigger-receipt edges derived from durable coordination state
 - orientation and CLI surfaces that expose evidence gaps, graph issues, coordination contracts, and full primitive discovery metadata
+- trigger evaluation over normalized ledger, internal, and webhook event envelopes with durable `trigger_receipt` primitives for replay-safe planned follow-up actions
 
-This turn does not implement live trigger execution loops, webhook ingress, remote MCP, or API runtime surfaces yet. It establishes the durable contracts those surfaces must honor.
+This turn does not implement live trigger execution loops, webhook HTTP runtime, remote MCP, or API runtime surfaces yet. It establishes the durable contracts those surfaces must honor.
 
-CLI creation paths now evaluate persisted policy primitives before writing. Trigger action plans remain durable planned follow-up actions rather than auto-executed effects in this foundation pass.
+CLI creation paths evaluate persisted policy primitives before writing. Trigger evaluation now records replay-safe `trigger_receipt` primitives and policy-aware planned action outcomes rather than auto-executed effects.
 
 ## Product Boundary
 

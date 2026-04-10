@@ -23,5 +23,8 @@ pub async fn handle(app: &AppContext) -> anyhow::Result<StatusOutput> {
         graph_issues: workspace_status.graph_issues,
         orphan_nodes: workspace_status.orphan_nodes,
         thread_evidence_gaps: workspace_status.thread_evidence_gaps,
+        trigger_health: workspace_status.trigger_health,
+        recent_trigger_receipts: workspace_status.recent_trigger_receipts,
+        pending_trigger_actions: workspace_status.pending_trigger_actions,
     })
 }

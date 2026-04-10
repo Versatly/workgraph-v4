@@ -1,6 +1,10 @@
 #![forbid(unsafe_code)]
 
 //! API surface placeholders for HTTP, gRPC, SSE, and webhook endpoints.
+//!
+//! Phase 3 keeps event-plane semantics in the kernel and CLI. This crate remains
+//! a transport-thin placeholder until remote runtime surfaces are intentionally
+//! implemented in a later phase.
 
 /// Transport exposed by the placeholder API server.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

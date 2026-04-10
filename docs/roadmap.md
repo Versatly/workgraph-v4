@@ -41,6 +41,8 @@ Scope:
 - durable trigger subscriptions
 - policy-aware action planning
 - ingress from internal and external event sources
+- durable trigger receipts and replay-safe deduplication
+- CLI-first trigger validation, replay, ingest, and status surfaces
 
 ## Phase 4 — Remote Access Surfaces (MCP as Cloud Adapter)
 

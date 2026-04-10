@@ -226,6 +226,45 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
                 ],
             ),
             capability(
+                "trigger validate",
+                "Validate a trigger definition by reference against the normalized event-plane contract.",
+                vec!["<trigger-ref>"],
+                &global_flags,
+                vec![
+                    "workgraph trigger validate trigger/thread-done --json",
+                    "workgraph trigger validate trigger/thread-done",
+                ],
+            ),
+            capability(
+                "trigger replay",
+                "Replay recent ledger entries through the trigger plane and persist durable trigger receipts.",
+                vec![],
+                &[global_flags[0], global_flags[1], "--last <n>"],
+                vec![
+                    "workgraph trigger replay --json",
+                    "workgraph trigger replay --last 20",
+                ],
+            ),
+            capability(
+                "trigger ingest",
+                "Ingest one normalized internal or webhook event payload into the trigger plane.",
+                vec![],
+                &[
+                    global_flags[0],
+                    global_flags[1],
+                    "--source <ledger|internal|webhook>",
+                    "--event-id <event-id>",
+                    "--event-name <event-name>",
+                    "--provider <provider>",
+                    "--subject <type/id>",
+                    "--field key=value",
+                ],
+                vec![
+                    "workgraph trigger ingest --source internal --event-id event-1 --event-name handoff.ready --subject thread/thread-1 --json",
+                    "workgraph trigger ingest --source webhook --event-id gh-123 --event-name pull_request.merged --provider github --subject project/dealer-portal",
+                ],
+            ),
+            capability(
                 "capabilities",
                 "List command contracts for autonomous self-discovery.",
                 vec![],

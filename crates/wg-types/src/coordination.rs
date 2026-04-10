@@ -1,5 +1,7 @@
 //! Coordination, graph, and trigger contracts shared across WorkGraph crates.
 
+use std::collections::BTreeMap;
+
 use crate::{ActorId, ExternalRef, LedgerOp};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -318,6 +320,18 @@ pub enum EventSourceKind {
     Internal,
 }
 
+impl EventSourceKind {
+    /// Returns the stable serialized value used in frontmatter and JSON.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ledger => "ledger",
+            Self::Webhook => "webhook",
+            Self::Internal => "internal",
+        }
+    }
+}
+
 /// Trigger event matching contract.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EventPattern {
@@ -341,6 +355,53 @@ pub struct EventPattern {
     /// Optional provider or emitter name for webhook/internal sources.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
+    /// Optional actor identifier that must have emitted the event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_id: Option<ActorId>,
+    /// Optional subject reference that must match the event subject.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject_reference: Option<String>,
+    /// Optional payload field values that must match exactly.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub payload_fields: BTreeMap<String, String>,
+}
+
+/// Normalized event envelope evaluated against trigger definitions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EventEnvelope {
+    /// Stable event identifier used for replay-safe deduplication.
+    pub id: String,
+    /// Event source kind.
+    pub source: EventSourceKind,
+    /// Optional stable event name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_name: Option<String>,
+    /// Optional provider or emitter name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// Actor that emitted or initiated the event, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_id: Option<ActorId>,
+    /// Time the event occurred.
+    pub occurred_at: DateTime<Utc>,
+    /// Ledger operation for ledger-backed events, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub op: Option<LedgerOp>,
+    /// Primitive type associated with the event subject, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primitive_type: Option<String>,
+    /// Primitive identifier associated with the event subject, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primitive_id: Option<String>,
+    /// Durable subject reference in `type/id` form, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject_reference: Option<String>,
+    /// Field names included in the event payload.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub field_names: Vec<String>,
+    /// Normalized payload values for richer trigger matching.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub payload_fields: BTreeMap<String, String>,
 }
 
 /// Action plan yielded by a matched trigger.
@@ -353,6 +414,51 @@ pub struct TriggerActionPlan {
     pub target_reference: Option<String>,
     /// Durable instruction attached to the plan.
     pub instruction: String,
+}
+
+/// Persistent health and replay state tracked on a trigger definition.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TriggerSubscriptionState {
+    /// Most recent time an event was evaluated against this trigger.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_evaluated_at: Option<DateTime<Utc>>,
+    /// Most recent time an event matched this trigger.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_matched_at: Option<DateTime<Utc>>,
+    /// Identifier of the last evaluated event, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_event_id: Option<String>,
+    /// Stable event name of the last evaluated event, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_event_name: Option<String>,
+    /// Cursor or hash for replay-oriented sources, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_event_cursor: Option<String>,
+    /// Most recent receipt emitted by this trigger, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_receipt_id: Option<String>,
+}
+
+/// Policy decision attached to one trigger-emitted action plan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TriggerPlanDecision {
+    /// The action plan is allowed to remain pending.
+    Allow,
+    /// The action plan is recorded but suppressed by policy.
+    Deny,
+}
+
+/// Durable outcome for one action plan yielded by a trigger.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TriggerActionOutcome {
+    /// Planned follow-up action produced by the trigger.
+    pub plan: TriggerActionPlan,
+    /// Policy decision recorded for this plan.
+    pub decision: TriggerPlanDecision,
+    /// Optional explanation when the plan was suppressed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 /// Durable trigger document model.
@@ -369,6 +475,51 @@ pub struct TriggerPrimitive {
     /// Action plans emitted when the pattern matches.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub action_plans: Vec<TriggerActionPlan>,
+    /// Persistent subscription and replay metadata for this trigger.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subscription_state: Option<TriggerSubscriptionState>,
+}
+
+/// Durable trigger receipt recording one matched event and its planned actions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TriggerReceiptPrimitive {
+    /// Stable trigger receipt identifier.
+    pub id: String,
+    /// Trigger receipt title.
+    pub title: String,
+    /// Trigger that matched the event.
+    pub trigger_id: String,
+    /// Trigger title at the time of receipt creation.
+    pub trigger_title: String,
+    /// Stable identifier of the matched event.
+    pub event_id: String,
+    /// Event source kind that produced the receipt.
+    pub event_source: EventSourceKind,
+    /// Stable event name, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_name: Option<String>,
+    /// Provider or emitter for webhook/internal events, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// Actor associated with the matched event, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_id: Option<ActorId>,
+    /// Durable subject reference associated with the event, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject_reference: Option<String>,
+    /// Time the triggering event occurred.
+    pub occurred_at: DateTime<Utc>,
+    /// Replay-safe deduplication key for this trigger/event pair.
+    pub dedup_key: String,
+    /// Payload field names observed on the event.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub field_names: Vec<String>,
+    /// Normalized payload values retained for inspection and replay.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub payload_fields: BTreeMap<String, String>,
+    /// Durable action outcomes recorded for this receipt.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub action_outcomes: Vec<TriggerActionOutcome>,
 }
 
 /// Durable checkpoint document model.
@@ -443,10 +594,12 @@ const fn default_true() -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        CheckpointPrimitive, ConversationMessage, CoordinationAction, EventPattern,
+        CheckpointPrimitive, ConversationMessage, CoordinationAction, EventEnvelope, EventPattern,
         EventSourceKind, EvidenceItem, GraphEdgeKind, GraphEdgeReference, GraphEdgeSource,
         LineageMode, MessageKind, MissionMilestone, MissionPrimitive, MissionStatus, RunPrimitive,
-        ThreadExitCriterion, ThreadPrimitive, TriggerActionPlan, TriggerPrimitive, TriggerStatus,
+        ThreadExitCriterion, ThreadPrimitive, TriggerActionOutcome, TriggerActionPlan,
+        TriggerPlanDecision, TriggerPrimitive, TriggerReceiptPrimitive, TriggerStatus,
+        TriggerSubscriptionState,
     };
     use crate::{ActorId, ExternalRef, RunStatus, ThreadStatus};
     use chrono::{TimeZone, Utc};
@@ -577,11 +730,75 @@ mod tests {
                 primitive_id: None,
                 field_names: vec!["evidence".into()],
                 provider: None,
+                actor_id: Some(ActorId::new("agent:cursor")),
+                subject_reference: Some("thread/thread-1".into()),
+                payload_fields: BTreeMap::from([("status".to_owned(), "done".to_owned())]),
             },
             action_plans: vec![TriggerActionPlan {
                 kind: "rebrief_actor".into(),
                 target_reference: Some("agent:cursor".into()),
                 instruction: "Refresh the active brief with new evidence.".into(),
+            }],
+            subscription_state: Some(TriggerSubscriptionState {
+                last_evaluated_at: Some(
+                    Utc.with_ymd_and_hms(2026, 3, 22, 9, 30, 0)
+                        .single()
+                        .expect("valid timestamp"),
+                ),
+                last_matched_at: Some(
+                    Utc.with_ymd_and_hms(2026, 3, 22, 9, 31, 0)
+                        .single()
+                        .expect("valid timestamp"),
+                ),
+                last_event_id: Some("event-1".into()),
+                last_event_name: Some("thread.done".into()),
+                last_event_cursor: Some("hash-1".into()),
+                last_receipt_id: Some("trigger-receipt-1".into()),
+            }),
+        };
+        let event = EventEnvelope {
+            id: "event-1".into(),
+            source: EventSourceKind::Ledger,
+            event_name: Some("thread.done".into()),
+            provider: None,
+            actor_id: Some(ActorId::new("agent:cursor")),
+            occurred_at: Utc
+                .with_ymd_and_hms(2026, 3, 22, 9, 31, 0)
+                .single()
+                .expect("valid timestamp"),
+            op: Some(crate::LedgerOp::Done),
+            primitive_type: Some("thread".into()),
+            primitive_id: Some("thread-1".into()),
+            subject_reference: Some("thread/thread-1".into()),
+            field_names: vec!["evidence".into(), "status".into()],
+            payload_fields: BTreeMap::from([("status".to_owned(), "done".to_owned())]),
+        };
+        let receipt = TriggerReceiptPrimitive {
+            id: "trigger-receipt-1".into(),
+            title: "Trigger receipt: React to completed deployments".into(),
+            trigger_id: "trigger-1".into(),
+            trigger_title: "React to completed deployments".into(),
+            event_id: "event-1".into(),
+            event_source: EventSourceKind::Ledger,
+            event_name: Some("thread.done".into()),
+            provider: None,
+            actor_id: Some(ActorId::new("agent:cursor")),
+            subject_reference: Some("thread/thread-1".into()),
+            occurred_at: Utc
+                .with_ymd_and_hms(2026, 3, 22, 9, 31, 0)
+                .single()
+                .expect("valid timestamp"),
+            dedup_key: "trigger-1::event-1".into(),
+            field_names: vec!["evidence".into(), "status".into()],
+            payload_fields: BTreeMap::from([("status".to_owned(), "done".to_owned())]),
+            action_outcomes: vec![TriggerActionOutcome {
+                plan: TriggerActionPlan {
+                    kind: "rebrief_actor".into(),
+                    target_reference: Some("agent:cursor".into()),
+                    instruction: "Refresh the active brief with new evidence.".into(),
+                },
+                decision: TriggerPlanDecision::Allow,
+                reason: None,
             }],
         };
         let checkpoint = CheckpointPrimitive {
@@ -606,6 +823,8 @@ mod tests {
         roundtrip(&mission);
         roundtrip(&run);
         roundtrip(&trigger);
+        roundtrip(&event);
+        roundtrip(&receipt);
         roundtrip(&checkpoint);
         roundtrip(&edge);
         roundtrip(&LineageMode::Opaque);

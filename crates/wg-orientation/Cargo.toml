@@ -19,6 +19,7 @@ wg-paths = { path = "../wg-paths" }
 wg-policy = { path = "../wg-policy" }
 wg-store = { path = "../wg-store" }
 wg-thread = { path = "../wg-thread" }
+wg-trigger = { path = "../wg-trigger" }
 wg-types = { path = "../wg-types" }
 
 [dev-dependencies]

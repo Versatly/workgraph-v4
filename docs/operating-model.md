@@ -557,7 +557,20 @@ This foundation pass supports event source contracts for:
 - `webhook`
 - `internal`
 
-Concrete matching is implemented for ledger events in this pass. The other sources are part of the schema contract but not yet live runtime surfaces.
+Phase 3 expands the substrate from ledger-only evaluation into a normalized event
+plane. Ledger, internal, and externally ingested webhook-shaped events can all be
+converted into the same event envelope, evaluated against active triggers, and
+recorded as durable `trigger_receipt` primitives.
+
+Those receipts are important because WorkGraph still does not auto-execute trigger
+effects in this pass. Instead it durably records:
+
+- which trigger matched
+- which normalized event produced the match
+- which planned follow-up actions were emitted
+- which of those actions were suppressed by policy
+- what replay-safe deduplication key prevents duplicate receipts for the same
+  trigger/event pair
 
 Kernel and CLI mutation paths append durable ledger entries for persisted coordination changes so trigger evaluation can observe real thread, mission, run, trigger, and checkpoint state transitions.
 Those mutation paths should flow through primitive-family domain mutation services that own lifecycle semantics, policy checks, audited writes, and future trigger hooks rather than composing store writes ad hoc at call sites.
@@ -576,7 +589,9 @@ That means:
 - evidence references the criteria it satisfies
 - completion is validated, not assumed
 
-Planned update actions and completion actions are durable follow-up intentions. They are not automatically executed in this foundation pass.
+Planned update actions, completion actions, and trigger-emitted action plans are
+durable follow-up intentions. They are not automatically executed in this
+foundation pass.
 
 ## Surface Model
 
@@ -601,9 +616,14 @@ Coordination commands now include:
 - `workgraph run start|complete|fail|cancel <run-id>` — transition run lifecycle state
 - `workgraph checkpoint --working-on ... --focus ...` — persist working context
 - `workgraph ledger [--last N]` — inspect recent immutable ledger entries
+- `workgraph trigger validate <trigger-id>` — validate one persisted trigger
+- `workgraph trigger replay [--last N]` — replay recent ledger entries through the trigger plane
+- `workgraph trigger ingest --source ... --event-id ... --event-name ...` — ingest a normalized internal or webhook-shaped event through the CLI
 
 `workgraph status` also surfaces graph hygiene (`graph_issues`, `orphan_nodes`)
-and thread evidence gaps in both human and JSON output.
+and thread evidence gaps in both human and JSON output. Phase 3 also adds trigger
+health, recent trigger receipts, and pending trigger action counts to those
+orientation surfaces.
 
 ## Delegation And Handoff
 

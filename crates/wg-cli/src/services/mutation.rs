@@ -4,6 +4,7 @@ use anyhow::{Context, bail};
 use wg_clock::RealClock;
 use wg_policy::{PolicyAction, PolicyContext, PolicyDecision, evaluate as evaluate_policy};
 use wg_store::{AuditedWriteRequest, StoredPrimitive, write_primitive_audited};
+use wg_trigger::ingest_ledger_entry;
 use wg_types::{ActorId, LedgerEntry, LedgerOp, Registry};
 
 use crate::app::AppContext;
@@ -61,13 +62,19 @@ impl<'a> PrimitiveMutationService<'a> {
         .await
         .with_context(|| format!("failed to create {primitive_type}/{primitive_id}"))?;
 
-        self.after_mutation(primitive).await?;
+        self.after_mutation(primitive, &ledger_entry).await?;
 
         Ok((path.as_path().display().to_string(), ledger_entry))
     }
 
-    async fn after_mutation(&self, _primitive: &StoredPrimitive) -> anyhow::Result<()> {
-        // Reserved for future generic trigger-aware follow-up hooks.
+    async fn after_mutation(
+        &self,
+        _primitive: &StoredPrimitive,
+        ledger_entry: &LedgerEntry,
+    ) -> anyhow::Result<()> {
+        ingest_ledger_entry(self.app.workspace(), ledger_entry)
+            .await
+            .context("failed to ingest ledger entry into trigger plane")?;
         Ok(())
     }
 }
