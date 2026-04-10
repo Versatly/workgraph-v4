@@ -9,9 +9,15 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 use wg_dispatch::Run;
-use wg_orientation::{GraphIssue, GraphOrphan, RecentActivity, ThreadEvidenceGap, WorkspaceBrief};
+use wg_orientation::{
+    GraphIssue, GraphOrphan, RecentActivity, ThreadEvidenceGap, TriggerHealth,
+    TriggerReceiptSummary, WorkspaceBrief,
+};
 use wg_store::StoredPrimitive;
-use wg_types::{LedgerEntry, ThreadPrimitive, WorkgraphConfig};
+use wg_types::{
+    EventEnvelope, LedgerEntry, ThreadPrimitive, TriggerPrimitive, TriggerReceiptPrimitive,
+    WorkgraphConfig,
+};
 
 /// Stable schema version for the JSON agent contract emitted by the CLI.
 pub const AGENT_SCHEMA_VERSION: &str = "v1";
@@ -48,6 +54,12 @@ pub enum CommandOutput {
     RunCreate(RunCreateOutput),
     /// Result of run lifecycle transitions.
     RunLifecycle(RunLifecycleOutput),
+    /// Result of `workgraph trigger validate`.
+    TriggerValidate(TriggerValidateOutput),
+    /// Result of `workgraph trigger replay`.
+    TriggerReplay(TriggerReplayOutput),
+    /// Result of `workgraph trigger ingest`.
+    TriggerIngest(TriggerIngestOutput),
 }
 
 /// Output model produced by the `init` command.
@@ -84,6 +96,12 @@ pub struct StatusOutput {
     pub orphan_nodes: Vec<GraphOrphan>,
     /// Threads that cannot yet complete because required evidence is missing.
     pub thread_evidence_gaps: Vec<ThreadEvidenceGap>,
+    /// Health and replay metadata for active triggers.
+    pub trigger_health: Vec<TriggerHealth>,
+    /// Recent durable trigger receipts.
+    pub recent_trigger_receipts: Vec<TriggerReceiptSummary>,
+    /// Count of planned trigger actions still pending execution.
+    pub pending_trigger_actions: usize,
 }
 
 /// Output model produced by the `claim` command.
@@ -227,6 +245,44 @@ pub struct RunLifecycleOutput {
     pub run: Run,
 }
 
+/// Output model produced by `workgraph trigger validate`.
+#[derive(Debug, Serialize)]
+pub struct TriggerValidateOutput {
+    /// Validated trigger reference.
+    pub reference: String,
+    /// Loaded trigger after validation.
+    pub trigger: TriggerPrimitive,
+    /// Whether validation succeeded.
+    pub valid: bool,
+}
+
+/// One replay result emitted while replaying ledger events.
+#[derive(Debug, Serialize)]
+pub struct TriggerReplayResult {
+    /// The replayed event envelope.
+    pub event: EventEnvelope,
+    /// Durable receipts emitted for the replayed event.
+    pub receipts: Vec<TriggerReceiptPrimitive>,
+}
+
+/// Output model produced by `workgraph trigger replay`.
+#[derive(Debug, Serialize)]
+pub struct TriggerReplayOutput {
+    /// Number of events replayed from the ledger.
+    pub events_replayed: usize,
+    /// Replay results in chronological order.
+    pub results: Vec<TriggerReplayResult>,
+}
+
+/// Output model produced by `workgraph trigger ingest`.
+#[derive(Debug, Serialize)]
+pub struct TriggerIngestOutput {
+    /// The normalized ingested event.
+    pub event: EventEnvelope,
+    /// Durable receipts emitted for the ingested event.
+    pub receipts: Vec<TriggerReceiptPrimitive>,
+}
+
 /// Output model produced by the `query` command.
 #[derive(Debug, Serialize)]
 pub struct QueryOutput {
@@ -304,6 +360,9 @@ impl CommandOutput {
                 "Cancelled" => "run_cancel",
                 _ => "run_lifecycle",
             },
+            Self::TriggerValidate(_) => "trigger_validate",
+            Self::TriggerReplay(_) => "trigger_replay",
+            Self::TriggerIngest(_) => "trigger_ingest",
         }
     }
 
@@ -328,6 +387,9 @@ impl CommandOutput {
             Self::Show(output) => serde_json::to_value(output),
             Self::RunCreate(output) => serde_json::to_value(output),
             Self::RunLifecycle(output) => serde_json::to_value(output),
+            Self::TriggerValidate(output) => serde_json::to_value(output),
+            Self::TriggerReplay(output) => serde_json::to_value(output),
+            Self::TriggerIngest(output) => serde_json::to_value(output),
         }
         .map_err(Into::into)
     }
@@ -350,6 +412,7 @@ impl CommandOutput {
             Self::Status(_) => vec![
                 "workgraph brief".to_owned(),
                 "workgraph query org".to_owned(),
+                "workgraph trigger replay --last 10".to_owned(),
             ],
             Self::Claim(output) => vec![
                 format!("workgraph show thread/{}", output.thread.id),
@@ -376,6 +439,7 @@ impl CommandOutput {
                 "workgraph schema".to_owned(),
                 "workgraph brief".to_owned(),
                 "workgraph create org --title \"<title>\"".to_owned(),
+                "workgraph trigger validate <trigger-id>".to_owned(),
             ],
             Self::Schema(_) => vec![
                 "workgraph capabilities".to_owned(),
@@ -425,6 +489,21 @@ impl CommandOutput {
                     "workgraph ledger --last 10".to_owned(),
                 ],
             },
+            Self::TriggerValidate(output) => vec![
+                format!("workgraph show trigger/{}", output.trigger.id),
+                "workgraph status".to_owned(),
+                "workgraph trigger replay --last 10".to_owned(),
+            ],
+            Self::TriggerReplay(_) => vec![
+                "workgraph status".to_owned(),
+                "workgraph query trigger_receipt".to_owned(),
+                "workgraph trigger replay --last 20".to_owned(),
+            ],
+            Self::TriggerIngest(_) => vec![
+                "workgraph status".to_owned(),
+                "workgraph query trigger_receipt".to_owned(),
+                "workgraph trigger replay --last 10".to_owned(),
+            ],
         }
     }
 }

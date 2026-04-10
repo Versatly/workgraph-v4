@@ -8,6 +8,7 @@ authors.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+chrono.workspace = true
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -24,6 +25,7 @@ wg-paths = { path = "../wg-paths" }
 wg-policy = { path = "../wg-policy" }
 wg-registry = { path = "../wg-registry" }
 wg-store = { path = "../wg-store" }
+wg-trigger = { path = "../wg-trigger" }
 wg-error = { path = "../wg-error" }
 wg-types = { path = "../wg-types" }
 

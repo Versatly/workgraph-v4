@@ -118,6 +118,11 @@ fn fix_for_clap_error(command: Option<&str>, _error: &clap::Error) -> String {
         Some("create") => "workgraph create <type> --title \"<title>\" --field key=value",
         Some("query") => "workgraph query <type> --filter key=value",
         Some("show") => "workgraph show <type>/<id>",
+        Some("trigger_validate") => "workgraph trigger validate <trigger-id>",
+        Some("trigger_replay") => "workgraph trigger replay --last <n>",
+        Some("trigger_ingest") => {
+            "workgraph trigger ingest --source <internal|webhook> --event-id <id> --event-name <name>"
+        }
         Some("brief") => "workgraph brief --lens workspace",
         Some("schema") => "workgraph schema <type>",
         Some("capabilities") => "workgraph capabilities",
@@ -165,6 +170,11 @@ fn default_fix(command: Option<&str>) -> &'static str {
         Some("create") => "workgraph create <type> --title \"<title>\"",
         Some("query") => "workgraph query <type>",
         Some("show") => "workgraph show <type>/<id>",
+        Some("trigger_validate") => "workgraph trigger validate <trigger-id>",
+        Some("trigger_replay") => "workgraph trigger replay --last <n>",
+        Some("trigger_ingest") => {
+            "workgraph trigger ingest --source <internal|webhook> --event-id <id> --event-name <name>"
+        }
         _ => "workgraph --help",
     }
 }

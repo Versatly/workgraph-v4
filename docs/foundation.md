@@ -14,7 +14,7 @@ Execution tools can do work, but they do not naturally preserve the organization
 - durable actor lineage and delegation context
 - durable event history and planned downstream actions
 
-In this repo, "context graph" means a typed graph built from durable primitives and provenanced edges. It does not mean a fuzzy wiki-link memory map. Likewise, the current trigger substrate evaluates durable events into planned follow-up actions; live execution loops are a later layer.
+In this repo, "context graph" means a typed graph built from durable primitives and provenanced edges. It does not mean a fuzzy wiki-link memory map. Likewise, the current trigger substrate evaluates normalized durable events into durable trigger receipts and planned follow-up actions; live execution loops are a later layer.
 
 ## Product Boundary
 
@@ -23,7 +23,7 @@ WorkGraph is:
 - the durable system of record for organizational context and agentic work
 - the durable coordination layer for missions, threads, runs, checkpoints, and evidence-backed handoffs
 - the typed graph and immutable ledger that heterogeneous agents can consult and act through
-- the durable trigger evaluation substrate that turns events into planned actions
+- the durable trigger evaluation substrate that turns events into planned actions and durable trigger receipts
 
 WorkGraph is not:
 
@@ -59,6 +59,7 @@ Specifically:
 - explicit domain mutation services per primitive family so semantic checks,
   policy, audited writes, and future hooks share one contract
 - trigger evaluation over durable events
+- durable trigger receipts with replay-safe deduplication
 - cross-agent continuity through missions, threads, runs, checkpoints, and action plans
 
 ## Deployment Modes

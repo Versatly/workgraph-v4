@@ -1,8 +1,9 @@
 #![forbid(unsafe_code)]
 
-//! HTTP webhook adapter placeholder.
+//! Normalized webhook event ingress helpers for the trigger plane.
 
 use wg_adapter_api::{AdapterRequest, AdapterStatus, RuntimeAdapter};
+use wg_types::{EventEnvelope, EventSourceKind};
 
 /// Placeholder adapter for webhook-triggered runs.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -16,6 +17,13 @@ impl WebhookAdapter {
     #[must_use]
     pub const fn new() -> Self {
         Self
+    }
+
+    /// Normalizes a provider webhook payload into a trigger-plane event envelope.
+    #[must_use]
+    pub fn normalize_event(self, event: EventEnvelope) -> EventEnvelope {
+        debug_assert_eq!(event.source, EventSourceKind::Webhook);
+        event
     }
 }
 

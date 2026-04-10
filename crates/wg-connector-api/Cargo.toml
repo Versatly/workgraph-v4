@@ -7,3 +7,5 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+chrono.workspace = true
+wg-types = { path = "../wg-types" }

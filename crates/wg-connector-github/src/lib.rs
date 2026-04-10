@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 
-//! GitHub connector placeholder for webhooks and reconciliation.
+//! GitHub connector placeholder for trigger-plane event normalization.
 
 use wg_connector_api::{EventSource, ExternalEvent, PollStatus, ReconcileStatus, Reconciler};
 
-/// Placeholder connector for GitHub-originated events.
+/// Placeholder connector for GitHub-originated trigger events.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct GithubConnector;
 
@@ -34,7 +34,10 @@ impl Reconciler for GithubConnector {
         Self::KIND
     }
 
-    fn reconcile(&self, _event: ExternalEvent<'_>) -> ReconcileStatus {
-        ReconcileStatus::Skipped
+    fn reconcile(&self, event: ExternalEvent) -> ReconcileStatus {
+        match event.event_name.as_str() {
+            "pull_request" | "push" => ReconcileStatus::Applied,
+            _ => ReconcileStatus::Skipped,
+        }
     }
 }

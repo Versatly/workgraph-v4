@@ -15,10 +15,12 @@ mod tier_two;
 
 pub use config::WorkgraphConfig;
 pub use coordination::{
-    CheckpointPrimitive, ConversationMessage, CoordinationAction, EventPattern, EventSourceKind,
-    EvidenceItem, GraphEdgeKind, GraphEdgeReference, GraphEdgeSource, LineageMode, MessageKind,
-    MissionMilestone, MissionPrimitive, MissionStatus, RunPrimitive, ThreadExitCriterion,
-    ThreadPrimitive, TriggerActionPlan, TriggerPrimitive, TriggerStatus,
+    CheckpointPrimitive, ConversationMessage, CoordinationAction, EventEnvelope, EventPattern,
+    EventSourceKind, EvidenceItem, GraphEdgeKind, GraphEdgeReference, GraphEdgeSource, LineageMode,
+    MessageKind, MissionMilestone, MissionPrimitive, MissionStatus, RunPrimitive,
+    ThreadExitCriterion, ThreadPrimitive, TriggerActionOutcome, TriggerActionPlan,
+    TriggerPlanDecision, TriggerPrimitive, TriggerReceiptPrimitive, TriggerStatus,
+    TriggerSubscriptionState,
 };
 pub use identity::{ActorId, NodeId, WorkspaceId};
 pub use ledger::{LedgerEntry, LedgerOp};

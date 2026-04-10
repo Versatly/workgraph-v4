@@ -66,6 +66,10 @@ fn build_dynamic_suggestions(type_counts: &BTreeMap<String, usize>) -> Vec<Strin
         }
     }
 
+    if type_counts.get("trigger").copied().unwrap_or(0) > 0 {
+        suggestions.push("workgraph trigger replay".to_owned());
+    }
+
     suggestions.push("workgraph status".to_owned());
     suggestions
 }

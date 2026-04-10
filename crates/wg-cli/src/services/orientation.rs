@@ -25,6 +25,7 @@ pub async fn build_workspace_brief(app: &AppContext) -> anyhow::Result<Workspace
         ),
         primitive_counts_section(&workspace_status),
         recent_ledger_section(&workspace_status),
+        trigger_plane_section(&workspace_status),
         next_actions_section(),
     ];
 
@@ -42,6 +43,16 @@ pub async fn build_workspace_brief(app: &AppContext) -> anyhow::Result<Workspace
             .take(10)
             .cloned()
             .collect(),
+        trigger_health: workspace_status.trigger_health.clone(),
+        trigger_receipts: workspace_status.recent_trigger_receipts.clone(),
+        trigger_planned_actions: wg_orientation::TriggerPlannedActionSummary {
+            pending_count: workspace_status.pending_trigger_actions,
+            suppressed_count: workspace_status
+                .recent_trigger_receipts
+                .iter()
+                .map(|receipt| receipt.suppressed_plans)
+                .sum(),
+        },
         warnings: build_warnings(&workspace_status),
     })
 }
@@ -117,6 +128,41 @@ fn next_actions_section() -> BriefSection {
     )
 }
 
+fn trigger_plane_section(workspace_status: &WorkspaceStatus) -> BriefSection {
+    let mut items = workspace_status
+        .trigger_health
+        .iter()
+        .map(|trigger| BriefItem {
+            kind: "trigger".to_owned(),
+            reference: Some(trigger.trigger_reference.clone()),
+            title: trigger.trigger_reference.clone(),
+            detail: Some(format!(
+                "status={} last_event={} last_receipt={}",
+                trigger.status,
+                trigger.last_event_id.as_deref().unwrap_or("none"),
+                trigger.last_receipt_id.as_deref().unwrap_or("none")
+            )),
+        })
+        .collect::<Vec<_>>();
+    if let Some(receipt) = workspace_status.recent_trigger_receipts.first() {
+        items.push(BriefItem {
+            kind: "trigger_receipt".to_owned(),
+            reference: Some(receipt.receipt_reference.clone()),
+            title: receipt.trigger_reference.clone(),
+            detail: Some(format!(
+                "event={} pending={} suppressed={}",
+                receipt
+                    .event_name
+                    .clone()
+                    .unwrap_or_else(|| receipt.event_source.clone()),
+                receipt.pending_plans,
+                receipt.suppressed_plans
+            )),
+        });
+    }
+    section("trigger_plane", "Trigger plane", items)
+}
+
 fn build_warnings(workspace_status: &WorkspaceStatus) -> Vec<String> {
     let mut warnings = Vec::new();
 
@@ -132,6 +178,14 @@ fn build_warnings(workspace_status: &WorkspaceStatus) -> Vec<String> {
             "Graph issue: {} -> {} [{} via {}]",
             issue.source_reference, issue.target_reference, issue.kind, issue.provenance
         ));
+    }
+    for trigger in workspace_status.trigger_health.iter().take(5) {
+        if trigger.status == "draft" || trigger.status == "paused" || trigger.status == "disabled" {
+            warnings.push(format!(
+                "Trigger status: {} is {}",
+                trigger.trigger_reference, trigger.status
+            ));
+        }
     }
 
     warnings

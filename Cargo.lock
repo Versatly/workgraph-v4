@@ -975,6 +975,7 @@ name = "wg-adapter-webhook"
 version = "0.1.0"
 dependencies = [
  "wg-adapter-api",
+ "wg-types",
 ]
 
 [[package]]
@@ -993,6 +994,7 @@ name = "wg-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "serde",
  "serde_json",
@@ -1011,6 +1013,7 @@ dependencies = [
  "wg-registry",
  "wg-store",
  "wg-thread",
+ "wg-trigger",
  "wg-types",
 ]
 
@@ -1024,6 +1027,10 @@ dependencies = [
 [[package]]
 name = "wg-connector-api"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+ "wg-types",
+]
 
 [[package]]
 name = "wg-connector-github"
@@ -1046,6 +1053,7 @@ dependencies = [
  "wg-paths",
  "wg-policy",
  "wg-store",
+ "wg-trigger",
  "wg-types",
 ]
 
@@ -1129,6 +1137,7 @@ dependencies = [
  "wg-policy",
  "wg-store",
  "wg-thread",
+ "wg-trigger",
  "wg-types",
 ]
 
@@ -1160,6 +1169,7 @@ dependencies = [
  "wg-policy",
  "wg-store",
  "wg-thread",
+ "wg-trigger",
  "wg-types",
 ]
 
@@ -1232,6 +1242,7 @@ dependencies = [
  "wg-paths",
  "wg-policy",
  "wg-store",
+ "wg-trigger",
  "wg-types",
 ]
 
@@ -1243,8 +1254,10 @@ version = "0.1.0"
 name = "wg-trigger"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "serde",
  "serde_yaml",
+ "sha2",
  "tempfile",
  "tokio",
  "wg-clock",

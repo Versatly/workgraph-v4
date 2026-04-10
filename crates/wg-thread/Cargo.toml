@@ -14,6 +14,7 @@ wg-error = { path = "../wg-error" }
 wg-paths = { path = "../wg-paths" }
 wg-policy = { path = "../wg-policy" }
 wg-store = { path = "../wg-store" }
+wg-trigger = { path = "../wg-trigger" }
 wg-types = { path = "../wg-types" }
 
 [dev-dependencies]

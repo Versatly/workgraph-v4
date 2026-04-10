@@ -13,9 +13,10 @@ mod schema;
 mod show;
 mod status;
 mod thread_complete;
+mod trigger;
 
 use crate::app::AppContext;
-use crate::args::{Command, RunCommand};
+use crate::args::{Command, RunCommand, TriggerCommand};
 use crate::output::CommandOutput;
 
 /// Executes the selected CLI command using the shared application context.
@@ -109,6 +110,38 @@ pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<Comma
             )),
             RunCommand::Cancel { run_id, summary } => Ok(CommandOutput::RunLifecycle(
                 run::cancel(app, &run_id, summary.as_deref()).await?,
+            )),
+        },
+        Command::Trigger { command } => match command {
+            TriggerCommand::Validate { reference } => Ok(CommandOutput::TriggerValidate(
+                trigger::validate(app, &reference).await?,
+            )),
+            TriggerCommand::Replay { last } => Ok(CommandOutput::TriggerReplay(
+                trigger::replay(app, last).await?,
+            )),
+            TriggerCommand::Ingest {
+                source,
+                event_id,
+                event_name,
+                provider,
+                fields,
+            } => Ok(CommandOutput::TriggerIngest(
+                trigger::ingest(
+                    app,
+                    trigger::TriggerIngestArgs {
+                        source,
+                        event_id: event_id.unwrap_or_else(|| "manual-ingest".to_owned()),
+                        event_name,
+                        provider,
+                        actor_id: trigger::field_value(&fields, "actor_id"),
+                        subject_reference: trigger::field_value(&fields, "subject_reference"),
+                        primitive_type: trigger::field_value(&fields, "primitive_type"),
+                        primitive_id: trigger::field_value(&fields, "primitive_id"),
+                        op: trigger::field_value(&fields, "op"),
+                        fields,
+                    },
+                )
+                .await?,
             )),
         },
     }

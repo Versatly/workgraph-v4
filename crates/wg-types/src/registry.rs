@@ -534,7 +534,7 @@ fn builtin_types() -> Vec<PrimitiveType> {
         builtin_type(
             "trigger",
             "triggers",
-            "Reactive automation definition driven by ledger events.",
+            "Reactive automation definition driven by normalized event evaluation.",
             vec![
                 field("id", "string", "Stable trigger identifier", true, false),
                 field("title", "string", "Trigger title", true, false),
@@ -556,6 +556,119 @@ fn builtin_types() -> Vec<PrimitiveType> {
                     "action_plans",
                     "object[]",
                     "Durable action plans emitted by the trigger",
+                    false,
+                    true,
+                ),
+                field(
+                    "subscription_state",
+                    "object",
+                    "Persistent replay and health metadata for the trigger subscription",
+                    false,
+                    false,
+                ),
+            ],
+        ),
+        builtin_type(
+            "trigger_receipt",
+            "trigger_receipts",
+            "Durable receipt for one matched trigger event and its planned follow-up actions.",
+            vec![
+                field(
+                    "id",
+                    "string",
+                    "Stable trigger receipt identifier",
+                    true,
+                    false,
+                ),
+                field("title", "string", "Trigger receipt title", true, false),
+                field(
+                    "trigger_id",
+                    "string",
+                    "Trigger identifier that matched the event",
+                    true,
+                    false,
+                ),
+                field(
+                    "trigger_title",
+                    "string",
+                    "Trigger title at receipt creation time",
+                    true,
+                    false,
+                ),
+                field(
+                    "event_id",
+                    "string",
+                    "Stable matched event identifier",
+                    true,
+                    false,
+                ),
+                field(
+                    "event_source",
+                    "event_source_kind",
+                    "Source kind that produced the matched event",
+                    true,
+                    false,
+                ),
+                field(
+                    "event_name",
+                    "string",
+                    "Stable matched event name when known",
+                    false,
+                    false,
+                ),
+                field(
+                    "provider",
+                    "string",
+                    "Provider or emitter for webhook/internal events",
+                    false,
+                    false,
+                ),
+                field(
+                    "actor_id",
+                    "string",
+                    "Actor associated with the matched event",
+                    false,
+                    false,
+                ),
+                field(
+                    "subject_reference",
+                    "string",
+                    "Durable subject reference associated with the event",
+                    false,
+                    false,
+                ),
+                field(
+                    "occurred_at",
+                    "datetime",
+                    "Timestamp when the matched event occurred",
+                    true,
+                    false,
+                ),
+                field(
+                    "dedup_key",
+                    "string",
+                    "Replay-safe trigger/event deduplication key",
+                    true,
+                    false,
+                ),
+                field(
+                    "field_names",
+                    "string[]",
+                    "Normalized field names observed on the event",
+                    false,
+                    true,
+                ),
+                field(
+                    "payload_fields",
+                    "object",
+                    "Normalized payload values retained for inspection and replay",
+                    false,
+                    false,
+                ),
+                field(
+                    "action_outcomes",
+                    "object[]",
+                    "Durable action outcomes recorded for this receipt",
                     false,
                     true,
                 ),
@@ -643,7 +756,7 @@ mod tests {
     fn builtin_registry_contains_all_required_types() {
         let registry = Registry::builtins();
 
-        assert_eq!(registry.types.len(), 17);
+        assert_eq!(registry.types.len(), 18);
         assert_eq!(
             registry
                 .get_type("person")
@@ -660,6 +773,7 @@ mod tests {
         );
         assert!(registry.get_type("thread").is_some());
         assert!(registry.get_type("trigger").is_some());
+        assert!(registry.get_type("trigger_receipt").is_some());
         assert!(registry.get_type("checkpoint").is_some());
     }
 
@@ -670,6 +784,6 @@ mod tests {
         let decoded: Registry = serde_json::from_str(&json).expect("registry should deserialize");
 
         assert_eq!(decoded, registry);
-        assert_eq!(decoded.list_types().len(), 17);
+        assert_eq!(decoded.list_types().len(), 18);
     }
 }

@@ -9,6 +9,7 @@ use wg_store::{
     AuditedWriteRequest, PrimitiveFrontmatter, StoredPrimitive, read_primitive,
     write_primitive_audited_now,
 };
+use wg_trigger::ingest_ledger_entry;
 use wg_types::{ActorId, FieldDefinition, LedgerOp, PrimitiveType, Registry};
 
 /// Domain mutation service for checkpoint persistence.
@@ -73,14 +74,15 @@ impl<'a> CheckpointMutationService<'a> {
             .with_note(format!("Saved checkpoint '{}'", id));
 
         self.authorize(&id, &audit).await?;
-        write_primitive_audited_now(
+        let (_, ledger_entry) = write_primitive_audited_now(
             self.workspace,
             &checkpoint_registry(),
             &primitive,
             audit.clone(),
         )
         .await?;
-        self.after_mutation(&primitive, &audit).await?;
+        self.after_mutation(&primitive, &audit, &ledger_entry)
+            .await?;
         read_primitive(self.workspace, "checkpoint", &id).await
     }
 
@@ -106,8 +108,9 @@ impl<'a> CheckpointMutationService<'a> {
         self,
         _primitive: &StoredPrimitive,
         _audit: &AuditedWriteRequest,
+        ledger_entry: &wg_types::LedgerEntry,
     ) -> Result<()> {
-        // Reserved for future trigger-aware follow-up hooks.
+        ingest_ledger_entry(self.workspace, ledger_entry).await?;
         Ok(())
     }
 }

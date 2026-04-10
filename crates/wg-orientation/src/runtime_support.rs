@@ -4,9 +4,13 @@ use wg_ledger::{LedgerCursor, LedgerReader};
 use wg_mission::Mission;
 use wg_paths::WorkspacePath;
 use wg_thread::Thread;
-use wg_types::{GraphEdgeKind, GraphEdgeSource, LedgerEntry};
+use wg_trigger::{Trigger, TriggerReceipt};
+use wg_types::{GraphEdgeKind, GraphEdgeSource, LedgerEntry, TriggerPlanDecision};
 
-use crate::{GraphOrphan, RecentActivity, ThreadEvidenceGap};
+use crate::{
+    GraphOrphan, RecentActivity, ThreadEvidenceGap, TriggerHealth, TriggerPlannedActionSummary,
+    TriggerReceiptSummary,
+};
 
 pub(crate) async fn load_recent_activity(
     workspace: &WorkspacePath,
@@ -53,6 +57,97 @@ pub(crate) async fn load_missions(workspace: &WorkspacePath) -> Result<Vec<Missi
 
 pub(crate) async fn load_runs(workspace: &WorkspacePath) -> Result<Vec<Run>> {
     wg_dispatch::list_runs(workspace).await
+}
+
+pub(crate) async fn load_triggers(workspace: &WorkspacePath) -> Result<Vec<Trigger>> {
+    wg_trigger::list_triggers(workspace).await
+}
+
+pub(crate) async fn load_trigger_receipts(
+    workspace: &WorkspacePath,
+) -> Result<Vec<TriggerReceipt>> {
+    wg_trigger::list_trigger_receipts(workspace).await
+}
+
+pub(crate) async fn load_trigger_health(workspace: &WorkspacePath) -> Result<Vec<TriggerHealth>> {
+    Ok(load_triggers(workspace)
+        .await?
+        .into_iter()
+        .map(|trigger| TriggerHealth {
+            trigger_reference: format!("trigger/{}", trigger.id),
+            status: trigger.status.as_str().to_owned(),
+            last_evaluated_at: trigger.subscription_state.as_ref().and_then(|state| {
+                state
+                    .last_evaluated_at
+                    .map(|timestamp| timestamp.to_rfc3339())
+            }),
+            last_matched_at: trigger.subscription_state.as_ref().and_then(|state| {
+                state
+                    .last_matched_at
+                    .map(|timestamp| timestamp.to_rfc3339())
+            }),
+            last_event_id: trigger
+                .subscription_state
+                .as_ref()
+                .and_then(|state| state.last_event_id.clone()),
+            last_receipt_id: trigger
+                .subscription_state
+                .as_ref()
+                .and_then(|state| state.last_receipt_id.clone()),
+        })
+        .collect())
+}
+
+pub(crate) async fn load_recent_trigger_receipts(
+    workspace: &WorkspacePath,
+    limit: usize,
+) -> Result<Vec<TriggerReceiptSummary>> {
+    Ok(load_trigger_receipts(workspace)
+        .await?
+        .into_iter()
+        .rev()
+        .take(limit)
+        .map(|receipt| {
+            let pending_plans = receipt
+                .action_outcomes
+                .iter()
+                .filter(|outcome| outcome.decision == TriggerPlanDecision::Allow)
+                .count();
+            let suppressed_plans = receipt
+                .action_outcomes
+                .iter()
+                .filter(|outcome| outcome.decision == TriggerPlanDecision::Deny)
+                .count();
+            TriggerReceiptSummary {
+                receipt_reference: format!("trigger_receipt/{}", receipt.id),
+                trigger_reference: format!("trigger/{}", receipt.trigger_id),
+                event_source: receipt.event_source.as_str().to_owned(),
+                event_name: receipt.event_name,
+                subject_reference: receipt.subject_reference,
+                occurred_at: receipt.occurred_at.to_rfc3339(),
+                pending_plans,
+                suppressed_plans,
+            }
+        })
+        .collect())
+}
+
+pub(crate) async fn pending_trigger_actions(
+    workspace: &WorkspacePath,
+) -> Result<TriggerPlannedActionSummary> {
+    let mut summary = TriggerPlannedActionSummary {
+        pending_count: 0,
+        suppressed_count: 0,
+    };
+    for receipt in load_trigger_receipts(workspace).await? {
+        for outcome in receipt.action_outcomes {
+            match outcome.decision {
+                TriggerPlanDecision::Allow => summary.pending_count += 1,
+                TriggerPlanDecision::Deny => summary.suppressed_count += 1,
+            }
+        }
+    }
+    Ok(summary)
 }
 
 pub(crate) fn entry_to_recent_activity(entry: LedgerEntry) -> RecentActivity {
