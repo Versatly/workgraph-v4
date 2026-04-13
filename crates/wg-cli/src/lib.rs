@@ -40,9 +40,6 @@ pub async fn run_from_env() -> anyhow::Result<()> {
             args::Command::Mcp {
                 command: args::McpCommand::Serve,
             } => {
-                let output =
-                    output::CommandOutput::Serve(commands::serve::describe_mcp(&app));
-                println!("{}", output::render_success(&output, json_output)?);
                 return commands::serve::run_mcp(&app).await;
             }
             _ => {}
