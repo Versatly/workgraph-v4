@@ -599,6 +599,22 @@ The CLI (`wg-cli`) is the primary agent interface. An agent on any machine with 
 
 MCP (`wg-mcp`) and API (`wg-api`) are secondary surfaces for cloud contexts. Both call the same kernel operations — neither owns business logic.
 
+The current remote-access pass now includes a minimal hosted/dev shape for those
+secondary surfaces:
+
+- `workgraph serve --listen ... --token ...` starts a hosted HTTP adapter over one workspace
+- `workgraph connect --server ... --token ... --actor-id ...` points a local CLI profile at that hosted workspace
+- `workgraph whoami` shows the active local or hosted actor identity
+- `workgraph actor register|list|show` provides first-class actor registration and inspection
+- `workgraph mcp serve` starts the MCP stdio adapter for tool-hosted/cloud agents
+
+Those surfaces are intentionally thin and local/developer-oriented in this pass:
+
+- one workspace per served process
+- bearer-token auth only
+- no org-grade scoped credentials or service-account rotation yet
+- no separate business logic path outside the CLI/kernel contracts
+
 Agent-facing CLI expectations:
 
 - structured JSON envelope on every command (`--json`)
@@ -610,6 +626,11 @@ Agent-facing CLI expectations:
 
 Coordination commands now include:
 
+- `workgraph connect --server ... --token ... --actor-id ...` — bind a CLI profile to a hosted workspace
+- `workgraph whoami` — show the effective actor and hosted/local execution mode
+- `workgraph serve --listen ... --token ...` — expose one workspace over the hosted HTTP adapter
+- `workgraph actor register --type ... --id ... --title ...` — register a durable person or agent actor
+- `workgraph actor list|show ...` — inspect durable actor registrations
 - `workgraph claim <thread-id>` — claim and activate a thread
 - `workgraph complete <thread-id>` — complete a thread with evidence validation
 - `workgraph run create --title ... --thread-id ...` — create a bounded run receipt for one thread
@@ -619,6 +640,7 @@ Coordination commands now include:
 - `workgraph trigger validate <trigger-id>` — validate one persisted trigger
 - `workgraph trigger replay [--last N]` — replay recent ledger entries through the trigger plane
 - `workgraph trigger ingest --source ... --event-id ... --event-name ...` — ingest a normalized internal or webhook-shaped event through the CLI
+- `workgraph mcp serve` — expose the CLI-first command surface as MCP stdio tools
 
 `workgraph status` also surfaces graph hygiene (`graph_issues`, `orphan_nodes`)
 and thread evidence gaps in both human and JSON output. Phase 3 also adds trigger
