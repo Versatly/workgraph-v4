@@ -16,6 +16,7 @@ use std::path::Path;
 use anyhow::{Context, anyhow};
 use app::AppContext;
 use args::{OutputFormat, parse_cli};
+use wg_types::{RemoteCommandRequest, RemoteCommandResponse};
 
 /// Parses CLI arguments from the current process, executes the requested command, and prints the result.
 ///
@@ -76,6 +77,16 @@ where
         Ok(cli) => {
             let command_name = cli.command.name();
             let app = AppContext::new(workspace_root.as_ref().to_path_buf());
+            if cli.command.can_execute_remotely() {
+                if let Some(remote_response) =
+                    try_execute_remote(&app, &args, cli.json || cli.format.is_json()).await?
+                {
+                    return Ok(ExecutionContract {
+                        rendered: remote_response.rendered,
+                        success: remote_response.success,
+                    });
+                }
+            }
             match commands::execute(&app, cli.command).await {
                 Ok(output) => Ok(ExecutionContract {
                     rendered: output::render_success(&output, cli.json || cli.format.is_json())?,
@@ -106,6 +117,49 @@ where
                 success: false,
             })
         }
+    }
+}
+
+async fn try_execute_remote(
+    app: &AppContext,
+    args: &[OsString],
+    json_output: bool,
+) -> anyhow::Result<Option<RemoteCommandResponse>> {
+    let Some(config) = app.try_load_config().await? else {
+        return Ok(None);
+    };
+    let Some(remote) = config.remote else {
+        return Ok(None);
+    };
+
+    let request = RemoteCommandRequest {
+        args: args
+            .iter()
+            .map(|value| value.to_string_lossy().into_owned())
+            .collect(),
+        actor_id: Some(remote.actor_id.to_string()),
+    };
+
+    let endpoint = format!("{}/v1/execute", remote.server_url.trim_end_matches('/'));
+    let response = reqwest::Client::new()
+        .post(endpoint)
+        .bearer_auth(remote.auth_token)
+        .json(&request)
+        .send()
+        .await
+        .context("failed to reach hosted WorkGraph server")?;
+    let status = response.status();
+    let remote_response = response
+        .json::<RemoteCommandResponse>()
+        .await
+        .context("failed to decode hosted WorkGraph response")?;
+
+    if status.is_success() {
+        Ok(Some(remote_response))
+    } else if json_output {
+        Ok(Some(remote_response))
+    } else {
+        Err(anyhow!(remote_response.rendered))
     }
 }
 

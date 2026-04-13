@@ -9,7 +9,10 @@ use crate::output::StatusOutput;
 ///
 /// Returns an error when workspace metadata, ledger, or orientation data cannot be read.
 pub async fn handle(app: &AppContext) -> anyhow::Result<StatusOutput> {
-    let config = app.load_config().await?;
+    let mut config = app.load_config().await?;
+    if let Some(actor) = app.actor_override() {
+        config.default_actor_id = Some(actor.clone());
+    }
     let workspace_status = wg_orientation::status(app.workspace()).await?;
     let mut entries = app.read_ledger_entries().await?;
     entries.reverse();

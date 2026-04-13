@@ -10,7 +10,10 @@ use crate::app::AppContext;
 ///
 /// Returns an error when workspace metadata, primitives, or ledger entries cannot be read.
 pub async fn build_workspace_brief(app: &AppContext) -> anyhow::Result<WorkspaceBrief> {
-    let config = app.load_config().await?;
+    let mut config = app.load_config().await?;
+    if let Some(actor) = app.actor_override() {
+        config.default_actor_id = Some(actor.clone());
+    }
     let workspace_status = wg_orientation::status(app.workspace()).await?;
     let sections = vec![
         section(

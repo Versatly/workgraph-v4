@@ -7,13 +7,14 @@ use tokio::fs;
 use wg_ledger::{LedgerCursor, LedgerReader};
 use wg_paths::WorkspacePath;
 use wg_registry::RuntimeRegistry;
-use wg_types::{LedgerEntry, Registry, WorkgraphConfig};
+use wg_types::{ActorId, LedgerEntry, Registry, WorkgraphConfig};
 
 /// Shared command context for operating on a single WorkGraph workspace.
 #[derive(Debug, Clone)]
 pub struct AppContext {
     root: PathBuf,
     workspace: WorkspacePath,
+    actor_override: Option<ActorId>,
 }
 
 impl AppContext {
@@ -23,6 +24,17 @@ impl AppContext {
         Self {
             workspace: WorkspacePath::new(root.clone()),
             root,
+            actor_override: None,
+        }
+    }
+
+    /// Creates a new application context with a per-request actor override.
+    #[must_use]
+    pub fn with_actor(root: PathBuf, actor_override: Option<ActorId>) -> Self {
+        Self {
+            workspace: WorkspacePath::new(root.clone()),
+            root,
+            actor_override,
         }
     }
 
@@ -36,6 +48,12 @@ impl AppContext {
     #[must_use]
     pub fn workspace(&self) -> &WorkspacePath {
         &self.workspace
+    }
+
+    /// Returns the per-request actor override when present.
+    #[must_use]
+    pub fn actor_override(&self) -> Option<&ActorId> {
+        self.actor_override.as_ref()
     }
 
     /// Returns the path to the hidden `.workgraph` metadata directory.
@@ -111,6 +129,22 @@ impl AppContext {
 
         serde_yaml::from_str(&encoded)
             .with_context(|| format!("failed to parse config file '{}'", path.display()))
+    }
+
+    /// Resolves the effective actor for writes, preferring a per-request override.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the persisted config cannot be loaded.
+    pub async fn effective_actor_id(&self) -> anyhow::Result<ActorId> {
+        if let Some(actor) = self.actor_override() {
+            return Ok(actor.clone());
+        }
+
+        let config = self.load_config().await?;
+        Ok(config
+            .default_actor_id
+            .unwrap_or_else(|| ActorId::new("cli")))
     }
 
     /// Reads every ledger entry currently recorded for the workspace.

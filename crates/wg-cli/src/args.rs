@@ -59,6 +59,56 @@ pub enum Command {
         after_help = "Examples:\n  workgraph init\n  workgraph --json init\n  workgraph --format json init"
     )]
     Init,
+    /// Connects the current directory to a hosted WorkGraph server profile.
+    #[command(
+        after_help = "Examples:\n  workgraph connect --server http://127.0.0.1:8787 --token secret --actor-id person:pedro\n  workgraph --json connect --server http://127.0.0.1:8787 --token secret --actor-id agent:cursor"
+    )]
+    Connect {
+        /// Hosted WorkGraph server base URL.
+        #[arg(long)]
+        server: String,
+        /// Bearer token used for authenticating remote requests.
+        #[arg(long)]
+        token: String,
+        /// Actor identifier to attribute remote work to.
+        #[arg(long = "actor-id")]
+        actor_id: String,
+    },
+    /// Shows the effective actor and connection mode for this CLI profile.
+    #[command(
+        after_help = "Examples:\n  workgraph whoami\n  workgraph --json whoami"
+    )]
+    Whoami,
+    /// Registers and inspects person/agent actors.
+    #[command(
+        after_help = "Examples:\n  workgraph actor register --type agent --id agent:cursor --title \"Cursor\" --runtime cursor --capability coding\n  workgraph actor list --type agent\n  workgraph actor show agent/agent:cursor"
+    )]
+    Actor {
+        /// Actor-specific subcommand to execute.
+        #[command(subcommand)]
+        command: ActorCommand,
+    },
+    /// Serves the WorkGraph MCP stdio adapter.
+    #[command(
+        after_help = "Examples:\n  workgraph mcp serve\n  workgraph mcp serve --help"
+    )]
+    Mcp {
+        /// MCP-specific subcommand to execute.
+        #[command(subcommand)]
+        command: McpCommand,
+    },
+    /// Serves the current workspace over the hosted HTTP API.
+    #[command(
+        after_help = "Examples:\n  workgraph serve --listen 127.0.0.1:8787 --token secret\n  workgraph serve --listen 0.0.0.0:8787 --token secret"
+    )]
+    Serve {
+        /// Socket address to bind the hosted server to.
+        #[arg(long)]
+        listen: String,
+        /// Bearer token required by remote clients.
+        #[arg(long)]
+        token: String,
+    },
     /// Produces an orientation summary for a human or agent entering the workspace.
     #[command(
         after_help = "Examples:\n  workgraph brief\n  workgraph brief --lens delivery\n  workgraph --json brief --lens workspace"
@@ -190,6 +240,9 @@ impl Command {
     pub const fn name(&self) -> &'static str {
         match self {
             Self::Init => "init",
+            Self::Connect { .. } => "connect",
+            Self::Whoami => "whoami",
+            Self::Serve { .. } => "serve",
             Self::Brief { .. } => "brief",
             Self::Status => "status",
             Self::Claim { .. } => "claim",
@@ -203,7 +256,18 @@ impl Command {
             Self::Show { .. } => "show",
             Self::Run { command } => command.name(),
             Self::Trigger { command } => command.name(),
+            Self::Actor { command } => command.name(),
+            Self::Mcp { command } => command.name(),
         }
+    }
+
+    /// Returns true when this command may be executed through a hosted remote profile.
+    #[must_use]
+    pub const fn can_execute_remotely(&self) -> bool {
+        !matches!(
+            self,
+            Self::Init | Self::Connect { .. } | Self::Whoami | Self::Serve { .. } | Self::Mcp { .. }
+        )
     }
 }
 
@@ -354,6 +418,91 @@ impl TriggerCommand {
             Self::Validate { .. } => "trigger_validate",
             Self::Replay { .. } => "trigger_replay",
             Self::Ingest { .. } => "trigger_ingest",
+        }
+    }
+}
+
+/// Supported `workgraph actor` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum ActorCommand {
+    /// Registers a new person or agent actor.
+    #[command(
+        after_help = "Examples:\n  workgraph actor register --type person --id person:pedro --title \"Pedro\" --email pedro@example.com\n  workgraph actor register --type agent --id agent:cursor --title \"Cursor\" --runtime cursor --capability coding"
+    )]
+    Register {
+        /// Actor primitive type to create (`person` or `agent`).
+        #[arg(long = "type")]
+        actor_type: String,
+        /// Stable actor identifier.
+        #[arg(long)]
+        id: String,
+        /// Human-readable actor title.
+        #[arg(long)]
+        title: String,
+        /// Preferred email for person actors.
+        #[arg(long)]
+        email: Option<String>,
+        /// Default runtime for agent actors.
+        #[arg(long)]
+        runtime: Option<String>,
+        /// Optional tracked parent actor above this agent.
+        #[arg(long = "parent-actor-id")]
+        parent_actor_id: Option<String>,
+        /// Optional root tracked actor for delegated lineages.
+        #[arg(long = "root-actor-id")]
+        root_actor_id: Option<String>,
+        /// Optional lineage mode (`tracked` or `opaque`).
+        #[arg(long = "lineage-mode")]
+        lineage_mode: Option<String>,
+        /// Advertised capabilities for an agent actor.
+        #[arg(long = "capability")]
+        capabilities: Vec<String>,
+    },
+    /// Lists registered actors.
+    #[command(
+        after_help = "Examples:\n  workgraph actor list\n  workgraph actor list --type agent\n  workgraph --json actor list"
+    )]
+    List {
+        /// Optional actor type filter (`person` or `agent`).
+        #[arg(long = "type")]
+        actor_type: Option<String>,
+    },
+    /// Shows a registered actor by reference.
+    #[command(
+        after_help = "Examples:\n  workgraph actor show person/person:pedro\n  workgraph --json actor show agent/agent:cursor"
+    )]
+    Show {
+        /// Actor reference in `<type>/<id>` form.
+        reference: String,
+    },
+}
+
+impl ActorCommand {
+    /// Returns the stable command name associated with this parsed actor subcommand.
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::Register { .. } => "actor_register",
+            Self::List { .. } => "actor_list",
+            Self::Show { .. } => "actor_show",
+        }
+    }
+}
+
+/// Supported `workgraph mcp` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum McpCommand {
+    /// Serves the MCP stdio adapter.
+    #[command(after_help = "Examples:\n  workgraph mcp serve")]
+    Serve,
+}
+
+impl McpCommand {
+    /// Returns the stable command name associated with this parsed MCP subcommand.
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::Serve => "mcp_serve",
         }
     }
 }

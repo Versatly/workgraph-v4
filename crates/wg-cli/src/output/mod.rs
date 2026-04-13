@@ -28,6 +28,12 @@ pub const AGENT_SCHEMA_VERSION: &str = "v1";
 pub enum CommandOutput {
     /// Result of `workgraph init`.
     Init(InitOutput),
+    /// Result of `workgraph connect`.
+    Connect(ConnectOutput),
+    /// Result of `workgraph whoami`.
+    Whoami(WhoamiOutput),
+    /// Result of `workgraph serve` and `workgraph mcp serve`.
+    Serve(ServeOutput),
     /// Result of `workgraph brief`.
     Brief(BriefOutput),
     /// Result of `workgraph status`.
@@ -60,6 +66,12 @@ pub enum CommandOutput {
     TriggerReplay(TriggerReplayOutput),
     /// Result of `workgraph trigger ingest`.
     TriggerIngest(TriggerIngestOutput),
+    /// Result of `workgraph actor register`.
+    ActorRegister(ActorRegisterOutput),
+    /// Result of `workgraph actor list`.
+    ActorList(ActorListOutput),
+    /// Result of `workgraph actor show`.
+    ActorShow(ActorShowOutput),
 }
 
 /// Output model produced by the `init` command.
@@ -75,6 +87,47 @@ pub struct InitOutput {
     pub config_path: String,
     /// The primitive directories ensured during initialization.
     pub created_directories: Vec<String>,
+}
+
+/// Output model produced by the `connect` command.
+#[derive(Debug, Serialize)]
+pub struct ConnectOutput {
+    /// Connection mode after applying the profile.
+    pub mode: String,
+    /// Hosted server URL for the active remote profile.
+    pub server_url: String,
+    /// Effective actor selected for the profile.
+    pub actor_id: String,
+    /// The persisted workspace configuration after adding the remote profile.
+    pub config: WorkgraphConfig,
+}
+
+/// Output model produced by the `whoami` command.
+#[derive(Debug, Serialize)]
+pub struct WhoamiOutput {
+    /// Whether the current profile is connected to a hosted server.
+    pub mode: String,
+    /// Effective actor used for writes and remote attribution.
+    pub actor_id: String,
+    /// Stable workspace identifier for the current profile.
+    pub workspace_id: String,
+    /// Human-readable workspace name.
+    pub workspace_name: String,
+    /// Hosted server URL when connected remotely.
+    pub hosted_server: Option<String>,
+    /// Active hosted profile name when configured.
+    pub hosted_profile: Option<String>,
+}
+
+/// Output model produced by `workgraph serve` and `workgraph mcp serve`.
+#[derive(Debug, Serialize)]
+pub struct ServeOutput {
+    /// Served transport kind.
+    pub transport: String,
+    /// Bound endpoint when relevant.
+    pub endpoint: Option<String>,
+    /// Workspace root being served.
+    pub workspace_root: String,
 }
 
 /// Output model produced by the `status` command.
@@ -283,6 +336,35 @@ pub struct TriggerIngestOutput {
     pub receipts: Vec<TriggerReceiptPrimitive>,
 }
 
+/// Output model produced by `workgraph actor register`.
+#[derive(Debug, Serialize)]
+pub struct ActorRegisterOutput {
+    /// Created actor reference in `<type>/<id>` form.
+    pub reference: String,
+    /// The stored actor primitive.
+    pub primitive: StoredPrimitive,
+    /// Ledger entry emitted by actor registration.
+    pub ledger_entry: Option<LedgerEntry>,
+}
+
+/// Output model produced by `workgraph actor list`.
+#[derive(Debug, Serialize)]
+pub struct ActorListOutput {
+    /// Number of matched actor primitives.
+    pub count: usize,
+    /// Listed actor primitives.
+    pub items: Vec<StoredPrimitive>,
+}
+
+/// Output model produced by `workgraph actor show`.
+#[derive(Debug, Serialize)]
+pub struct ActorShowOutput {
+    /// Requested actor reference.
+    pub reference: String,
+    /// Loaded actor primitive.
+    pub primitive: StoredPrimitive,
+}
+
 /// Output model produced by the `query` command.
 #[derive(Debug, Serialize)]
 pub struct QueryOutput {
@@ -341,6 +423,9 @@ impl CommandOutput {
     pub fn command_name(&self) -> &'static str {
         match self {
             Self::Init(_) => "init",
+            Self::Connect(_) => "connect",
+            Self::Whoami(_) => "whoami",
+            Self::Serve(_) => "serve",
             Self::Brief(_) => "brief",
             Self::Status(_) => "status",
             Self::Claim(_) => "claim",
@@ -363,6 +448,9 @@ impl CommandOutput {
             Self::TriggerValidate(_) => "trigger_validate",
             Self::TriggerReplay(_) => "trigger_replay",
             Self::TriggerIngest(_) => "trigger_ingest",
+            Self::ActorRegister(_) => "actor_register",
+            Self::ActorList(_) => "actor_list",
+            Self::ActorShow(_) => "actor_show",
         }
     }
 
@@ -374,6 +462,9 @@ impl CommandOutput {
     pub fn result_value(&self) -> anyhow::Result<JsonValue> {
         match self {
             Self::Init(output) => serde_json::to_value(output),
+            Self::Connect(output) => serde_json::to_value(output),
+            Self::Whoami(output) => serde_json::to_value(output),
+            Self::Serve(output) => serde_json::to_value(output),
             Self::Brief(output) => serde_json::to_value(output),
             Self::Status(output) => serde_json::to_value(output),
             Self::Claim(output) => serde_json::to_value(output),
@@ -390,6 +481,9 @@ impl CommandOutput {
             Self::TriggerValidate(output) => serde_json::to_value(output),
             Self::TriggerReplay(output) => serde_json::to_value(output),
             Self::TriggerIngest(output) => serde_json::to_value(output),
+            Self::ActorRegister(output) => serde_json::to_value(output),
+            Self::ActorList(output) => serde_json::to_value(output),
+            Self::ActorShow(output) => serde_json::to_value(output),
         }
         .map_err(Into::into)
     }
@@ -404,6 +498,26 @@ impl CommandOutput {
                 "workgraph create org --title \"<title>\"".to_owned(),
                 "workgraph show org/versatly".to_owned(),
             ],
+            Self::Connect(_) => vec![
+                "workgraph whoami".to_owned(),
+                "workgraph brief".to_owned(),
+                "workgraph actor list".to_owned(),
+                "workgraph status".to_owned(),
+            ],
+            Self::Whoami(_) => vec![
+                "workgraph brief".to_owned(),
+                "workgraph status".to_owned(),
+                "workgraph actor list".to_owned(),
+            ],
+            Self::Serve(output) => match output.transport.as_str() {
+                "http" => vec![
+                    "workgraph connect --server <server> --token <token> --actor-id <actor-id>"
+                        .to_owned(),
+                    "workgraph whoami".to_owned(),
+                ],
+                "mcp" => vec!["workgraph whoami".to_owned(), "workgraph brief".to_owned()],
+                _ => vec!["workgraph status".to_owned()],
+            },
             Self::Brief(_) => vec![
                 "workgraph show org/versatly".to_owned(),
                 "workgraph query org".to_owned(),
@@ -449,6 +563,19 @@ impl CommandOutput {
                 format!("workgraph show {}", output.reference),
                 "workgraph status".to_owned(),
                 format!("workgraph query {}", output.primitive.frontmatter.r#type),
+            ],
+            Self::ActorRegister(output) => vec![
+                format!("workgraph actor show {}", output.reference),
+                "workgraph actor list".to_owned(),
+                "workgraph whoami".to_owned(),
+            ],
+            Self::ActorList(_) => vec![
+                "workgraph whoami".to_owned(),
+                "workgraph status".to_owned(),
+            ],
+            Self::ActorShow(output) => vec![
+                format!("workgraph show {}", output.reference),
+                "workgraph actor list".to_owned(),
             ],
             Self::Query(output) => {
                 let mut actions = vec!["workgraph brief".to_owned()];

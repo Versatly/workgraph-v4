@@ -13,7 +13,7 @@ mod support;
 mod tier_one;
 mod tier_two;
 
-pub use config::WorkgraphConfig;
+pub use config::{RemoteWorkspaceConfig, WorkgraphConfig};
 pub use coordination::{
     CheckpointPrimitive, ConversationMessage, CoordinationAction, EventEnvelope, EventPattern,
     EventSourceKind, EvidenceItem, GraphEdgeKind, GraphEdgeReference, GraphEdgeSource, LineageMode,
@@ -26,6 +26,6 @@ pub use identity::{ActorId, NodeId, WorkspaceId};
 pub use ledger::{LedgerEntry, LedgerOp};
 pub use registry::{FieldDefinition, PrimitiveType, Registry};
 pub use status::{RunStatus, ThreadStatus};
-pub use support::{CachedSnapshot, ExternalRef};
+pub use support::{CachedSnapshot, ExternalRef, RemoteCommandRequest, RemoteCommandResponse};
 pub use tier_one::{Decision, Lesson, Pattern, Policy, Relationship, StrategicNote};
 pub use tier_two::{Agent, Client, Org, Person, Project, Team};

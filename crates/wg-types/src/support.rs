@@ -38,9 +38,28 @@ pub struct CachedSnapshot {
     pub external_refs: Vec<ExternalRef>,
 }
 
+/// A remotely executable WorkGraph command request.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteCommandRequest {
+    /// Full CLI argument vector, including the binary name.
+    pub args: Vec<String>,
+    /// Optional actor override used to attribute mutations on the hosted server.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_id: Option<String>,
+}
+
+/// A remotely executed WorkGraph command response.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteCommandResponse {
+    /// Whether command execution succeeded.
+    pub success: bool,
+    /// The rendered human or JSON envelope returned by the command.
+    pub rendered: String,
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{CachedSnapshot, ExternalRef};
+    use super::{CachedSnapshot, ExternalRef, RemoteCommandRequest, RemoteCommandResponse};
     use chrono::{TimeZone, Utc};
     use std::collections::BTreeMap;
 
@@ -92,5 +111,21 @@ mod tests {
         };
 
         roundtrip(&snapshot);
+    }
+
+    #[test]
+    fn remote_command_contract_roundtrips_through_json() {
+        roundtrip(&RemoteCommandRequest {
+            args: vec![
+                "workgraph".into(),
+                "--json".into(),
+                "status".into(),
+            ],
+            actor_id: Some("agent:cursor".into()),
+        });
+        roundtrip(&RemoteCommandResponse {
+            success: true,
+            rendered: "{\"success\":true}".into(),
+        });
     }
 }

@@ -76,6 +76,15 @@ fn classify_fix(command: Option<&str>, error: &anyhow::Error) -> String {
     }
 
     let message = error.to_string();
+    if message.contains("hosted workspace")
+        || message.contains("remote profile")
+        || message.contains("actor token")
+    {
+        return match command {
+            Some("init") => "workgraph init --hosted --server https://<server> --workspace-id <workspace-id> --workspace-name \"<name>\" --actor-id <actor-id> --actor-token <token>".to_owned(),
+            _ => "workgraph init --hosted --server https://<server> --workspace-id <workspace-id> --workspace-name \"<name>\" --actor-id <actor-id> --actor-token <token>".to_owned(),
+        };
+    }
     if message.contains("primitive reference must be in the form <type>/<id>") {
         return "workgraph show <type>/<id>".to_owned();
     }
@@ -104,6 +113,10 @@ fn classify_fix(command: Option<&str>, error: &anyhow::Error) -> String {
 
 fn fix_for_clap_error(command: Option<&str>, _error: &clap::Error) -> String {
     match command {
+        Some("connect") => {
+            "workgraph connect --server <url> --token <token> --actor-id <actor-id>"
+        }
+        Some("whoami") => "workgraph whoami",
         Some("claim") => "workgraph claim <thread-id>",
         Some("complete") => "workgraph complete <thread-id>",
         Some("run_create") => "workgraph run create --title \"<title>\" --thread-id <thread-id>",
@@ -128,6 +141,11 @@ fn fix_for_clap_error(command: Option<&str>, _error: &clap::Error) -> String {
         Some("capabilities") => "workgraph capabilities",
         Some("status") => "workgraph status",
         Some("init") => "workgraph init",
+        Some("actor_register") => {
+            "workgraph actor register --type <person|agent> --id <actor-id> --title \"<title>\""
+        }
+        Some("actor_list") => "workgraph actor list",
+        Some("actor_show") => "workgraph actor show <type>/<id>",
         _ => "workgraph --help",
     }
     .to_owned()
@@ -152,6 +170,8 @@ fn fix_for_workgraph_error(command: Option<&str>, error: &WorkgraphError) -> Str
 fn default_fix(command: Option<&str>) -> &'static str {
     match command {
         Some("init") => "workgraph init",
+        Some("connect") => "workgraph connect --server <url> --token <token> --actor-id <actor-id>",
+        Some("whoami") => "workgraph whoami",
         Some("brief") => "workgraph brief --lens workspace",
         Some("status") => "workgraph status",
         Some("claim") => "workgraph claim <thread-id>",
@@ -168,6 +188,11 @@ fn default_fix(command: Option<&str>) -> &'static str {
         Some("capabilities") => "workgraph capabilities",
         Some("schema") => "workgraph schema <type>",
         Some("create") => "workgraph create <type> --title \"<title>\"",
+        Some("actor_register") => {
+            "workgraph actor register --type <person|agent> --id <actor-id> --title \"<title>\""
+        }
+        Some("actor_list") => "workgraph actor list",
+        Some("actor_show") => "workgraph actor show <type>/<id>",
         Some("query") => "workgraph query <type>",
         Some("show") => "workgraph show <type>/<id>",
         Some("trigger_validate") => "workgraph trigger validate <trigger-id>",
