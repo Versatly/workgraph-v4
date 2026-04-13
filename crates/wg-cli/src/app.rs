@@ -131,6 +131,23 @@ impl AppContext {
             .with_context(|| format!("failed to parse config file '{}'", path.display()))
     }
 
+    /// Loads the persisted workspace configuration file when it exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the configuration file exists but cannot be read or parsed.
+    pub async fn try_load_config(&self) -> anyhow::Result<Option<WorkgraphConfig>> {
+        let path = self.config_path();
+        if !fs::try_exists(&path)
+            .await
+            .with_context(|| format!("failed to inspect config file '{}'", path.display()))?
+        {
+            return Ok(None);
+        }
+
+        self.load_config().await.map(Some)
+    }
+
     /// Resolves the effective actor for writes, preferring a per-request override.
     ///
     /// # Errors

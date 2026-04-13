@@ -11,7 +11,7 @@ mod ledger;
 mod query;
 mod run;
 mod schema;
-mod serve;
+pub(crate) mod serve;
 mod show;
 mod status;
 mod thread_complete;
@@ -38,9 +38,7 @@ pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<Comma
             connect::handle(app, &server, &token, &actor_id).await?,
         )),
         Command::Whoami => Ok(CommandOutput::Whoami(connect::whoami(app).await?)),
-        Command::Serve { listen, token } => {
-            Ok(CommandOutput::Serve(serve::serve_http(app, &listen, &token).await?))
-        }
+        Command::Serve { listen, .. } => Ok(CommandOutput::Serve(serve::describe_http(app, &listen))),
         Command::Brief { lens } => Ok(CommandOutput::Brief(brief::handle(app, lens.0).await?)),
         Command::Status => Ok(CommandOutput::Status(status::handle(app).await?)),
         Command::Claim { thread_id } => {
@@ -194,7 +192,7 @@ pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<Comma
             }
         },
         Command::Mcp { command } => match command {
-            McpCommand::Serve => Ok(CommandOutput::Serve(serve::serve_mcp(app).await?)),
+            McpCommand::Serve => Ok(CommandOutput::Serve(serve::describe_mcp(app))),
         },
     }
 }

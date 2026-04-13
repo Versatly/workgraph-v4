@@ -10,16 +10,26 @@ use wg_types::{ActorId, RemoteCommandRequest, RemoteCommandResponse};
 
 use crate::output::ServeOutput;
 
+/// Builds a description of an HTTP serve endpoint.
+#[must_use]
+pub fn describe_http(app: &crate::app::AppContext, listen: &str) -> ServeOutput {
+    ServeOutput {
+        transport: "http".to_owned(),
+        endpoint: Some(format!("http://{listen}")),
+        workspace_root: app.root().display().to_string(),
+    }
+}
+
 /// Serves the current workspace over the hosted HTTP API.
 ///
 /// # Errors
 ///
 /// Returns an error when the socket address is invalid or the server fails.
-pub async fn serve_http(
+pub async fn run_http(
     app: &crate::app::AppContext,
     listen: &str,
     token: &str,
-) -> anyhow::Result<ServeOutput> {
+) -> anyhow::Result<()> {
     let listen_addr: SocketAddr = listen
         .parse()
         .with_context(|| format!("invalid listen address '{listen}'"))?;
@@ -28,15 +38,17 @@ pub async fn serve_http(
         workspace_root: app.root().to_path_buf(),
         auth_token: token.to_owned(),
     };
-    tokio::spawn(async move {
-        let _ = wg_api::serve(config, Arc::new(CliRemoteExecutor)).await;
-    });
+    wg_api::serve(config, Arc::new(CliRemoteExecutor)).await
+}
 
-    Ok(ServeOutput {
-        transport: "http".to_owned(),
-        endpoint: Some(format!("http://{listen_addr}")),
+/// Builds a description of the MCP stdio endpoint.
+#[must_use]
+pub fn describe_mcp(app: &crate::app::AppContext) -> ServeOutput {
+    ServeOutput {
+        transport: "mcp".to_owned(),
+        endpoint: Some("stdio".to_owned()),
         workspace_root: app.root().display().to_string(),
-    })
+    }
 }
 
 /// Serves the MCP stdio adapter for the current workspace.
@@ -44,17 +56,8 @@ pub async fn serve_http(
 /// # Errors
 ///
 /// Returns an error when the MCP protocol loop fails.
-pub async fn serve_mcp(app: &crate::app::AppContext) -> anyhow::Result<ServeOutput> {
-    let executor = Arc::new(CliRemoteExecutor);
-    let workspace_root = app.root().display().to_string();
-    tokio::spawn(async move {
-        let _ = wg_mcp::serve_stdio(executor).await;
-    });
-    Ok(ServeOutput {
-        transport: "mcp".to_owned(),
-        endpoint: Some("stdio".to_owned()),
-        workspace_root,
-    })
+pub async fn run_mcp(_app: &crate::app::AppContext) -> anyhow::Result<()> {
+    wg_mcp::serve_stdio(Arc::new(CliRemoteExecutor)).await
 }
 
 struct CliRemoteExecutor;

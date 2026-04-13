@@ -1,11 +1,15 @@
 //! Implementation of the `workgraph actor` command family.
 
-use anyhow::{Context, bail};
-use wg_store::read_primitive;
+use std::collections::BTreeMap;
+
+use anyhow::{Context, anyhow, bail};
+use tokio::fs;
+use wg_store::{PrimitiveFrontmatter, StoredPrimitive, read_primitive};
+use serde_yaml::Value;
 
 use crate::app::AppContext;
-use crate::args::KeyValueInput;
 use crate::output::{ActorListOutput, ActorRegisterOutput, ActorShowOutput};
+use crate::services::mutation::PrimitiveMutationService;
 
 /// Parsed arguments for `workgraph actor register`.
 #[derive(Debug, Clone)]
@@ -44,69 +48,39 @@ pub async fn register(
         bail!("actor registration requires --type person or --type agent");
     }
 
-    let mut fields = vec![KeyValueInput {
-        key: "id".to_owned(),
-        value: args.id.clone(),
-    }];
+    let registry = app.load_registry().await?;
+    let primitive = actor_primitive(actor_type, &args)?;
+    let reference = format!("{actor_type}/{}", primitive.frontmatter.id);
+    let primitive_path = app
+        .workspace()
+        .primitive_path(actor_type, &primitive.frontmatter.id);
 
-    if let Some(email) = args.email.filter(|value| !value.trim().is_empty()) {
-        fields.push(KeyValueInput {
-            key: "email".to_owned(),
-            value: email,
-        });
-    }
-    if let Some(runtime) = args.runtime.filter(|value| !value.trim().is_empty()) {
-        fields.push(KeyValueInput {
-            key: "runtime".to_owned(),
-            value: runtime,
-        });
-    }
-    if let Some(parent_actor_id) = args
-        .parent_actor_id
-        .filter(|value| !value.trim().is_empty())
+    if fs::try_exists(primitive_path.as_path())
+        .await
+        .context("failed to inspect existing actor path")?
     {
-        fields.push(KeyValueInput {
-            key: "parent_actor_id".to_owned(),
-            value: parent_actor_id,
-        });
-    }
-    if let Some(root_actor_id) = args.root_actor_id.filter(|value| !value.trim().is_empty()) {
-        fields.push(KeyValueInput {
-            key: "root_actor_id".to_owned(),
-            value: root_actor_id,
-        });
-    }
-    if let Some(lineage_mode) = args.lineage_mode.filter(|value| !value.trim().is_empty()) {
-        fields.push(KeyValueInput {
-            key: "lineage_mode".to_owned(),
-            value: lineage_mode,
-        });
-    }
-    for capability in args
-        .capabilities
-        .into_iter()
-        .filter(|value| !value.trim().is_empty())
-    {
-        fields.push(KeyValueInput {
-            key: "capabilities".to_owned(),
-            value: capability,
-        });
+        let existing = read_primitive(app.workspace(), actor_type, &primitive.frontmatter.id)
+            .await
+            .with_context(|| format!("failed to read existing actor '{reference}'"))?;
+        if existing == primitive {
+            return Ok(ActorRegisterOutput {
+                reference,
+                primitive,
+                ledger_entry: None,
+            });
+        }
+
+        return Err(anyhow!("actor '{reference}' already exists with different data"));
     }
 
-    let created = crate::commands::create::handle(
-        app,
-        actor_type,
-        Some(&args.title),
-        &fields,
-        false,
-        false,
-    )
-    .await?;
+    let (_, ledger_entry) = PrimitiveMutationService::new(app, &registry)
+        .create(app.effective_actor_id().await?, &primitive)
+        .await?;
 
     Ok(ActorRegisterOutput {
-        reference: created.reference,
-        primitive: created.primitive,
-        ledger_entry: created.ledger_entry,
+        reference,
+        primitive,
+        ledger_entry: Some(ledger_entry),
     })
 }
 
@@ -136,6 +110,80 @@ pub async fn list(app: &AppContext, actor_type: Option<&str>) -> anyhow::Result<
     Ok(ActorListOutput {
         count: items.len(),
         items,
+    })
+}
+
+fn actor_primitive(actor_type: &str, args: &ActorRegisterArgs) -> anyhow::Result<StoredPrimitive> {
+    let mut extra_fields = BTreeMap::new();
+
+    if let Some(email) = args.email.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+        extra_fields.insert("email".to_owned(), Value::String(email.to_owned()));
+    }
+    if let Some(runtime) = args
+        .runtime
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        extra_fields.insert("runtime".to_owned(), Value::String(runtime.to_owned()));
+    }
+    if let Some(parent_actor_id) = args
+        .parent_actor_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        extra_fields.insert(
+            "parent_actor_id".to_owned(),
+            Value::String(parent_actor_id.to_owned()),
+        );
+    }
+    if let Some(root_actor_id) = args
+        .root_actor_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        extra_fields.insert(
+            "root_actor_id".to_owned(),
+            Value::String(root_actor_id.to_owned()),
+        );
+    }
+    if let Some(lineage_mode) = args
+        .lineage_mode
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        extra_fields.insert(
+            "lineage_mode".to_owned(),
+            Value::String(lineage_mode.to_owned()),
+        );
+    }
+
+    let capabilities = args
+        .capabilities
+        .iter()
+        .map(String::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    if !capabilities.is_empty() {
+        extra_fields.insert(
+            "capabilities".to_owned(),
+            serde_yaml::to_value(capabilities).context("failed to encode capabilities")?,
+        );
+    }
+
+    Ok(StoredPrimitive {
+        frontmatter: PrimitiveFrontmatter {
+            r#type: actor_type.to_owned(),
+            id: args.id.clone(),
+            title: args.title.clone(),
+            extra_fields,
+        },
+        body: String::new(),
     })
 }
 
