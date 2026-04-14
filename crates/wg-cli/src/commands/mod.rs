@@ -1,5 +1,6 @@
 //! Individual command handlers and dispatch logic for the WorkGraph CLI.
 
+mod actor;
 mod brief;
 mod capabilities;
 mod checkpoint;
@@ -16,7 +17,6 @@ mod show;
 mod status;
 mod thread_complete;
 mod trigger;
-mod actor;
 
 use crate::app::AppContext;
 use crate::args::{ActorCommand, Command, McpCommand, RunCommand, TriggerCommand};
@@ -38,7 +38,17 @@ pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<Comma
             connect::handle(app, &server, &token, &actor_id).await?,
         )),
         Command::Whoami => Ok(CommandOutput::Whoami(connect::whoami(app).await?)),
-        Command::Serve { listen, .. } => Ok(CommandOutput::Serve(serve::describe_http(app, &listen))),
+        Command::Serve {
+            listen,
+            actor_id,
+            access_scope,
+            ..
+        } => Ok(CommandOutput::Serve(serve::describe_http(
+            app,
+            &listen,
+            Some(actor_id.as_str()),
+            access_scope.map(|scope| scope.0),
+        )?)),
         Command::Brief { lens } => Ok(CommandOutput::Brief(brief::handle(app, lens.0).await?)),
         Command::Status => Ok(CommandOutput::Status(status::handle(app).await?)),
         Command::Claim { thread_id } => {
@@ -184,15 +194,22 @@ pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<Comma
                 )
                 .await?,
             )),
-            ActorCommand::List { actor_type } => {
-                Ok(CommandOutput::ActorList(actor::list(app, actor_type.as_deref()).await?))
-            }
-            ActorCommand::Show { reference } => {
-                Ok(CommandOutput::ActorShow(actor::show(app, &reference).await?))
-            }
+            ActorCommand::List { actor_type } => Ok(CommandOutput::ActorList(
+                actor::list(app, actor_type.as_deref()).await?,
+            )),
+            ActorCommand::Show { reference } => Ok(CommandOutput::ActorShow(
+                actor::show(app, &reference).await?,
+            )),
         },
         Command::Mcp { command } => match command {
-            McpCommand::Serve => Ok(CommandOutput::Serve(serve::describe_mcp(app))),
+            McpCommand::Serve {
+                actor_id,
+                access_scope,
+            } => Ok(CommandOutput::Serve(serve::describe_mcp(
+                app,
+                Some(actor_id.as_str()),
+                access_scope.map(|scope| scope.0),
+            )?)),
         },
     }
 }

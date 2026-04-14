@@ -114,7 +114,7 @@ fn classify_fix(command: Option<&str>, error: &anyhow::Error) -> String {
 fn fix_for_clap_error(command: Option<&str>, _error: &clap::Error) -> String {
     match command {
         Some("connect") => {
-            "workgraph connect --server <url> --token <token> --actor-id <actor-id>"
+            "workgraph connect --server <url> --token <token> --actor-id <actor-id> [--access-scope <read|operate|admin>]"
         }
         Some("whoami") => "workgraph whoami",
         Some("claim") => "workgraph claim <thread-id>",
@@ -170,7 +170,9 @@ fn fix_for_workgraph_error(command: Option<&str>, error: &WorkgraphError) -> Str
 fn default_fix(command: Option<&str>) -> &'static str {
     match command {
         Some("init") => "workgraph init",
-        Some("connect") => "workgraph connect --server <url> --token <token> --actor-id <actor-id>",
+        Some("connect") => {
+            "workgraph connect --server <url> --token <token> --actor-id <actor-id> [--access-scope <read|operate|admin>]"
+        }
         Some("whoami") => "workgraph whoami",
         Some("brief") => "workgraph brief --lens workspace",
         Some("status") => "workgraph status",

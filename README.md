@@ -44,7 +44,7 @@ The current workspace encodes that durable foundation rather than only describin
 - orientation and CLI surfaces that expose evidence gaps, graph issues, coordination contracts, and full primitive discovery metadata
 - trigger evaluation over normalized ledger, internal, and webhook event envelopes with durable `trigger_receipt` primitives for replay-safe planned follow-up actions
 
-This turn still does not implement live trigger execution loops or webhook ingress runtime, but it now includes a **minimal hosted HTTP adapter** for CLI-based remote access and a **minimal MCP stdio adapter** for cloud/tool-hosted agents. These surfaces remain intentionally thin wrappers over the same CLI/kernel contracts rather than independent business-logic layers.
+This turn still does not implement live trigger execution loops or webhook ingress runtime, but it now includes a **minimal hosted HTTP adapter** for CLI-based remote access and a **minimal MCP stdio adapter** for cloud/tool-hosted agents. These surfaces remain intentionally thin wrappers over the same CLI/kernel contracts rather than independent business-logic layers, and remote credentials are now **actor-bound** and **scope-bound** (`read`, `operate`, `admin`) so remote writes stay durably attributable instead of acting as generic bearer sessions.
 
 CLI creation paths evaluate persisted policy primitives before writing. Trigger evaluation now records replay-safe `trigger_receipt` primitives and policy-aware planned action outcomes rather than auto-executed effects.
 

@@ -15,7 +15,8 @@ use wg_types::{RemoteCommandRequest, RemoteCommandResponse};
 #[async_trait]
 pub trait McpCommandExecutor: Send + Sync {
     /// Executes one CLI-shaped command request on behalf of a tool call.
-    async fn execute(&self, request: RemoteCommandRequest) -> anyhow::Result<RemoteCommandResponse>;
+    async fn execute(&self, request: RemoteCommandRequest)
+    -> anyhow::Result<RemoteCommandResponse>;
 }
 
 /// Serves a minimal MCP stdio endpoint until stdin closes.
@@ -83,7 +84,10 @@ async fn handle_message(
                 .get("name")
                 .and_then(Value::as_str)
                 .ok_or_else(|| anyhow::anyhow!("missing MCP tool name"))?;
-            let arguments = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+            let arguments = params
+                .get("arguments")
+                .cloned()
+                .unwrap_or_else(|| json!({}));
             let request = tool_request(tool_name, arguments)?;
             let result = executor.execute(request).await?;
             Ok(id.map(|id| {
@@ -302,7 +306,11 @@ fn tool_request(tool_name: &str, arguments: Value) -> anyhow::Result<RemoteComma
         "create" => {
             args.push("create".to_owned());
             args.push(required_string_arg(&arguments, "primitive_type")?);
-            push_flag(&mut args, "--title", &required_string_arg(&arguments, "title")?);
+            push_flag(
+                &mut args,
+                "--title",
+                &required_string_arg(&arguments, "title")?,
+            );
             if arguments
                 .get("dry_run")
                 .and_then(Value::as_bool)
@@ -322,7 +330,11 @@ fn tool_request(tool_name: &str, arguments: Value) -> anyhow::Result<RemoteComma
         }
         "run_create" => {
             args.extend(["run".to_owned(), "create".to_owned()]);
-            push_flag(&mut args, "--title", &required_string_arg(&arguments, "title")?);
+            push_flag(
+                &mut args,
+                "--title",
+                &required_string_arg(&arguments, "title")?,
+            );
             push_flag(
                 &mut args,
                 "--thread-id",
@@ -357,7 +369,11 @@ fn tool_request(tool_name: &str, arguments: Value) -> anyhow::Result<RemoteComma
                 &required_string_arg(&arguments, "actor_type")?,
             );
             push_flag(&mut args, "--id", &required_string_arg(&arguments, "id")?);
-            push_flag(&mut args, "--title", &required_string_arg(&arguments, "title")?);
+            push_flag(
+                &mut args,
+                "--title",
+                &required_string_arg(&arguments, "title")?,
+            );
             append_optional_flag(&mut args, "--runtime", string_arg(&arguments, "runtime"));
             append_optional_flag(&mut args, "--email", string_arg(&arguments, "email"));
             append_optional_flag(
@@ -428,9 +444,7 @@ fn append_fields(args: &mut Vec<String>, value: Option<&Value>) {
     }
 }
 
-async fn read_message(
-    reader: &mut BufReader<tokio::io::Stdin>,
-) -> anyhow::Result<Option<Value>> {
+async fn read_message(reader: &mut BufReader<tokio::io::Stdin>) -> anyhow::Result<Option<Value>> {
     let mut content_length = None;
     loop {
         let mut line = String::new();
