@@ -87,11 +87,65 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
         first_command: "workgraph brief --json".to_owned(),
         commands: vec![
             capability(
+                "connect",
+                "Connect this CLI profile to a hosted WorkGraph workspace and select the acting actor.",
+                vec![],
+                &[
+                    global_flags[0],
+                    global_flags[1],
+                    "--server <url>",
+                    "--workspace-id <workspace-id>",
+                    "--actor-id <actor-id>",
+                    "--token <token>",
+                    "--profile <profile>",
+                ],
+                vec![
+                    "workgraph connect --server http://127.0.0.1:8787 --workspace-id demo --actor-id agent:cursor --token dev-token --json",
+                    "workgraph connect --server https://wg.example.com --workspace-id versatly --actor-id person:pedro --profile hosted-main",
+                ],
+            ),
+            capability(
+                "whoami",
+                "Show the active local or hosted CLI connection identity.",
+                vec![],
+                &global_flags,
+                vec!["workgraph whoami --json", "workgraph whoami"],
+            ),
+            capability(
+                "actor register",
+                "Register a durable person or agent actor against the active workspace.",
+                vec![],
+                &[
+                    global_flags[0],
+                    global_flags[1],
+                    "--type <person|agent>",
+                    "--id <actor-id>",
+                    "--title \"<title>\"",
+                    "--runtime <runtime>",
+                    "--capability <capability>",
+                ],
+                vec![
+                    "workgraph actor register --type person --id person:pedro --title \"Pedro\" --json",
+                    "workgraph actor register --type agent --id agent:cursor --title \"Cursor Agent\" --runtime cursor --capability coding",
+                ],
+            ),
+            capability(
+                "actor list",
+                "List registered person and agent actors in the active workspace.",
+                vec![],
+                &global_flags,
+                vec!["workgraph actor list --json", "workgraph actor list"],
+            ),
+            capability(
                 "init",
                 "Initialize registry, config, ledger, and primitive directories.",
                 vec![],
                 &global_flags,
-                vec!["workgraph init --json", "workgraph init"],
+                vec![
+                    "workgraph init --json",
+                    "workgraph init",
+                    "workgraph init --server http://127.0.0.1:8787 --workspace-id demo --token dev-token --actor-id agent:cli --json",
+                ],
             ),
             capability(
                 "brief",

@@ -5,10 +5,11 @@ use std::fmt::Write as _;
 use serde_yaml::Value;
 
 use super::{
-    CapabilitiesOutput, CheckpointOutput, CommandOutput, CreateOutcome, CreateOutput, InitOutput,
-    LedgerOutput, QueryOutput, RunCreateOutcome, RunCreateOutput, RunLifecycleOutput, SchemaOutput,
-    ShowOutput, StatusOutput, ThreadClaimOutput, ThreadCompleteOutput, TriggerIngestOutput,
-    TriggerReplayOutput, TriggerValidateOutput,
+    ActorListOutput, ActorRegisterOutput, ActorShowOutput, CapabilitiesOutput, CheckpointOutput,
+    CommandOutput, ConnectOutput, CreateOutcome, CreateOutput, InitOutput, LedgerOutput,
+    QueryOutput, RunCreateOutcome, RunCreateOutput, RunLifecycleOutput, SchemaOutput, ShowOutput,
+    StatusOutput, ThreadClaimOutput, ThreadCompleteOutput, TriggerIngestOutput,
+    TriggerReplayOutput, TriggerValidateOutput, WhoamiOutput,
 };
 
 /// Renders a structured command output to human-readable text.
@@ -16,6 +17,9 @@ use super::{
 pub fn render(output: &CommandOutput, next_actions: &[String]) -> String {
     let mut rendered = match output {
         CommandOutput::Init(output) => render_init(output),
+        CommandOutput::Connect(output) => render_connect(output),
+        CommandOutput::Whoami(output) => render_whoami(output),
+        CommandOutput::Serve(output) => render_serve(output),
         CommandOutput::Brief(output) => render_brief(output),
         CommandOutput::Status(output) => render_status(output),
         CommandOutput::Claim(output) => render_claim(output),
@@ -24,6 +28,9 @@ pub fn render(output: &CommandOutput, next_actions: &[String]) -> String {
         CommandOutput::Ledger(output) => render_ledger(output),
         CommandOutput::Capabilities(output) => render_capabilities(output),
         CommandOutput::Schema(output) => render_schema(output),
+        CommandOutput::ActorRegister(output) => render_actor_register(output),
+        CommandOutput::ActorList(output) => render_actor_list(output),
+        CommandOutput::ActorShow(output) => render_actor_show(output),
         CommandOutput::Create(output) => render_create(output),
         CommandOutput::RunCreate(output) => render_run_create(output),
         CommandOutput::RunLifecycle(output) => render_run_lifecycle(output),
@@ -76,6 +83,50 @@ fn render_init(output: &InitOutput) -> String {
     for directory in &output.created_directories {
         let _ = writeln!(rendered, "- {directory}");
     }
+    rendered.trim_end().to_owned()
+}
+
+fn render_connect(output: &ConnectOutput) -> String {
+    let mut rendered = String::new();
+    let _ = writeln!(rendered, "Connected workspace to hosted WorkGraph");
+    let _ = writeln!(
+        rendered,
+        "mode: {}",
+        if output.config.remote.is_some() {
+            "hosted"
+        } else {
+            "local"
+        }
+    );
+    if let Some(remote) = &output.config.remote {
+        let _ = writeln!(rendered, "server: {}", remote.server_url);
+        let _ = writeln!(rendered, "actor_id: {}", remote.actor_id);
+    }
+    rendered.trim_end().to_owned()
+}
+
+fn render_whoami(output: &WhoamiOutput) -> String {
+    let mut rendered = String::new();
+    let _ = writeln!(rendered, "mode: {}", output.mode);
+    let _ = writeln!(rendered, "actor_id: {}", output.actor_id);
+    let _ = writeln!(rendered, "workspace_id: {}", output.workspace_id);
+    let _ = writeln!(rendered, "workspace_name: {}", output.workspace_name);
+    if let Some(server_url) = &output.hosted_server {
+        let _ = writeln!(rendered, "server_url: {server_url}");
+    }
+    if let Some(profile) = &output.hosted_profile {
+        let _ = writeln!(rendered, "profile: {profile}");
+    }
+    rendered.trim_end().to_owned()
+}
+
+fn render_serve(output: &super::ServeOutput) -> String {
+    let mut rendered = String::new();
+    let _ = writeln!(rendered, "Serving WorkGraph over {}", output.transport);
+    if let Some(endpoint) = &output.endpoint {
+        let _ = writeln!(rendered, "endpoint: {endpoint}");
+    }
+    let _ = writeln!(rendered, "workspace_root: {}", output.workspace_root);
     rendered.trim_end().to_owned()
 }
 
@@ -335,6 +386,40 @@ fn render_create(output: &CreateOutput) -> String {
         let _ = writeln!(rendered, "Ledger hash: n/a");
     }
     rendered.trim_end().to_owned()
+}
+
+fn render_actor_register(output: &ActorRegisterOutput) -> String {
+    let mut rendered = String::new();
+    let _ = writeln!(rendered, "Registered actor: {}", output.reference);
+    let _ = writeln!(rendered, "title: {}", output.primitive.frontmatter.title);
+    if let Some(ledger_entry) = &output.ledger_entry {
+        let _ = writeln!(rendered, "ledger_hash: {}", ledger_entry.hash);
+    }
+    rendered.trim_end().to_owned()
+}
+
+fn render_actor_list(output: &ActorListOutput) -> String {
+    let mut rendered = String::new();
+    let _ = writeln!(rendered, "Registered actors: {}", output.count);
+    if output.items.is_empty() {
+        let _ = writeln!(rendered, "- none");
+    } else {
+        for item in &output.items {
+            let _ = writeln!(
+                rendered,
+                "- {}/{} — {}",
+                item.frontmatter.r#type, item.frontmatter.id, item.frontmatter.title
+            );
+        }
+    }
+    rendered.trim_end().to_owned()
+}
+
+fn render_actor_show(output: &ActorShowOutput) -> String {
+    render_show(&ShowOutput {
+        reference: output.reference.clone(),
+        primitive: output.primitive.clone(),
+    })
 }
 
 fn render_run_create(output: &RunCreateOutput) -> String {

@@ -3,6 +3,17 @@
 use crate::{ActorId, NodeId, WorkspaceId};
 use serde::{Deserialize, Serialize};
 
+/// Describes how a local CLI profile reaches a hosted WorkGraph workspace.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteWorkspaceConfig {
+    /// Base URL for the hosted WorkGraph HTTP server.
+    pub server_url: String,
+    /// Bearer token used for authenticating remote requests.
+    pub auth_token: String,
+    /// Actor identity to attribute remote mutations to.
+    pub actor_id: ActorId,
+}
+
 /// Describes the filesystem and identity configuration for a WorkGraph workspace.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkgraphConfig {
@@ -28,11 +39,14 @@ pub struct WorkgraphConfig {
     /// The local node identifier when the workspace is part of a distributed deployment.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local_node_id: Option<NodeId>,
+    /// Optional hosted-workspace connection profile used by remote CLI and MCP surfaces.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote: Option<RemoteWorkspaceConfig>,
 }
 
 #[cfg(test)]
 mod tests {
-    use super::WorkgraphConfig;
+    use super::{RemoteWorkspaceConfig, WorkgraphConfig};
     use crate::{ActorId, NodeId, WorkspaceId};
 
     #[test]
@@ -48,6 +62,11 @@ mod tests {
             config_file: "/workspace/.workgraph/config.yaml".into(),
             default_actor_id: Some(ActorId::new("cli")),
             local_node_id: Some(NodeId::new("node-a")),
+            remote: Some(RemoteWorkspaceConfig {
+                server_url: "http://127.0.0.1:8787".into(),
+                auth_token: "secret".into(),
+                actor_id: ActorId::new("agent:cursor"),
+            }),
         };
 
         let json = serde_json::to_string_pretty(&config).expect("config should serialize");

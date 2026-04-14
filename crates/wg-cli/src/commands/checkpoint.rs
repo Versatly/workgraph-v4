@@ -13,6 +13,8 @@ pub async fn handle(
     working_on: &str,
     focus: &str,
 ) -> anyhow::Result<CheckpointOutput> {
-    let primitive = wg_orientation::checkpoint(app.workspace(), working_on, focus).await?;
+    let primitive = wg_orientation::CheckpointMutationService::new(app.workspace())
+        .checkpoint(working_on, focus)
+        .await?;
     Ok(CheckpointOutput { primitive })
 }

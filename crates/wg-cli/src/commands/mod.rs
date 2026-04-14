@@ -4,19 +4,22 @@ mod brief;
 mod capabilities;
 mod checkpoint;
 mod claim;
+mod connect;
 mod create;
 mod init;
 mod ledger;
 mod query;
 mod run;
 mod schema;
+pub(crate) mod serve;
 mod show;
 mod status;
 mod thread_complete;
 mod trigger;
+mod actor;
 
 use crate::app::AppContext;
-use crate::args::{Command, RunCommand, TriggerCommand};
+use crate::args::{ActorCommand, Command, McpCommand, RunCommand, TriggerCommand};
 use crate::output::CommandOutput;
 
 /// Executes the selected CLI command using the shared application context.
@@ -27,6 +30,15 @@ use crate::output::CommandOutput;
 pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<CommandOutput> {
     match command {
         Command::Init => Ok(CommandOutput::Init(init::handle(app).await?)),
+        Command::Connect {
+            server,
+            token,
+            actor_id,
+        } => Ok(CommandOutput::Connect(
+            connect::handle(app, &server, &token, &actor_id).await?,
+        )),
+        Command::Whoami => Ok(CommandOutput::Whoami(connect::whoami(app).await?)),
+        Command::Serve { listen, .. } => Ok(CommandOutput::Serve(serve::describe_http(app, &listen))),
         Command::Brief { lens } => Ok(CommandOutput::Brief(brief::handle(app, lens.0).await?)),
         Command::Status => Ok(CommandOutput::Status(status::handle(app).await?)),
         Command::Claim { thread_id } => {
@@ -143,6 +155,44 @@ pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<Comma
                 )
                 .await?,
             )),
+        },
+        Command::Actor { command } => match command {
+            ActorCommand::Register {
+                actor_type,
+                id,
+                title,
+                email,
+                runtime,
+                parent_actor_id,
+                root_actor_id,
+                lineage_mode,
+                capabilities,
+            } => Ok(CommandOutput::ActorRegister(
+                actor::register(
+                    app,
+                    actor::ActorRegisterArgs {
+                        actor_type,
+                        id,
+                        title,
+                        email,
+                        runtime,
+                        parent_actor_id,
+                        root_actor_id,
+                        lineage_mode,
+                        capabilities,
+                    },
+                )
+                .await?,
+            )),
+            ActorCommand::List { actor_type } => {
+                Ok(CommandOutput::ActorList(actor::list(app, actor_type.as_deref()).await?))
+            }
+            ActorCommand::Show { reference } => {
+                Ok(CommandOutput::ActorShow(actor::show(app, &reference).await?))
+            }
+        },
+        Command::Mcp { command } => match command {
+            McpCommand::Serve => Ok(CommandOutput::Serve(serve::describe_mcp(app))),
         },
     }
 }

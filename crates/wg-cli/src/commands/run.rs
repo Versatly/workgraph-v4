@@ -188,10 +188,7 @@ async fn resolve_actor(app: &AppContext, actor_id: Option<&str>) -> anyhow::Resu
 }
 
 async fn default_actor(app: &AppContext) -> anyhow::Result<ActorId> {
-    let config = app.load_config().await?;
-    Ok(config
-        .default_actor_id
-        .unwrap_or_else(|| ActorId::new("cli")))
+    app.effective_actor_id().await
 }
 
 fn build_request(args: &RunCreateArgs, actor_id: ActorId) -> DispatchRequest {

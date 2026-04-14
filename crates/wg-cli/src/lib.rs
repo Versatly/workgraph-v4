@@ -16,6 +16,7 @@ use std::path::Path;
 use anyhow::{Context, anyhow};
 use app::AppContext;
 use args::{OutputFormat, parse_cli};
+use wg_types::{RemoteCommandRequest, RemoteCommandResponse};
 
 /// Parses CLI arguments from the current process, executes the requested command, and prints the result.
 ///
@@ -26,6 +27,24 @@ pub async fn run_from_env() -> anyhow::Result<()> {
     let current_dir =
         std::env::current_dir().context("failed to determine the current directory")?;
     let args = std::env::args_os().collect::<Vec<_>>();
+    if let Ok(cli) = parse_cli(args.clone()) {
+        let json_output = cli.json || cli.format.is_json();
+        let app = AppContext::new(current_dir.clone());
+        match &cli.command {
+            args::Command::Serve { listen, token } => {
+                let output =
+                    output::CommandOutput::Serve(commands::serve::describe_http(&app, listen));
+                println!("{}", output::render_success(&output, json_output)?);
+                return commands::serve::run_http(&app, listen, token).await;
+            }
+            args::Command::Mcp {
+                command: args::McpCommand::Serve,
+            } => {
+                return commands::serve::run_mcp(&app).await;
+            }
+            _ => {}
+        }
+    }
     let execution = execute_contract(args, current_dir).await?;
     println!("{}", execution.rendered);
 
@@ -76,6 +95,16 @@ where
         Ok(cli) => {
             let command_name = cli.command.name();
             let app = AppContext::new(workspace_root.as_ref().to_path_buf());
+            if cli.command.can_execute_remotely() {
+                if let Some(remote_response) =
+                    try_execute_remote(&app, &args, cli.json || cli.format.is_json()).await?
+                {
+                    return Ok(ExecutionContract {
+                        rendered: remote_response.rendered,
+                        success: remote_response.success,
+                    });
+                }
+            }
             match commands::execute(&app, cli.command).await {
                 Ok(output) => Ok(ExecutionContract {
                     rendered: output::render_success(&output, cli.json || cli.format.is_json())?,
@@ -106,6 +135,49 @@ where
                 success: false,
             })
         }
+    }
+}
+
+async fn try_execute_remote(
+    app: &AppContext,
+    args: &[OsString],
+    json_output: bool,
+) -> anyhow::Result<Option<RemoteCommandResponse>> {
+    let Some(config) = app.try_load_config().await? else {
+        return Ok(None);
+    };
+    let Some(remote) = config.remote else {
+        return Ok(None);
+    };
+
+    let request = RemoteCommandRequest {
+        args: args
+            .iter()
+            .map(|value| value.to_string_lossy().into_owned())
+            .collect(),
+        actor_id: Some(remote.actor_id.to_string()),
+    };
+
+    let endpoint = format!("{}/v1/execute", remote.server_url.trim_end_matches('/'));
+    let response = reqwest::Client::new()
+        .post(endpoint)
+        .bearer_auth(remote.auth_token)
+        .json(&request)
+        .send()
+        .await
+        .context("failed to reach hosted WorkGraph server")?;
+    let status = response.status();
+    let remote_response = response
+        .json::<RemoteCommandResponse>()
+        .await
+        .context("failed to decode hosted WorkGraph response")?;
+
+    if status.is_success() {
+        Ok(Some(remote_response))
+    } else if json_output {
+        Ok(Some(remote_response))
+    } else {
+        Err(anyhow!(remote_response.rendered))
     }
 }
 
@@ -142,9 +214,13 @@ fn parse_output_format(args: &[OsString]) -> OutputFormat {
 
 #[cfg(test)]
 mod tests {
+    use std::{net::TcpListener, time::Duration};
+
+    use crate::app::AppContext;
     use crate::execute;
     use crate::util::fields::parse_key_value_input;
     use crate::util::slug::slugify;
+    use reqwest::StatusCode;
     use serde_json::Value as JsonValue;
     use tempfile::tempdir;
 
@@ -735,5 +811,205 @@ mod tests {
             serde_json::from_str(&cancel_output).expect("cancel output should be valid JSON");
         assert_eq!(cancel_json["command"], "run_cancel");
         assert_eq!(cancel_json["result"]["run"]["status"], "cancelled");
+    }
+
+    #[tokio::test]
+    async fn hosted_server_supports_remote_cli_roundtrip() {
+        let server_workspace = tempdir().expect("server workspace should exist");
+        let client_one = tempdir().expect("client one workspace should exist");
+        let client_two = tempdir().expect("client two workspace should exist");
+        let listen_addr = format!("127.0.0.1:{}", reserve_local_port());
+        let server_url = format!("http://{listen_addr}");
+
+        execute(["workgraph", "--json", "init"], server_workspace.path())
+            .await
+            .expect("server init should succeed");
+        let server_app = AppContext::new(server_workspace.path().to_path_buf());
+        let listen_for_task = listen_addr.clone();
+        tokio::spawn(async move {
+            let _ = crate::commands::serve::run_http(&server_app, &listen_for_task, "dev-token").await;
+        });
+        wait_for_health(&server_url)
+            .await
+            .expect("server should become healthy");
+
+        for workspace in [client_one.path(), client_two.path()] {
+            execute(["workgraph", "--json", "init"], workspace)
+                .await
+                .expect("client init should succeed");
+        }
+
+        let connect_one = execute(
+            [
+                "workgraph",
+                "--json",
+                "connect",
+                "--server",
+                &server_url,
+                "--token",
+                "dev-token",
+                "--actor-id",
+                "person:pedro",
+            ],
+            client_one.path(),
+        )
+        .await
+        .expect("client one connect should succeed");
+        let connect_one_json: JsonValue =
+            serde_json::from_str(&connect_one).expect("connect output should be valid JSON");
+        assert_eq!(connect_one_json["result"]["mode"], "hosted");
+        assert_eq!(connect_one_json["result"]["actor_id"], "person:pedro");
+
+        let connect_two = execute(
+            [
+                "workgraph",
+                "--json",
+                "connect",
+                "--server",
+                &server_url,
+                "--token",
+                "dev-token",
+                "--actor-id",
+                "agent:cursor",
+            ],
+            client_two.path(),
+        )
+        .await
+        .expect("client two connect should succeed");
+        let connect_two_json: JsonValue =
+            serde_json::from_str(&connect_two).expect("connect output should be valid JSON");
+        assert_eq!(connect_two_json["result"]["mode"], "hosted");
+        assert_eq!(connect_two_json["result"]["actor_id"], "agent:cursor");
+
+        execute(
+            [
+                "workgraph",
+                "--json",
+                "actor",
+                "register",
+                "--type",
+                "person",
+                "--id",
+                "person:pedro",
+                "--title",
+                "Pedro",
+            ],
+            client_one.path(),
+        )
+        .await
+        .expect("remote person registration should succeed");
+
+        execute(
+            [
+                "workgraph",
+                "--json",
+                "actor",
+                "register",
+                "--type",
+                "agent",
+                "--id",
+                "agent:cursor",
+                "--title",
+                "Cursor Agent",
+                "--runtime",
+                "cursor",
+                "--capability",
+                "coding",
+            ],
+            client_two.path(),
+        )
+        .await
+        .expect("remote agent registration should succeed");
+
+        execute(
+            [
+                "workgraph",
+                "--json",
+                "create",
+                "thread",
+                "--title",
+                "Remote Thread",
+                "--field",
+                "status=ready",
+            ],
+            client_one.path(),
+        )
+        .await
+        .expect("remote thread creation should succeed");
+
+        let claim_output = execute(
+            ["workgraph", "--json", "claim", "remote-thread"],
+            client_two.path(),
+        )
+        .await
+        .expect("remote claim should succeed");
+        let claim_json: JsonValue =
+            serde_json::from_str(&claim_output).expect("claim output should be valid JSON");
+        assert_eq!(claim_json["result"]["thread"]["assigned_actor"], "agent:cursor");
+
+        let run_output = execute(
+            [
+                "workgraph",
+                "--json",
+                "run",
+                "create",
+                "--title",
+                "Remote Run",
+                "--thread-id",
+                "remote-thread",
+            ],
+            client_two.path(),
+        )
+        .await
+        .expect("remote run create should succeed");
+        let run_json: JsonValue =
+            serde_json::from_str(&run_output).expect("run output should be valid JSON");
+        assert_eq!(run_json["result"]["run"]["actor_id"], "agent:cursor");
+
+        let server_query = execute(
+            ["workgraph", "--json", "query", "agent"],
+            server_workspace.path(),
+        )
+        .await
+        .expect("server query should succeed");
+        let server_query_json: JsonValue =
+            serde_json::from_str(&server_query).expect("server query should be valid JSON");
+        assert_eq!(server_query_json["result"]["count"], 1);
+
+        let server_thread = execute(
+            ["workgraph", "--json", "show", "thread/remote-thread"],
+            server_workspace.path(),
+        )
+        .await
+        .expect("server thread show should succeed");
+        let server_thread_json: JsonValue =
+            serde_json::from_str(&server_thread).expect("server thread output should be valid JSON");
+        assert_eq!(
+            server_thread_json["result"]["primitive"]["frontmatter"]["assigned_actor"],
+            "agent:cursor"
+        );
+    }
+
+    fn reserve_local_port() -> u16 {
+        TcpListener::bind("127.0.0.1:0")
+            .expect("ephemeral listener should bind")
+            .local_addr()
+            .expect("listener should expose local addr")
+            .port()
+    }
+
+    async fn wait_for_health(server_url: &str) -> anyhow::Result<()> {
+        let client = reqwest::Client::new();
+        let endpoint = format!("{server_url}/v1/health");
+        for _ in 0..40 {
+            if let Ok(response) = client.get(&endpoint).send().await {
+                if response.status() == StatusCode::OK {
+                    return Ok(());
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+
+        anyhow::bail!("timed out waiting for hosted server health endpoint");
     }
 }

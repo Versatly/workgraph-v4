@@ -25,6 +25,7 @@ pub fn default_config(app: &AppContext, default_actor_id: Option<ActorId>) -> Wo
         config_file: app.config_path().display().to_string(),
         default_actor_id,
         local_node_id: None,
+        remote: None,
     }
 }
 

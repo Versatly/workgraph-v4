@@ -4,7 +4,6 @@ use anyhow::{Context, anyhow, bail};
 use tokio::fs;
 use wg_store::{PrimitiveFrontmatter, StoredPrimitive, read_primitive};
 use wg_trigger::{TriggerMutationService, load_trigger};
-use wg_types::ActorId;
 
 use crate::app::AppContext;
 use crate::args::KeyValueInput;
@@ -95,10 +94,7 @@ pub async fn handle(
         });
     }
 
-    let config = app.load_config().await?;
-    let actor = config
-        .default_actor_id
-        .unwrap_or_else(|| ActorId::new("cli"));
+    let actor = app.effective_actor_id().await?;
 
     let (path, ledger_entry) = if primitive_type == "trigger" {
         let trigger = load_trigger_payload(&primitive)?;
