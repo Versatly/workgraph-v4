@@ -1,6 +1,6 @@
 //! Workspace configuration models shared across crates.
 
-use crate::{ActorId, NodeId, WorkspaceId};
+use crate::{ActorId, NodeId, RemoteAccessScope, WorkspaceId};
 use serde::{Deserialize, Serialize};
 
 /// Describes how a local CLI profile reaches a hosted WorkGraph workspace.
@@ -12,6 +12,9 @@ pub struct RemoteWorkspaceConfig {
     pub auth_token: String,
     /// Actor identity to attribute remote mutations to.
     pub actor_id: ActorId,
+    /// Governance scope granted to this hosted credential.
+    #[serde(default)]
+    pub access_scope: RemoteAccessScope,
 }
 
 /// Describes the filesystem and identity configuration for a WorkGraph workspace.
@@ -47,7 +50,7 @@ pub struct WorkgraphConfig {
 #[cfg(test)]
 mod tests {
     use super::{RemoteWorkspaceConfig, WorkgraphConfig};
-    use crate::{ActorId, NodeId, WorkspaceId};
+    use crate::{ActorId, NodeId, RemoteAccessScope, WorkspaceId};
 
     #[test]
     fn workgraph_config_roundtrips_through_json() {
@@ -66,6 +69,7 @@ mod tests {
                 server_url: "http://127.0.0.1:8787".into(),
                 auth_token: "secret".into(),
                 actor_id: ActorId::new("agent:cursor"),
+                access_scope: RemoteAccessScope::Operate,
             }),
         };
 

@@ -88,20 +88,18 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
         commands: vec![
             capability(
                 "connect",
-                "Connect this CLI profile to a hosted WorkGraph workspace and select the acting actor.",
+                "Connect this CLI profile to a hosted WorkGraph workspace using an actor-bound scoped credential.",
                 vec![],
                 &[
                     global_flags[0],
                     global_flags[1],
                     "--server <url>",
-                    "--workspace-id <workspace-id>",
                     "--actor-id <actor-id>",
                     "--token <token>",
-                    "--profile <profile>",
                 ],
                 vec![
-                    "workgraph connect --server http://127.0.0.1:8787 --workspace-id demo --actor-id agent:cursor --token dev-token --json",
-                    "workgraph connect --server https://wg.example.com --workspace-id versatly --actor-id person:pedro --profile hosted-main",
+                    "workgraph connect --server http://127.0.0.1:8787 --actor-id agent:cursor --token dev-token --json",
+                    "workgraph connect --server https://wg.example.com --actor-id person:pedro --token prod-token",
                 ],
             ),
             capability(

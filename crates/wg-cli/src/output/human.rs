@@ -101,6 +101,7 @@ fn render_connect(output: &ConnectOutput) -> String {
     if let Some(remote) = &output.config.remote {
         let _ = writeln!(rendered, "server: {}", remote.server_url);
         let _ = writeln!(rendered, "actor_id: {}", remote.actor_id);
+        let _ = writeln!(rendered, "access_scope: {}", remote.access_scope);
     }
     rendered.trim_end().to_owned()
 }
@@ -109,6 +110,9 @@ fn render_whoami(output: &WhoamiOutput) -> String {
     let mut rendered = String::new();
     let _ = writeln!(rendered, "mode: {}", output.mode);
     let _ = writeln!(rendered, "actor_id: {}", output.actor_id);
+    if let Some(access_scope) = &output.access_scope {
+        let _ = writeln!(rendered, "access_scope: {access_scope}");
+    }
     let _ = writeln!(rendered, "workspace_id: {}", output.workspace_id);
     let _ = writeln!(rendered, "workspace_name: {}", output.workspace_name);
     if let Some(server_url) = &output.hosted_server {
@@ -127,6 +131,10 @@ fn render_serve(output: &super::ServeOutput) -> String {
         let _ = writeln!(rendered, "endpoint: {endpoint}");
     }
     let _ = writeln!(rendered, "workspace_root: {}", output.workspace_root);
+    if let Some(actor_id) = &output.actor_id {
+        let _ = writeln!(rendered, "actor_id: {actor_id}");
+    }
+    let _ = writeln!(rendered, "access_scope: {}", output.access_scope);
     rendered.trim_end().to_owned()
 }
 

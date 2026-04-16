@@ -16,7 +16,7 @@ use std::path::Path;
 use anyhow::{Context, anyhow};
 use app::AppContext;
 use args::{OutputFormat, parse_cli};
-use wg_types::{RemoteCommandRequest, RemoteCommandResponse};
+use wg_types::{ActorId, RemoteCommandRequest, RemoteCommandResponse};
 
 /// Parses CLI arguments from the current process, executes the requested command, and prints the result.
 ///
@@ -31,16 +31,41 @@ pub async fn run_from_env() -> anyhow::Result<()> {
         let json_output = cli.json || cli.format.is_json();
         let app = AppContext::new(current_dir.clone());
         match &cli.command {
-            args::Command::Serve { listen, token } => {
-                let output =
-                    output::CommandOutput::Serve(commands::serve::describe_http(&app, listen));
+            args::Command::Serve {
+                listen,
+                token,
+                actor_id,
+                access_scope,
+            } => {
+                let output = output::CommandOutput::Serve(commands::serve::describe_http(
+                    &app,
+                    listen,
+                    Some(actor_id.as_str()),
+                    access_scope.map(|scope| scope.0),
+                )?);
                 println!("{}", output::render_success(&output, json_output)?);
-                return commands::serve::run_http(&app, listen, token).await;
+                return commands::serve::run_http(
+                    &app,
+                    listen,
+                    token,
+                    Some(actor_id.as_str()),
+                    access_scope.map(|scope| scope.0),
+                )
+                .await;
             }
             args::Command::Mcp {
-                command: args::McpCommand::Serve,
+                command:
+                    args::McpCommand::Serve {
+                        actor_id,
+                        access_scope,
+                    },
             } => {
-                return commands::serve::run_mcp(&app).await;
+                return commands::serve::run_mcp(
+                    &app,
+                    Some(actor_id.as_str()),
+                    access_scope.map(|scope| scope.0),
+                )
+                .await;
             }
             _ => {}
         }
@@ -172,16 +197,68 @@ async fn try_execute_remote(
         .await
         .context("failed to decode hosted WorkGraph response")?;
 
-    if status.is_success() {
-        Ok(Some(remote_response))
-    } else if json_output {
+    if status.is_success() || json_output {
         Ok(Some(remote_response))
     } else {
         Err(anyhow!(remote_response.rendered))
     }
 }
 
-fn parse_output_format(args: &[OsString]) -> OutputFormat {
+pub(crate) async fn execute_remote_contract(
+    args: &[String],
+    workspace_root: impl AsRef<Path>,
+    actor_override: Option<ActorId>,
+) -> anyhow::Result<RemoteCommandResponse> {
+    let args = args
+        .iter()
+        .cloned()
+        .map(OsString::from)
+        .collect::<Vec<OsString>>();
+    let json_output = parse_output_format(&args).is_json();
+
+    match parse_cli(args.clone()) {
+        Ok(cli) => {
+            let app = AppContext::with_actor(workspace_root.as_ref().to_path_buf(), actor_override);
+            let command_name = cli.command.name();
+            match commands::execute(&app, cli.command).await {
+                Ok(output) => Ok(RemoteCommandResponse {
+                    success: true,
+                    rendered: output::render_success(&output, cli.json || cli.format.is_json())?,
+                }),
+                Err(error) => render_failure_contract(
+                    Some(command_name),
+                    &error,
+                    cli.json || cli.format.is_json(),
+                ),
+            }
+        }
+        Err(error) => {
+            if error.kind() == clap::error::ErrorKind::DisplayHelp
+                || error.kind() == clap::error::ErrorKind::DisplayVersion
+            {
+                return Ok(RemoteCommandResponse {
+                    success: true,
+                    rendered: error.to_string().trim_end().to_owned(),
+                });
+            }
+            let error: anyhow::Error = error.into();
+            render_failure_contract(None, &error, json_output)
+        }
+    }
+}
+
+pub(crate) fn render_failure_contract(
+    command: Option<&str>,
+    error: &anyhow::Error,
+    json_output: bool,
+) -> anyhow::Result<RemoteCommandResponse> {
+    Ok(RemoteCommandResponse {
+        success: false,
+        rendered: output::render_failure(command, error, json_output)?,
+    })
+}
+
+pub(crate) fn parse_output_format(args: &[OsString]) -> OutputFormat {
     let mut iter = args.iter();
     while let Some(argument) = iter.next() {
         if argument.to_str() == Some("--json") {
@@ -814,10 +891,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn hosted_server_supports_remote_cli_roundtrip() {
+    async fn hosted_server_supports_actor_bound_remote_roundtrip() {
         let server_workspace = tempdir().expect("server workspace should exist");
-        let client_one = tempdir().expect("client one workspace should exist");
-        let client_two = tempdir().expect("client two workspace should exist");
+        let client_workspace = tempdir().expect("client workspace should exist");
         let listen_addr = format!("127.0.0.1:{}", reserve_local_port());
         let server_url = format!("http://{listen_addr}");
 
@@ -827,19 +903,29 @@ mod tests {
         let server_app = AppContext::new(server_workspace.path().to_path_buf());
         let listen_for_task = listen_addr.clone();
         tokio::spawn(async move {
-            let _ = crate::commands::serve::run_http(&server_app, &listen_for_task, "dev-token").await;
+            let _ = crate::commands::serve::run_http(
+                &server_app,
+                &listen_for_task,
+                "cursor-token",
+                Some("agent:cursor"),
+                Some(
+                    crate::args::Command::Claim {
+                        thread_id: "unused".to_owned(),
+                    }
+                    .required_remote_access_scope(),
+                ),
+            )
+            .await;
         });
         wait_for_health(&server_url)
             .await
             .expect("server should become healthy");
 
-        for workspace in [client_one.path(), client_two.path()] {
-            execute(["workgraph", "--json", "init"], workspace)
-                .await
-                .expect("client init should succeed");
-        }
+        execute(["workgraph", "--json", "init"], client_workspace.path())
+            .await
+            .expect("client init should succeed");
 
-        let connect_one = execute(
+        let connect_output = execute(
             [
                 "workgraph",
                 "--json",
@@ -847,79 +933,26 @@ mod tests {
                 "--server",
                 &server_url,
                 "--token",
-                "dev-token",
-                "--actor-id",
-                "person:pedro",
-            ],
-            client_one.path(),
-        )
-        .await
-        .expect("client one connect should succeed");
-        let connect_one_json: JsonValue =
-            serde_json::from_str(&connect_one).expect("connect output should be valid JSON");
-        assert_eq!(connect_one_json["result"]["mode"], "hosted");
-        assert_eq!(connect_one_json["result"]["actor_id"], "person:pedro");
-
-        let connect_two = execute(
-            [
-                "workgraph",
-                "--json",
-                "connect",
-                "--server",
-                &server_url,
-                "--token",
-                "dev-token",
+                "cursor-token",
                 "--actor-id",
                 "agent:cursor",
             ],
-            client_two.path(),
+            client_workspace.path(),
         )
         .await
-        .expect("client two connect should succeed");
-        let connect_two_json: JsonValue =
-            serde_json::from_str(&connect_two).expect("connect output should be valid JSON");
-        assert_eq!(connect_two_json["result"]["mode"], "hosted");
-        assert_eq!(connect_two_json["result"]["actor_id"], "agent:cursor");
+        .expect("connect should succeed");
+        let connect_json: JsonValue =
+            serde_json::from_str(&connect_output).expect("connect output should be valid JSON");
+        assert_eq!(connect_json["result"]["actor_id"], "agent:cursor");
+        assert_eq!(connect_json["result"]["access_scope"], "operate");
 
-        execute(
-            [
-                "workgraph",
-                "--json",
-                "actor",
-                "register",
-                "--type",
-                "person",
-                "--id",
-                "person:pedro",
-                "--title",
-                "Pedro",
-            ],
-            client_one.path(),
-        )
-        .await
-        .expect("remote person registration should succeed");
-
-        execute(
-            [
-                "workgraph",
-                "--json",
-                "actor",
-                "register",
-                "--type",
-                "agent",
-                "--id",
-                "agent:cursor",
-                "--title",
-                "Cursor Agent",
-                "--runtime",
-                "cursor",
-                "--capability",
-                "coding",
-            ],
-            client_two.path(),
-        )
-        .await
-        .expect("remote agent registration should succeed");
+        let whoami_output = execute(["workgraph", "--json", "whoami"], client_workspace.path())
+            .await
+            .expect("whoami should succeed");
+        let whoami_json: JsonValue =
+            serde_json::from_str(&whoami_output).expect("whoami output should be valid JSON");
+        assert_eq!(whoami_json["result"]["actor_id"], "agent:cursor");
+        assert_eq!(whoami_json["result"]["access_scope"], "operate");
 
         execute(
             [
@@ -932,20 +965,23 @@ mod tests {
                 "--field",
                 "status=ready",
             ],
-            client_one.path(),
+            server_workspace.path(),
         )
         .await
-        .expect("remote thread creation should succeed");
+        .expect("server-side thread creation should succeed");
 
         let claim_output = execute(
             ["workgraph", "--json", "claim", "remote-thread"],
-            client_two.path(),
+            client_workspace.path(),
         )
         .await
         .expect("remote claim should succeed");
         let claim_json: JsonValue =
             serde_json::from_str(&claim_output).expect("claim output should be valid JSON");
-        assert_eq!(claim_json["result"]["thread"]["assigned_actor"], "agent:cursor");
+        assert_eq!(
+            claim_json["result"]["thread"]["assigned_actor"],
+            "agent:cursor"
+        );
 
         let run_output = execute(
             [
@@ -958,36 +994,123 @@ mod tests {
                 "--thread-id",
                 "remote-thread",
             ],
-            client_two.path(),
+            client_workspace.path(),
         )
         .await
         .expect("remote run create should succeed");
         let run_json: JsonValue =
             serde_json::from_str(&run_output).expect("run output should be valid JSON");
         assert_eq!(run_json["result"]["run"]["actor_id"], "agent:cursor");
+    }
 
-        let server_query = execute(
-            ["workgraph", "--json", "query", "agent"],
-            server_workspace.path(),
+    #[tokio::test]
+    async fn hosted_server_rejects_actor_mismatch_and_insufficient_scope() {
+        let server_workspace = tempdir().expect("server workspace should exist");
+        let mismatch_client = tempdir().expect("mismatch client workspace should exist");
+        let read_only_client = tempdir().expect("read-only client workspace should exist");
+        let operate_addr = format!("127.0.0.1:{}", reserve_local_port());
+        let operate_url = format!("http://{operate_addr}");
+        let read_only_addr = format!("127.0.0.1:{}", reserve_local_port());
+        let read_only_url = format!("http://{read_only_addr}");
+
+        execute(["workgraph", "--json", "init"], server_workspace.path())
+            .await
+            .expect("server init should succeed");
+        let operate_app = AppContext::new(server_workspace.path().to_path_buf());
+        let read_only_app = AppContext::new(server_workspace.path().to_path_buf());
+
+        let operate_addr_for_task = operate_addr.clone();
+        tokio::spawn(async move {
+            let _ = crate::commands::serve::run_http(
+                &operate_app,
+                &operate_addr_for_task,
+                "cursor-token",
+                Some("agent:cursor"),
+                Some(
+                    crate::args::Command::Claim {
+                        thread_id: "unused".to_owned(),
+                    }
+                    .required_remote_access_scope(),
+                ),
+            )
+            .await;
+        });
+
+        let read_only_addr_for_task = read_only_addr.clone();
+        tokio::spawn(async move {
+            let _ = crate::commands::serve::run_http(
+                &read_only_app,
+                &read_only_addr_for_task,
+                "reader-token",
+                Some("person:reader"),
+                Some(
+                    crate::args::Command::Query {
+                        primitive_type: "thread".to_owned(),
+                        filters: Vec::new(),
+                    }
+                    .required_remote_access_scope(),
+                ),
+            )
+            .await;
+        });
+
+        wait_for_health(&operate_url)
+            .await
+            .expect("operate server should become healthy");
+        wait_for_health(&read_only_url)
+            .await
+            .expect("read-only server should become healthy");
+
+        execute(["workgraph", "--json", "init"], mismatch_client.path())
+            .await
+            .expect("mismatch client init should succeed");
+        execute(["workgraph", "--json", "init"], read_only_client.path())
+            .await
+            .expect("read-only client init should succeed");
+
+        let mismatch = execute(
+            [
+                "workgraph",
+                "--json",
+                "connect",
+                "--server",
+                &operate_url,
+                "--token",
+                "cursor-token",
+                "--actor-id",
+                "person:pedro",
+            ],
+            mismatch_client.path(),
+        )
+        .await;
+        assert!(mismatch.is_err(), "mismatched actor should be rejected");
+
+        let connect_reader = execute(
+            [
+                "workgraph",
+                "--json",
+                "connect",
+                "--server",
+                &read_only_url,
+                "--token",
+                "reader-token",
+                "--actor-id",
+                "person:reader",
+            ],
+            read_only_client.path(),
         )
         .await
-        .expect("server query should succeed");
-        let server_query_json: JsonValue =
-            serde_json::from_str(&server_query).expect("server query should be valid JSON");
-        assert_eq!(server_query_json["result"]["count"], 1);
+        .expect("read-only connect should succeed");
+        let connect_reader_json: JsonValue = serde_json::from_str(&connect_reader)
+            .expect("reader connect output should be valid JSON");
+        assert_eq!(connect_reader_json["result"]["access_scope"], "read");
 
-        let server_thread = execute(
-            ["workgraph", "--json", "show", "thread/remote-thread"],
-            server_workspace.path(),
+        let denied = execute(
+            ["workgraph", "--json", "claim", "remote-thread"],
+            read_only_client.path(),
         )
-        .await
-        .expect("server thread show should succeed");
-        let server_thread_json: JsonValue =
-            serde_json::from_str(&server_thread).expect("server thread output should be valid JSON");
-        assert_eq!(
-            server_thread_json["result"]["primitive"]["frontmatter"]["assigned_actor"],
-            "agent:cursor"
-        );
+        .await;
+        assert!(denied.is_err(), "read-only credential should reject writes");
     }
 
     fn reserve_local_port() -> u16 {

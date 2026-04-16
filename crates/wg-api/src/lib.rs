@@ -15,7 +15,7 @@ use axum::{
     routing::{get, post},
 };
 use serde::Serialize;
-use wg_types::{RemoteCommandRequest, RemoteCommandResponse};
+use wg_types::{RemoteAccessScope, RemoteCommandRequest, RemoteCommandResponse};
 
 /// Remote command executor used by the hosted API server.
 #[async_trait]
@@ -37,6 +37,10 @@ pub struct ApiServerConfig {
     pub workspace_root: PathBuf,
     /// Bearer token accepted by the server.
     pub auth_token: String,
+    /// Actor identity bound to the hosted credential.
+    pub actor_id: String,
+    /// Governance scope granted to the hosted credential.
+    pub access_scope: RemoteAccessScope,
 }
 
 #[derive(Clone)]
@@ -54,6 +58,10 @@ pub struct HealthResponse {
     pub ok: bool,
     /// Hosted workspace root served by this process.
     pub workspace_root: String,
+    /// Governance scope enforced for the hosted credential.
+    pub access_scope: RemoteAccessScope,
+    /// Actor identity bound to the hosted credential.
+    pub actor_id: String,
 }
 
 /// Serves the hosted WorkGraph HTTP adapter until the process is terminated.
@@ -84,6 +92,8 @@ async fn health(State(state): State<ApiState>) -> Json<HealthResponse> {
         service: "workgraph-api",
         ok: true,
         workspace_root: state.config.workspace_root.display().to_string(),
+        access_scope: state.config.access_scope,
+        actor_id: state.config.actor_id.clone(),
     })
 }
 

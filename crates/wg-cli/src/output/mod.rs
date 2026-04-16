@@ -98,6 +98,8 @@ pub struct ConnectOutput {
     pub server_url: String,
     /// Effective actor selected for the profile.
     pub actor_id: String,
+    /// Governance scope granted by the hosted credential.
+    pub access_scope: String,
     /// The persisted workspace configuration after adding the remote profile.
     pub config: WorkgraphConfig,
 }
@@ -117,6 +119,8 @@ pub struct WhoamiOutput {
     pub hosted_server: Option<String>,
     /// Active hosted profile name when configured.
     pub hosted_profile: Option<String>,
+    /// Governance scope granted by the active hosted profile.
+    pub access_scope: Option<String>,
 }
 
 /// Output model produced by `workgraph serve` and `workgraph mcp serve`.
@@ -128,6 +132,10 @@ pub struct ServeOutput {
     pub endpoint: Option<String>,
     /// Workspace root being served.
     pub workspace_root: String,
+    /// Actor bound to the served credential or session.
+    pub actor_id: Option<String>,
+    /// Governance scope granted to the served credential or session.
+    pub access_scope: String,
 }
 
 /// Output model produced by the `status` command.
@@ -569,10 +577,9 @@ impl CommandOutput {
                 "workgraph actor list".to_owned(),
                 "workgraph whoami".to_owned(),
             ],
-            Self::ActorList(_) => vec![
-                "workgraph whoami".to_owned(),
-                "workgraph status".to_owned(),
-            ],
+            Self::ActorList(_) => {
+                vec!["workgraph whoami".to_owned(), "workgraph status".to_owned()]
+            }
             Self::ActorShow(output) => vec![
                 format!("workgraph show {}", output.reference),
                 "workgraph actor list".to_owned(),

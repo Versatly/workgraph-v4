@@ -602,18 +602,30 @@ MCP (`wg-mcp`) and API (`wg-api`) are secondary surfaces for cloud contexts. Bot
 The current remote-access pass now includes a minimal hosted/dev shape for those
 secondary surfaces:
 
-- `workgraph serve --listen ... --token ...` starts a hosted HTTP adapter over one workspace
-- `workgraph connect --server ... --token ... --actor-id ...` points a local CLI profile at that hosted workspace
+- `workgraph serve --listen ... --token ... --actor-id ... [--access-scope ...]` starts a hosted HTTP adapter over one workspace with one actor-bound credential
+- `workgraph connect --server ... --token ... --actor-id ...` points a local CLI profile at that hosted workspace and verifies that the remote credential is bound to the requested actor
 - `workgraph whoami` shows the active local or hosted actor identity
 - `workgraph actor register|list|show` provides first-class actor registration and inspection
-- `workgraph mcp serve` starts the MCP stdio adapter for tool-hosted/cloud agents
+- `workgraph mcp serve --actor-id ... [--access-scope ...]` starts the MCP stdio adapter for tool-hosted/cloud agents with the same actor/scope contract
 
 Those surfaces are intentionally thin and local/developer-oriented in this pass:
 
 - one workspace per served process
-- bearer-token auth only
-- no org-grade scoped credentials or service-account rotation yet
+- one actor-bound credential per served process/session
+- bearer-token auth only on the hosted HTTP adapter
+- three coarse remote access scopes: `read`, `operate`, and `admin`
+- no org-grade scoped credentials, service-account rotation, or approval workflows yet
 - no separate business logic path outside the CLI/kernel contracts
+
+Remote governance contract in this pass:
+
+- every hosted HTTP credential is bound to exactly one tracked actor
+- every MCP stdio session is bound to exactly one tracked actor
+- `read` scope allows orientation and inspection commands only
+- `operate` scope allows coordination writes such as claim, complete, checkpoint, and run lifecycle mutations
+- `admin` scope is required for broad create flows, actor registration, and trigger administration
+- remote callers may not impersonate a different actor than the credential/session binding
+- `workgraph connect` validates the remote actor binding before persisting the hosted profile locally
 
 Agent-facing CLI expectations:
 
@@ -626,9 +638,9 @@ Agent-facing CLI expectations:
 
 Coordination commands now include:
 
-- `workgraph connect --server ... --token ... --actor-id ...` — bind a CLI profile to a hosted workspace
+- `workgraph connect --server ... --token ... --actor-id ...` — bind a CLI profile to a hosted workspace after validating the actor-bound remote credential
 - `workgraph whoami` — show the effective actor and hosted/local execution mode
-- `workgraph serve --listen ... --token ...` — expose one workspace over the hosted HTTP adapter
+- `workgraph serve --listen ... --token ... --actor-id ... [--access-scope ...]` — expose one workspace over the hosted HTTP adapter with one actor-bound scoped credential
 - `workgraph actor register --type ... --id ... --title ...` — register a durable person or agent actor
 - `workgraph actor list|show ...` — inspect durable actor registrations
 - `workgraph claim <thread-id>` — claim and activate a thread
@@ -640,7 +652,7 @@ Coordination commands now include:
 - `workgraph trigger validate <trigger-id>` — validate one persisted trigger
 - `workgraph trigger replay [--last N]` — replay recent ledger entries through the trigger plane
 - `workgraph trigger ingest --source ... --event-id ... --event-name ...` — ingest a normalized internal or webhook-shaped event through the CLI
-- `workgraph mcp serve` — expose the CLI-first command surface as MCP stdio tools
+- `workgraph mcp serve --actor-id ... [--access-scope ...]` — expose the CLI-first command surface as an actor-bound scoped MCP stdio session
 
 `workgraph status` also surfaces graph hygiene (`graph_issues`, `orphan_nodes`)
 and thread evidence gaps in both human and JSON output. Phase 3 also adds trigger

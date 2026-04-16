@@ -3,9 +3,9 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, anyhow, bail};
+use serde_yaml::Value;
 use tokio::fs;
 use wg_store::{PrimitiveFrontmatter, StoredPrimitive, read_primitive};
-use serde_yaml::Value;
 
 use crate::app::AppContext;
 use crate::output::{ActorListOutput, ActorRegisterOutput, ActorShowOutput};
@@ -70,7 +70,9 @@ pub async fn register(
             });
         }
 
-        return Err(anyhow!("actor '{reference}' already exists with different data"));
+        return Err(anyhow!(
+            "actor '{reference}' already exists with different data"
+        ));
     }
 
     let (_, ledger_entry) = PrimitiveMutationService::new(app, &registry)
@@ -116,7 +118,12 @@ pub async fn list(app: &AppContext, actor_type: Option<&str>) -> anyhow::Result<
 fn actor_primitive(actor_type: &str, args: &ActorRegisterArgs) -> anyhow::Result<StoredPrimitive> {
     let mut extra_fields = BTreeMap::new();
 
-    if let Some(email) = args.email.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(email) = args
+        .email
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         extra_fields.insert("email".to_owned(), Value::String(email.to_owned()));
     }
     if let Some(runtime) = args

@@ -61,6 +61,13 @@ Scope:
 - scoped auth and service accounts
 - access boundaries that differ cleanly between single-user and org mode
 
+Current delivered floor in this repo:
+
+- actor-bound hosted credentials for `workgraph serve`
+- actor-bound MCP stdio sessions for `workgraph mcp serve`
+- coarse remote access scopes (`read`, `operate`, `admin`) enforced before remote command execution
+- `workgraph connect` validation that a hosted credential matches the requested actor identity
+
 ## Phase 5 - Org-Grade Governance
 
 Goal:

@@ -2,6 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use wg_orientation::ContextLens;
+use wg_types::RemoteAccessScope;
 
 use crate::util::fields::parse_key_value_input;
 
@@ -75,9 +76,7 @@ pub enum Command {
         actor_id: String,
     },
     /// Shows the effective actor and connection mode for this CLI profile.
-    #[command(
-        after_help = "Examples:\n  workgraph whoami\n  workgraph --json whoami"
-    )]
+    #[command(after_help = "Examples:\n  workgraph whoami\n  workgraph --json whoami")]
     Whoami,
     /// Registers and inspects person/agent actors.
     #[command(
@@ -90,7 +89,7 @@ pub enum Command {
     },
     /// Serves the WorkGraph MCP stdio adapter.
     #[command(
-        after_help = "Examples:\n  workgraph mcp serve\n  workgraph mcp serve --help"
+        after_help = "Examples:\n  workgraph mcp serve --actor-id agent:cursor\n  workgraph mcp serve --actor-id agent:cursor --access-scope operate\n  workgraph mcp serve --actor-id person:pedro --access-scope admin"
     )]
     Mcp {
         /// MCP-specific subcommand to execute.
@@ -99,7 +98,7 @@ pub enum Command {
     },
     /// Serves the current workspace over the hosted HTTP API.
     #[command(
-        after_help = "Examples:\n  workgraph serve --listen 127.0.0.1:8787 --token secret\n  workgraph serve --listen 0.0.0.0:8787 --token secret"
+        after_help = "Examples:\n  workgraph serve --listen 127.0.0.1:8787 --token secret --actor-id agent:cursor\n  workgraph serve --listen 0.0.0.0:8787 --token secret --actor-id agent:cursor --access-scope operate\n  workgraph serve --listen 127.0.0.1:8787 --token secret --actor-id person:pedro --access-scope admin"
     )]
     Serve {
         /// Socket address to bind the hosted server to.
@@ -108,6 +107,12 @@ pub enum Command {
         /// Bearer token required by remote clients.
         #[arg(long)]
         token: String,
+        /// Actor identity bound to the hosted credential.
+        #[arg(long = "actor-id")]
+        actor_id: String,
+        /// Governance scope granted to the hosted credential.
+        #[arg(long = "access-scope", value_parser = parse_remote_access_scope)]
+        access_scope: Option<RemoteAccessScopeArg>,
     },
     /// Produces an orientation summary for a human or agent entering the workspace.
     #[command(
@@ -266,8 +271,45 @@ impl Command {
     pub const fn can_execute_remotely(&self) -> bool {
         !matches!(
             self,
-            Self::Init | Self::Connect { .. } | Self::Whoami | Self::Serve { .. } | Self::Mcp { .. }
+            Self::Init
+                | Self::Connect { .. }
+                | Self::Whoami
+                | Self::Serve { .. }
+                | Self::Mcp { .. }
         )
+    }
+
+    /// Returns the minimum hosted/MCP access scope required to execute this command remotely.
+    #[must_use]
+    pub const fn required_remote_access_scope(&self) -> RemoteAccessScope {
+        match self {
+            Self::Init | Self::Connect { .. } | Self::Serve { .. } | Self::Mcp { .. } => {
+                RemoteAccessScope::Admin
+            }
+            Self::Whoami
+            | Self::Brief { .. }
+            | Self::Status
+            | Self::Ledger { .. }
+            | Self::Capabilities
+            | Self::Schema { .. }
+            | Self::Query { .. }
+            | Self::Show { .. } => RemoteAccessScope::Read,
+            Self::Claim { .. }
+            | Self::Complete { .. }
+            | Self::Checkpoint { .. }
+            | Self::Run { .. } => RemoteAccessScope::Operate,
+            Self::Create { .. } => RemoteAccessScope::Admin,
+            Self::Trigger { command } => match command {
+                TriggerCommand::Validate { .. } => RemoteAccessScope::Read,
+                TriggerCommand::Replay { .. } | TriggerCommand::Ingest { .. } => {
+                    RemoteAccessScope::Admin
+                }
+            },
+            Self::Actor { command } => match command {
+                ActorCommand::List { .. } | ActorCommand::Show { .. } => RemoteAccessScope::Read,
+                ActorCommand::Register { .. } => RemoteAccessScope::Admin,
+            },
+        }
     }
 }
 
@@ -493,8 +535,17 @@ impl ActorCommand {
 #[derive(Debug, Subcommand)]
 pub enum McpCommand {
     /// Serves the MCP stdio adapter.
-    #[command(after_help = "Examples:\n  workgraph mcp serve")]
-    Serve,
+    #[command(
+        after_help = "Examples:\n  workgraph mcp serve\n  workgraph mcp serve --actor-id agent:cursor --access-scope operate\n  workgraph mcp serve --actor-id person:pedro --access-scope admin"
+    )]
+    Serve {
+        /// Actor identity bound to the MCP session.
+        #[arg(long = "actor-id")]
+        actor_id: String,
+        /// Governance scope granted to the MCP session.
+        #[arg(long = "access-scope", value_parser = parse_remote_access_scope)]
+        access_scope: Option<RemoteAccessScopeArg>,
+    },
 }
 
 impl McpCommand {
@@ -502,7 +553,7 @@ impl McpCommand {
     #[must_use]
     pub const fn name(&self) -> &'static str {
         match self {
-            Self::Serve => "mcp_serve",
+            Self::Serve { .. } => "mcp_serve",
         }
     }
 }
@@ -526,6 +577,16 @@ impl std::fmt::Display for ContextLensArg {
     }
 }
 
+/// A clap-friendly wrapper around [`wg_types::RemoteAccessScope`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RemoteAccessScopeArg(pub RemoteAccessScope);
+
+impl std::fmt::Display for RemoteAccessScopeArg {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.0.as_str())
+    }
+}
+
 /// Parses CLI arguments into the typed [`Cli`] structure.
 ///
 /// # Errors
@@ -541,4 +602,8 @@ where
 
 fn parse_context_lens(input: &str) -> Result<ContextLensArg, String> {
     input.parse::<ContextLens>().map(ContextLensArg)
+}
+
+fn parse_remote_access_scope(input: &str) -> Result<RemoteAccessScopeArg, String> {
+    input.parse::<RemoteAccessScope>().map(RemoteAccessScopeArg)
 }

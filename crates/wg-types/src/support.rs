@@ -3,6 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::str::FromStr;
 
 /// References an external system without copying the source of truth into WorkGraph.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,6 +39,66 @@ pub struct CachedSnapshot {
     pub external_refs: Vec<ExternalRef>,
 }
 
+/// Governance scope granted to a remote hosted or MCP credential.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteAccessScope {
+    /// Read-only access to orientation and query commands.
+    #[default]
+    Read,
+    /// Operational coordination writes such as claiming threads or transitioning runs.
+    Operate,
+    /// Full administrative access, including broad create flows and trigger administration.
+    Admin,
+}
+
+impl RemoteAccessScope {
+    /// Returns the stable snake_case label for this access scope.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Read => "read",
+            Self::Operate => "operate",
+            Self::Admin => "admin",
+        }
+    }
+
+    /// Returns true when this scope satisfies a requested minimum scope.
+    #[must_use]
+    pub const fn allows(self, required: Self) -> bool {
+        self.rank() >= required.rank()
+    }
+
+    const fn rank(self) -> u8 {
+        match self {
+            Self::Read => 0,
+            Self::Operate => 1,
+            Self::Admin => 2,
+        }
+    }
+}
+
+impl std::fmt::Display for RemoteAccessScope {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl FromStr for RemoteAccessScope {
+    type Err = String;
+
+    fn from_str(input: &str) -> std::result::Result<Self, Self::Err> {
+        match input {
+            "read" => Ok(Self::Read),
+            "operate" => Ok(Self::Operate),
+            "admin" => Ok(Self::Admin),
+            _ => Err(format!(
+                "unsupported remote access scope '{input}'; expected one of read, operate, admin"
+            )),
+        }
+    }
+}
+
 /// A remotely executable WorkGraph command request.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemoteCommandRequest {
@@ -59,7 +120,9 @@ pub struct RemoteCommandResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::{CachedSnapshot, ExternalRef, RemoteCommandRequest, RemoteCommandResponse};
+    use super::{
+        CachedSnapshot, ExternalRef, RemoteAccessScope, RemoteCommandRequest, RemoteCommandResponse,
+    };
     use chrono::{TimeZone, Utc};
     use std::collections::BTreeMap;
 
@@ -116,16 +179,26 @@ mod tests {
     #[test]
     fn remote_command_contract_roundtrips_through_json() {
         roundtrip(&RemoteCommandRequest {
-            args: vec![
-                "workgraph".into(),
-                "--json".into(),
-                "status".into(),
-            ],
+            args: vec!["workgraph".into(), "--json".into(), "status".into()],
             actor_id: Some("agent:cursor".into()),
         });
         roundtrip(&RemoteCommandResponse {
             success: true,
             rendered: "{\"success\":true}".into(),
         });
+    }
+
+    #[test]
+    fn remote_access_scope_roundtrips_and_orders() {
+        roundtrip(&RemoteAccessScope::Operate);
+        assert!(RemoteAccessScope::Admin.allows(RemoteAccessScope::Read));
+        assert!(RemoteAccessScope::Operate.allows(RemoteAccessScope::Operate));
+        assert!(!RemoteAccessScope::Read.allows(RemoteAccessScope::Admin));
+        assert_eq!(
+            "operate"
+                .parse::<RemoteAccessScope>()
+                .expect("scope should parse"),
+            RemoteAccessScope::Operate
+        );
     }
 }
