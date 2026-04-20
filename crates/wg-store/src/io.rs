@@ -249,6 +249,13 @@ mod tests {
                 FieldDefinition::new("id", "string", "Stable identifier", true, false),
                 FieldDefinition::new("title", "string", "Human title", true, false),
                 FieldDefinition::new("status", "string", "Decision status", true, false),
+                FieldDefinition::new(
+                    "decided_by",
+                    "actor_id",
+                    "Primary decision maker",
+                    false,
+                    false,
+                ),
             ],
         )])
     }
@@ -320,7 +327,7 @@ mod tests {
             "capture-rationale",
             "Capture rationale",
             "proposed",
-            [("owner", Value::String("pedro".to_owned()))],
+            [("decided_by", Value::String("person/pedro".to_owned()))],
         );
 
         super::write_primitive(&workspace, &registry, &primitive)

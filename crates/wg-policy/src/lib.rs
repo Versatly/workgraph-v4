@@ -500,7 +500,7 @@ mod tests {
         let policy = policy_primitive(
             "project-delete-policy",
             "Project delete policy",
-            Value::String("project".to_owned()),
+            Value::Sequence(vec![Value::String("project".to_owned())]),
             rules,
         );
         write_primitive(&workspace, &Registry::builtins(), &policy)

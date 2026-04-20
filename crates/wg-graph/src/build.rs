@@ -8,10 +8,10 @@ use wg_encoding::parse_frontmatter;
 use wg_error::Result;
 use wg_fs::list_md_files;
 use wg_paths::WorkspacePath;
-use wg_store::{PrimitiveFrontmatter, StoredPrimitive, list_primitives};
+use wg_store::{PrimitiveFrontmatter, StoredPrimitive, list_primitives, load_workspace_registry};
 use wg_types::{
-    EventPattern, EvidenceItem, GraphEdgeKind, GraphEdgeSource, Registry, TriggerActionOutcome,
-    TriggerActionPlan,
+    EventPattern, EvidenceItem, GraphEdgeKind, GraphEdgeSource, PrimitiveType, Registry,
+    TriggerActionOutcome, TriggerActionPlan,
 };
 
 use crate::model::{BrokenLink, Edge, GraphSnapshot, NodeRef};
@@ -23,7 +23,8 @@ use crate::model::{BrokenLink, Edge, GraphSnapshot, NodeRef};
 /// Returns an error when primitive directories cannot be scanned or stored
 /// primitives cannot be loaded.
 pub async fn build_graph(workspace: &WorkspacePath) -> Result<GraphSnapshot> {
-    let primitive_types = discover_primitive_types(workspace).await?;
+    let registry = load_workspace_registry(workspace).await?;
+    let primitive_types = discover_primitive_types(workspace, &registry).await?;
     let mut primitives = BTreeMap::new();
 
     for primitive_type in primitive_types {
@@ -53,6 +54,7 @@ pub async fn build_graph(workspace: &WorkspacePath) -> Result<GraphSnapshot> {
         emit_structured_edges(
             source,
             primitive,
+            registry.get_type(source.primitive_type.as_str()),
             &nodes,
             &id_index,
             &mut edges,
@@ -67,8 +69,11 @@ pub async fn build_graph(workspace: &WorkspacePath) -> Result<GraphSnapshot> {
     ))
 }
 
-async fn discover_primitive_types(workspace: &WorkspacePath) -> Result<BTreeSet<String>> {
-    let mut types = Registry::builtins()
+async fn discover_primitive_types(
+    workspace: &WorkspacePath,
+    registry: &Registry,
+) -> Result<BTreeSet<String>> {
+    let mut types = registry
         .list_types()
         .iter()
         .map(|primitive_type| primitive_type.name.clone())
@@ -127,11 +132,23 @@ fn emit_reference_edges(
 fn emit_structured_edges(
     source: &NodeRef,
     primitive: &StoredPrimitive,
+    primitive_type: Option<&PrimitiveType>,
     nodes: &BTreeSet<NodeRef>,
     id_index: &BTreeMap<String, Vec<NodeRef>>,
     edges: &mut BTreeSet<Edge>,
     broken_links: &mut BTreeSet<BrokenLink>,
 ) {
+    if let Some(primitive_type) = primitive_type {
+        emit_registry_defined_edges(
+            source,
+            primitive,
+            primitive_type,
+            nodes,
+            id_index,
+            edges,
+            broken_links,
+        );
+    }
     match primitive.frontmatter.r#type.as_str() {
         "agent" => emit_agent_edges(source, primitive, nodes, id_index, edges, broken_links),
         "relationship" => {
@@ -145,6 +162,61 @@ fn emit_structured_edges(
             emit_trigger_receipt_edges(source, primitive, nodes, id_index, edges, broken_links)
         }
         _ => {}
+    }
+}
+
+fn emit_registry_defined_edges(
+    source: &NodeRef,
+    primitive: &StoredPrimitive,
+    primitive_type: &PrimitiveType,
+    nodes: &BTreeSet<NodeRef>,
+    id_index: &BTreeMap<String, Vec<NodeRef>>,
+    edges: &mut BTreeSet<Edge>,
+    broken_links: &mut BTreeSet<BrokenLink>,
+) {
+    for definition in &primitive_type.fields {
+        let Some(edge_kind) = definition.graph_edge_kind else {
+            continue;
+        };
+        let Some(value) = primitive.frontmatter.extra_fields.get(&definition.name) else {
+            continue;
+        };
+        for reference in reference_values(value) {
+            resolve_and_record_edge(
+                source,
+                source,
+                reference,
+                expected_reference_type(definition, reference),
+                edge_kind,
+                GraphEdgeSource::Field,
+                nodes,
+                id_index,
+                edges,
+                broken_links,
+            );
+        }
+    }
+}
+
+fn expected_reference_type<'a>(
+    definition: &'a wg_types::FieldDefinition,
+    reference: &str,
+) -> Option<&'a str> {
+    if reference.contains('/') {
+        None
+    } else if definition.reference_types.len() == 1 {
+        definition.reference_types.first().map(String::as_str)
+    } else {
+        None
+    }
+}
+
+fn reference_values<'a>(value: &'a Value) -> Vec<&'a str> {
+    match value {
+        Value::String(value) => vec![value.as_str()],
+        Value::Sequence(values) => values.iter().filter_map(string_value).collect(),
+        Value::Tagged(tagged) => reference_values(&tagged.value),
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::Mapping(_) => Vec::new(),
     }
 }
 

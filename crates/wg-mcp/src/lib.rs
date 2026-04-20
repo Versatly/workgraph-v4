@@ -155,7 +155,11 @@ fn tool_definitions() -> Value {
                 "type": "object",
                 "required": ["primitive_type"],
                 "properties": {
-                    "primitive_type": { "type": "string" }
+                    "primitive_type": { "type": "string" },
+                    "filters": {
+                        "type": "object",
+                        "additionalProperties": { "type": "string" }
+                    }
                 }
             }
         },
@@ -259,11 +263,21 @@ fn tool_definitions() -> Value {
                     "actor_type": { "type": "string" },
                     "id": { "type": "string" },
                     "title": { "type": "string" },
+                    "role": { "type": "string" },
+                    "owner": { "type": "string" },
                     "runtime": { "type": "string" },
                     "email": { "type": "string" },
                     "parent_actor_id": { "type": "string" },
                     "root_actor_id": { "type": "string" },
                     "lineage_mode": { "type": "string" },
+                    "team_ids": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
                     "capabilities": {
                         "type": "array",
                         "items": { "type": "string" }
@@ -298,6 +312,7 @@ fn tool_request(tool_name: &str, arguments: Value) -> anyhow::Result<RemoteComma
         "query" => {
             args.push("query".to_owned());
             args.push(required_string_arg(&arguments, "primitive_type")?);
+            append_fields(&mut args, arguments.get("filters"));
         }
         "show" => {
             args.push("show".to_owned());
@@ -374,6 +389,8 @@ fn tool_request(tool_name: &str, arguments: Value) -> anyhow::Result<RemoteComma
                 "--title",
                 &required_string_arg(&arguments, "title")?,
             );
+            append_optional_flag(&mut args, "--role", string_arg(&arguments, "role"));
+            append_optional_flag(&mut args, "--owner", string_arg(&arguments, "owner"));
             append_optional_flag(&mut args, "--runtime", string_arg(&arguments, "runtime"));
             append_optional_flag(&mut args, "--email", string_arg(&arguments, "email"));
             append_optional_flag(
@@ -394,6 +411,16 @@ fn tool_request(tool_name: &str, arguments: Value) -> anyhow::Result<RemoteComma
             if let Some(capabilities) = arguments.get("capabilities").and_then(Value::as_array) {
                 for capability in capabilities.iter().filter_map(Value::as_str) {
                     push_flag(&mut args, "--capability", capability);
+                }
+            }
+            if let Some(team_ids) = arguments.get("team_ids").and_then(Value::as_array) {
+                for team_id in team_ids.iter().filter_map(Value::as_str) {
+                    push_flag(&mut args, "--team-id", team_id);
+                }
+            }
+            if let Some(tags) = arguments.get("tags").and_then(Value::as_array) {
+                for tag in tags.iter().filter_map(Value::as_str) {
+                    push_flag(&mut args, "--tag", tag);
                 }
             }
         }
