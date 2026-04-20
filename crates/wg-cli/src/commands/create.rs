@@ -1,6 +1,6 @@
 //! Implementation of the `workgraph create` command.
 
-use anyhow::{Context, anyhow, bail};
+use anyhow::{Context, anyhow};
 use tokio::fs;
 use wg_store::{PrimitiveFrontmatter, StoredPrimitive, read_primitive};
 use wg_trigger::{TriggerMutationService, load_trigger};
@@ -29,15 +29,15 @@ pub async fn handle(
 ) -> anyhow::Result<CreateOutput> {
     let registry = app.load_registry().await?;
     let runtime_registry = app.load_runtime_registry().await?;
-
-    if runtime_registry.get_type(primitive_type).is_none() {
-        bail!("unknown primitive type '{primitive_type}'");
-    }
+    let primitive_definition = runtime_registry
+        .get_type(primitive_type)
+        .ok_or_else(|| anyhow!("unknown primitive type '{primitive_type}'"))?;
 
     let (requested_title, merged_fields) = resolve_create_inputs(title, fields, stdin)?;
     let id = slugify(&requested_title);
     let primitive_path = app.workspace().primitive_path(primitive_type, &id);
-    let (body, extra_fields) = split_body_and_frontmatter(&merged_fields);
+    let (body, extra_fields) =
+        split_body_and_frontmatter(Some(primitive_definition), &merged_fields);
     let mut primitive = StoredPrimitive {
         frontmatter: PrimitiveFrontmatter {
             r#type: primitive_type.to_owned(),

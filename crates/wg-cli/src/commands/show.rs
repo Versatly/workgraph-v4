@@ -5,8 +5,9 @@ use wg_graph::{Edge, GraphSnapshot, NeighborDirection, NodeRef, build_graph};
 use wg_store::read_primitive;
 
 use crate::app::AppContext;
-use crate::output::{PrimitiveReference, ShowOutput};
+use crate::output::{GraphReferenceOutput, ShowOutput};
 use crate::util::workspace::parse_reference;
+use wg_orientation::GraphIssue;
 
 /// Loads and returns a single primitive by `<type>/<id>` reference.
 ///
@@ -26,13 +27,12 @@ pub async fn handle(app: &AppContext, reference: &str) -> anyhow::Result<ShowOut
         .broken_links()
         .iter()
         .filter(|broken| broken.source == node)
-        .map(|broken| PrimitiveReference {
-            reference: broken.target.clone(),
-            title: None,
-            edge_kind: broken.kind.as_str().to_owned(),
-            provenance: broken.provenance.as_str().to_owned(),
-            direction: "broken".to_owned(),
-            broken_reason: Some(broken.reason.clone()),
+        .map(|broken| GraphIssue {
+            source_reference: broken.source.reference(),
+            target_reference: broken.target.clone(),
+            kind: edge_kind_text(broken.kind).to_owned(),
+            provenance: edge_source_text(broken.provenance).to_owned(),
+            reason: broken.reason.clone(),
         })
         .collect();
 
@@ -49,29 +49,35 @@ fn references_for(
     graph: &GraphSnapshot,
     node: &NodeRef,
     direction: NeighborDirection,
-) -> Vec<PrimitiveReference> {
+) -> Vec<GraphReferenceOutput> {
     graph
-        .edges_for(node, direction)
+        .edge_refs(node, direction)
         .into_iter()
         .map(|edge| reference_from_edge(&edge, direction))
         .collect()
 }
 
-fn reference_from_edge(edge: &Edge, direction: NeighborDirection) -> PrimitiveReference {
-    let related = match direction {
-        NeighborDirection::Inbound => &edge.source,
-        NeighborDirection::Outbound => &edge.target,
-    };
+fn reference_from_edge(edge: &Edge, _direction: NeighborDirection) -> GraphReferenceOutput {
+    GraphReferenceOutput::from_edge(edge)
+}
 
-    PrimitiveReference {
-        reference: related.reference(),
-        title: None,
-        edge_kind: edge.kind.as_str().to_owned(),
-        provenance: edge.provenance.as_str().to_owned(),
-        direction: match direction {
-            NeighborDirection::Inbound => "inbound".to_owned(),
-            NeighborDirection::Outbound => "outbound".to_owned(),
-        },
-        broken_reason: None,
+fn edge_kind_text(kind: wg_types::GraphEdgeKind) -> &'static str {
+    match kind {
+        wg_types::GraphEdgeKind::Reference => "reference",
+        wg_types::GraphEdgeKind::Relationship => "relationship",
+        wg_types::GraphEdgeKind::Assignment => "assignment",
+        wg_types::GraphEdgeKind::Containment => "containment",
+        wg_types::GraphEdgeKind::Evidence => "evidence",
+        wg_types::GraphEdgeKind::Trigger => "trigger",
+    }
+}
+
+fn edge_source_text(source: wg_types::GraphEdgeSource) -> &'static str {
+    match source {
+        wg_types::GraphEdgeSource::WikiLink => "wiki_link",
+        wg_types::GraphEdgeSource::Field => "field",
+        wg_types::GraphEdgeSource::RelationshipPrimitive => "relationship_primitive",
+        wg_types::GraphEdgeSource::EvidenceRecord => "evidence_record",
+        wg_types::GraphEdgeSource::TriggerRule => "trigger_rule",
     }
 }

@@ -87,7 +87,10 @@ pub fn validate_primitive(registry: &Registry, primitive: &StoredPrimitive) -> R
         if !known_fields.contains(field_name.as_str()) {
             return Err(WorkgraphError::ValidationError(format!(
                 "primitive '{}' of type '{}' includes unknown field '{}'; inspect `workgraph schema {}` for the canonical contract",
-                primitive.frontmatter.id, primitive.frontmatter.r#type, field_name, primitive.frontmatter.r#type
+                primitive.frontmatter.id,
+                primitive.frontmatter.r#type,
+                field_name,
+                primitive.frontmatter.r#type
             )));
         }
     }
@@ -151,7 +154,10 @@ fn value_is_present(value: &Value) -> bool {
     }
 }
 
-fn validate_field_shape(definition: &FieldDefinition, value: &Value) -> std::result::Result<(), String> {
+fn validate_field_shape(
+    definition: &FieldDefinition,
+    value: &Value,
+) -> std::result::Result<(), String> {
     if definition.repeated {
         let values = sequence_values(value)
             .ok_or_else(|| "expected a YAML sequence for a repeated field".to_owned())?;
@@ -174,8 +180,8 @@ fn validate_reference_value(
     value: &Value,
     definition: &FieldDefinition,
 ) -> std::result::Result<(), String> {
-    let reference = scalar_text(value)
-        .ok_or_else(|| "expected a scalar reference value".to_owned())?;
+    let reference =
+        scalar_text(value).ok_or_else(|| "expected a scalar reference value".to_owned())?;
     if reference.trim().is_empty() {
         return Err("reference value must not be empty".to_owned());
     }
@@ -187,7 +193,10 @@ fn validate_reference_value(
             return Err("reference must be in <type>/<id> form".to_owned());
         }
         if !definition.reference_types.is_empty()
-            && !definition.reference_types.iter().any(|allowed| allowed == primitive_type.trim())
+            && !definition
+                .reference_types
+                .iter()
+                .any(|allowed| allowed == primitive_type.trim())
         {
             return Err(format!(
                 "expected one of [{}], got '{}'",
@@ -213,9 +222,11 @@ fn scalar_text(value: &Value) -> Option<&str> {
     match value {
         Value::String(value) => Some(value.as_str()),
         Value::Tagged(tagged) => scalar_text(&tagged.value),
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::Sequence(_) | Value::Mapping(_) => {
-            None
-        }
+        Value::Null
+        | Value::Bool(_)
+        | Value::Number(_)
+        | Value::Sequence(_)
+        | Value::Mapping(_) => None,
     }
 }
 

@@ -1859,6 +1859,7 @@ dependencies = [
  "wg-dispatch",
  "wg-error",
  "wg-fs",
+ "wg-graph",
  "wg-ledger",
  "wg-mcp",
  "wg-mission",

@@ -22,6 +22,20 @@ Tracked actors are durable accountability boundaries, not every runtime
 boundary. Subactors may exist below the tracked boundary, and lineage may be
 fully `tracked` or intentionally `opaque`.
 
+For durable actor and company-context authoring, the CLI schema is part of the
+contract:
+
+- `workgraph schema person` describes the canonical frontmatter for durable
+  human actor records
+- `workgraph schema agent` describes the canonical frontmatter for durable
+  machine actor records
+- `workgraph actor register` is the guided CLI for creating those actor
+  records, while `workgraph create` remains the generic primitive authoring
+  surface
+- typed references such as `person/pedro`, `team/platform`, and
+  `project/dealer-portal` are the preferred durable link format for new
+  structured metadata and generated navigation output
+
 Delegation should preserve meaning even when every subactor is not first-class
 in the graph.
 

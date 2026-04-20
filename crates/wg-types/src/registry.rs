@@ -219,7 +219,13 @@ fn builtin_types() -> Vec<PrimitiveType> {
                     false,
                 )
                 .with_reference_targets(["org"], GraphEdgeKind::Containment),
-                field("mission", "string", "Team mission or responsibility summary", false, false),
+                field(
+                    "mission",
+                    "string",
+                    "Team mission or responsibility summary",
+                    false,
+                    false,
+                ),
                 field(
                     "members",
                     "string[]",
@@ -303,7 +309,13 @@ fn builtin_types() -> Vec<PrimitiveType> {
                     false,
                     true,
                 ),
-                field("description", "string", "Concise explanation of what the agent is good at.", false, false),
+                field(
+                    "description",
+                    "string",
+                    "Concise explanation of what the agent is good at.",
+                    false,
+                    false,
+                ),
                 field(
                     "owner",
                     "string",
@@ -365,8 +377,14 @@ fn builtin_types() -> Vec<PrimitiveType> {
                 field("status", "string", "Current project status", false, false),
                 field("client_id", "string", "Associated client", false, false)
                     .with_reference_targets(["client"], GraphEdgeKind::Containment),
-                field("team_ids", "string[]", "Teams currently working on the project", false, true)
-                    .with_reference_targets(["team"], GraphEdgeKind::Assignment),
+                field(
+                    "team_ids",
+                    "string[]",
+                    "Teams currently working on the project",
+                    false,
+                    true,
+                )
+                .with_reference_targets(["team"], GraphEdgeKind::Assignment),
                 field_contains("tags", "string[]", "Tags used for filtering and grouping"),
                 opaque_field(
                     "external_refs",
@@ -435,8 +453,14 @@ fn builtin_types() -> Vec<PrimitiveType> {
             vec![
                 field("id", "string", "Stable policy identifier", true, false),
                 field("title", "string", "Policy title", true, false),
-                field("scope", "string", "Scope of the policy", false, false),
-                field("rule", "string", "Normative rule statement", false, false),
+                field_contains("scope", "string[]", "Primitive types covered by the policy"),
+                opaque_field(
+                    "rules",
+                    "object[]",
+                    "Allow/deny policy rules scoped to actors and actions.",
+                    false,
+                    true,
+                ),
             ],
         ),
         builtin_type(
@@ -865,6 +889,22 @@ fn field(
     repeated: bool,
 ) -> FieldDefinition {
     FieldDefinition::new(name, field_type, description, required, repeated)
+}
+
+fn field_contains(name: &str, field_type: &str, description: &str) -> FieldDefinition {
+    FieldDefinition::new(name, field_type, description, false, true)
+        .with_query_behavior(FieldQueryBehavior::Contains)
+}
+
+fn opaque_field(
+    name: &str,
+    field_type: &str,
+    description: &str,
+    required: bool,
+    repeated: bool,
+) -> FieldDefinition {
+    FieldDefinition::new(name, field_type, description, required, repeated)
+        .with_query_behavior(FieldQueryBehavior::Opaque)
 }
 
 #[cfg(test)]

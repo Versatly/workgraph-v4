@@ -3,7 +3,7 @@
 use serde_yaml::Value;
 use wg_error::{Result, WorkgraphError};
 use wg_paths::WorkspacePath;
-use wg_types::{FieldDefinition, FieldQueryBehavior, Registry};
+use wg_types::{FieldQueryBehavior, Registry};
 
 use crate::document::{FieldFilter, StoredPrimitive};
 use crate::io::list_primitives;
@@ -86,8 +86,12 @@ fn matches_filter(
                 return false;
             };
             match definition.query_behavior {
-                FieldQueryBehavior::Exact => scalar_value(value).is_some_and(|entry| entry == filter.value),
-                FieldQueryBehavior::Contains => repeated_values(value).iter().any(|entry| entry == &filter.value),
+                FieldQueryBehavior::Exact => {
+                    scalar_value(value).is_some_and(|entry| entry == filter.value)
+                }
+                FieldQueryBehavior::Contains => repeated_values(value)
+                    .iter()
+                    .any(|entry| entry == &filter.value),
                 FieldQueryBehavior::Opaque => false,
             }
         }
@@ -122,7 +126,7 @@ mod tests {
     use wg_paths::WorkspacePath;
     use wg_types::{FieldDefinition, FieldQueryBehavior, PrimitiveType, Registry};
 
-    use crate::document::{FieldFilter, PrimitiveFrontmatter, StoredPrimitive};
+    use crate::document::{FieldFilter, FilterOperator, PrimitiveFrontmatter, StoredPrimitive};
     use crate::io::write_primitive;
 
     fn decision_registry() -> Registry {
@@ -214,6 +218,7 @@ mod tests {
             &[FieldFilter {
                 field: "status".to_owned(),
                 value: "accepted".to_owned(),
+                operator: FilterOperator::Exact,
             }],
         )
         .await
@@ -229,10 +234,12 @@ mod tests {
                 FieldFilter {
                     field: "priority".to_owned(),
                     value: "2".to_owned(),
+                    operator: FilterOperator::Exact,
                 },
                 FieldFilter {
                     field: "active".to_owned(),
                     value: "true".to_owned(),
+                    operator: FilterOperator::Exact,
                 },
             ],
         )
@@ -248,6 +255,7 @@ mod tests {
             &[FieldFilter {
                 field: "tags".to_owned(),
                 value: "ops".to_owned(),
+                operator: FilterOperator::Exact,
             }],
         )
         .await
@@ -276,11 +284,16 @@ mod tests {
             &[FieldFilter {
                 field: "unknown".to_owned(),
                 value: "x".to_owned(),
+                operator: FilterOperator::Exact,
             }],
         )
         .await
         .expect_err("unknown fields should fail");
-        assert!(unknown_error.to_string().contains("not part of the 'decision' schema"));
+        assert!(
+            unknown_error
+                .to_string()
+                .contains("not part of the 'decision' schema")
+        );
 
         let opaque_error = super::query_primitives(
             &workspace,
@@ -289,12 +302,15 @@ mod tests {
             &[FieldFilter {
                 field: "snapshot".to_owned(),
                 value: "x".to_owned(),
+                operator: FilterOperator::Exact,
             }],
         )
         .await
         .expect_err("opaque fields should fail");
-        assert!(opaque_error
-            .to_string()
-            .contains("does not support direct query matching"));
+        assert!(
+            opaque_error
+                .to_string()
+                .contains("does not support direct query matching")
+        );
     }
 }

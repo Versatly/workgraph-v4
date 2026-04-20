@@ -20,6 +20,7 @@ tracing.workspace = true
 wg-api = { path = "../wg-api" }
 wg-clock = { path = "../wg-clock" }
 wg-dispatch = { path = "../wg-dispatch" }
+wg-graph = { path = "../wg-graph" }
 wg-thread = { path = "../wg-thread" }
 wg-fs = { path = "../wg-fs" }
 wg-ledger = { path = "../wg-ledger" }

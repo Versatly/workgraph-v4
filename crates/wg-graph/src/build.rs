@@ -1,6 +1,6 @@
 //! Typed graph builder that scans store primitives for semantic edges.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_yaml::Value;
 use tokio::fs;
@@ -69,7 +69,10 @@ pub async fn build_graph(workspace: &WorkspacePath) -> Result<GraphSnapshot> {
     ))
 }
 
-async fn discover_primitive_types(workspace: &WorkspacePath, registry: &Registry) -> Result<BTreeSet<String>> {
+async fn discover_primitive_types(
+    workspace: &WorkspacePath,
+    registry: &Registry,
+) -> Result<BTreeSet<String>> {
     let mut types = registry
         .list_types()
         .iter()
@@ -205,6 +208,15 @@ fn expected_reference_type<'a>(
         definition.reference_types.first().map(String::as_str)
     } else {
         None
+    }
+}
+
+fn reference_values<'a>(value: &'a Value) -> Vec<&'a str> {
+    match value {
+        Value::String(value) => vec![value.as_str()],
+        Value::Sequence(values) => values.iter().filter_map(string_value).collect(),
+        Value::Tagged(tagged) => reference_values(&tagged.value),
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::Mapping(_) => Vec::new(),
     }
 }
 

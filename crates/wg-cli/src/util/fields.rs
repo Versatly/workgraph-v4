@@ -42,9 +42,10 @@ pub fn split_body_and_frontmatter(
         } else {
             let parsed = primitive_type
                 .and_then(|primitive_type| primitive_type.field(&field.key))
-                .map_or_else(|| parse_scalar_value(&field.value), |definition| {
-                    parse_field_value(definition, &field.value)
-                });
+                .map_or_else(
+                    || parse_scalar_value(&field.value),
+                    |definition| parse_field_value(definition, &field.value),
+                );
             extra_fields.insert(field.key.clone(), parsed);
         }
     }

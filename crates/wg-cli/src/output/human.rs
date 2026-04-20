@@ -6,10 +6,9 @@ use serde_yaml::Value;
 
 use super::{
     ActorListOutput, ActorRegisterOutput, ActorShowOutput, CapabilitiesOutput, CheckpointOutput,
-    CommandOutput, ConnectOutput, CreateOutcome, CreateOutput, InitOutput, LedgerOutput,
-    PrimitiveReferenceSummary, QueryOutput, RunCreateOutcome, RunCreateOutput, RunLifecycleOutput,
-    SchemaOutput, ShowOutput, StatusOutput, ThreadClaimOutput, ThreadCompleteOutput,
-    TriggerIngestOutput,
+    CommandOutput, ConnectOutput, CreateOutcome, CreateOutput, GraphReferenceOutput, InitOutput,
+    LedgerOutput, QueryOutput, RunCreateOutcome, RunCreateOutput, RunLifecycleOutput, SchemaOutput,
+    ShowOutput, StatusOutput, ThreadClaimOutput, ThreadCompleteOutput, TriggerIngestOutput,
     TriggerReplayOutput, TriggerValidateOutput, WhoamiOutput,
 };
 
@@ -630,11 +629,15 @@ fn render_query(output: &QueryOutput) -> String {
     if !output.applied_filters.is_empty() {
         let _ = writeln!(rendered, "Filters:");
         for filter in &output.applied_filters {
-            let _ = writeln!(rendered, "- {} {} {}", filter.field, filter.operator, filter.value);
+            let _ = writeln!(rendered, "- {filter}");
         }
     }
     if !output.summary_fields.is_empty() {
-        let _ = writeln!(rendered, "Summary fields: {}", output.summary_fields.join(", "));
+        let _ = writeln!(
+            rendered,
+            "Summary fields: {}",
+            output.summary_fields.join(", ")
+        );
     }
     if output.items.is_empty() {
         let _ = writeln!(rendered, "- none");
@@ -683,11 +686,18 @@ fn render_show(output: &ShowOutput) -> String {
         "Inbound references",
         &output.inbound_references,
     );
-    render_reference_sections(
-        &mut rendered,
-        "Broken references",
-        &output.broken_references,
-    );
+    render_reference_sections(&mut rendered, "Broken references", &[]);
+    if !output.broken_references.is_empty() {
+        let _ = writeln!(rendered);
+        let _ = writeln!(rendered, "Broken references:");
+        for issue in &output.broken_references {
+            let _ = writeln!(
+                rendered,
+                "- {} [{} via {}] ({})",
+                issue.target_reference, issue.kind, issue.provenance, issue.reason
+            );
+        }
+    }
 
     if !primitive.body.trim().is_empty() {
         let _ = writeln!(rendered);
@@ -904,7 +914,7 @@ fn render_company_context_sections(rendered: &mut String, primitive: &wg_store::
 fn render_reference_sections(
     rendered: &mut String,
     heading: &str,
-    references: &[PrimitiveReferenceSummary],
+    references: &[GraphReferenceOutput],
 ) {
     let _ = writeln!(rendered);
     let _ = writeln!(rendered, "{heading}:");
@@ -914,17 +924,15 @@ fn render_reference_sections(
     }
 
     for reference in references {
+        let related_reference = if heading.starts_with("Inbound") {
+            &reference.source_reference
+        } else {
+            &reference.target_reference
+        };
         let _ = writeln!(
             rendered,
-            "- {} [{} via {}]{}",
-            reference.reference,
-            reference.edge_kind,
-            reference.provenance,
-            reference
-                .reason
-                .as_ref()
-                .map(|reason| format!(" ({reason})"))
-                .unwrap_or_default()
+            "- {} [{} via {}]",
+            related_reference, reference.kind, reference.provenance,
         );
     }
 }
@@ -963,10 +971,12 @@ fn summarize_company_context(primitive: &wg_store::StoredPrimitive) -> Option<St
         "person" => Some(join_summary_parts([
             optional_text(primitive.frontmatter.extra_fields.get("role")),
             optional_list_count("teams", primitive.frontmatter.extra_fields.get("team_ids")),
+            None,
         ])),
         "team" => Some(join_summary_parts([
             optional_text(primitive.frontmatter.extra_fields.get("org_id")),
             optional_list_count("members", primitive.frontmatter.extra_fields.get("members")),
+            None,
         ])),
         "project" => Some(join_summary_parts([
             optional_text(primitive.frontmatter.extra_fields.get("status")),
@@ -975,10 +985,16 @@ fn summarize_company_context(primitive: &wg_store::StoredPrimitive) -> Option<St
         ])),
         "client" => Some(join_summary_parts([
             optional_text(primitive.frontmatter.extra_fields.get("account_owner")),
+            None,
+            None,
         ])),
         "agent" => Some(join_summary_parts([
             optional_text(primitive.frontmatter.extra_fields.get("runtime")),
-            optional_list_count("capabilities", primitive.frontmatter.extra_fields.get("capabilities")),
+            optional_list_count(
+                "capabilities",
+                primitive.frontmatter.extra_fields.get("capabilities"),
+            ),
+            None,
         ])),
         _ => None,
     }

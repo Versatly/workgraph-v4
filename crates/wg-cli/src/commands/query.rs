@@ -1,8 +1,7 @@
 //! Implementation of the `workgraph query` command.
 
 use anyhow::bail;
-use wg_store::{FieldFilter, query_primitives};
-use wg_types::{FieldQueryBehavior, Registry};
+use wg_store::{FieldFilter, FilterOperator, query_primitives};
 
 use crate::app::AppContext;
 use crate::args::KeyValueInput;
@@ -28,17 +27,24 @@ pub async fn handle(
         .iter()
         .map(|filter| FieldFilter {
             field: filter.key.clone(),
+            operator: if filter.value.is_empty() {
+                FilterOperator::Present
+            } else {
+                FilterOperator::Exact
+            },
             value: filter.value.clone(),
-            behavior: filter_behavior(&registry, primitive_definition, &filter.key),
         })
         .collect::<Vec<_>>();
-    let items = query_primitives(app.workspace(), primitive_type, &filters).await?;
+    let items = query_primitives(app.workspace(), &registry, primitive_type, &filters).await?;
 
     Ok(QueryOutput {
         primitive_type: primitive_type.to_owned(),
         applied_filters: filters
             .iter()
-            .map(|filter| format!("{}={}", filter.field, filter.value))
+            .map(|filter| match filter.operator {
+                FilterOperator::Present => format!("{} is present", filter.field),
+                FilterOperator::Exact => format!("{}={}", filter.field, filter.value),
+            })
             .collect(),
         count: items.len(),
         items,
@@ -54,18 +60,4 @@ pub async fn handle(
             .map(|field| field.name.clone())
             .collect(),
     })
-}
-
-fn filter_behavior(
-    _registry: &Registry,
-    primitive_definition: &wg_types::PrimitiveType,
-    field_name: &str,
-) -> FieldQueryBehavior {
-    match field_name {
-        "type" | "id" | "title" => FieldQueryBehavior::Exact,
-        other => primitive_definition
-            .field(other)
-            .map(|field| field.query_behavior)
-            .unwrap_or(FieldQueryBehavior::Opaque),
-    }
 }

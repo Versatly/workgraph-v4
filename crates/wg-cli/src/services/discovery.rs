@@ -419,6 +419,24 @@ pub fn cli_schema(
                     description: field.description.clone(),
                     required: field.required,
                     repeated: field.repeated,
+                    query_behavior: match field.query_behavior {
+                        wg_types::FieldQueryBehavior::Exact => "exact",
+                        wg_types::FieldQueryBehavior::Contains => "contains",
+                        wg_types::FieldQueryBehavior::Opaque => "opaque",
+                    }
+                    .to_owned(),
+                    reference_types: field.reference_types.clone(),
+                    graph_edge_kind: field.graph_edge_kind.map(|kind| {
+                        match kind {
+                            wg_types::GraphEdgeKind::Reference => "reference",
+                            wg_types::GraphEdgeKind::Relationship => "relationship",
+                            wg_types::GraphEdgeKind::Assignment => "assignment",
+                            wg_types::GraphEdgeKind::Containment => "containment",
+                            wg_types::GraphEdgeKind::Evidence => "evidence",
+                            wg_types::GraphEdgeKind::Trigger => "trigger",
+                        }
+                        .to_owned()
+                    }),
                 })
                 .collect(),
         })

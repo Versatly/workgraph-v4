@@ -12,7 +12,7 @@ mod query;
 mod registry;
 mod validate;
 
-pub use document::{FieldFilter, PrimitiveFrontmatter, StoredPrimitive};
+pub use document::{FieldFilter, FilterOperator, PrimitiveFrontmatter, StoredPrimitive};
 pub use io::{
     AuditedWriteRequest, list_primitives, read_primitive, write_primitive, write_primitive_audited,
     write_primitive_audited_now,
