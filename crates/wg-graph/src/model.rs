@@ -138,6 +138,19 @@ impl GraphSnapshot {
         self.edges.iter().cloned().collect()
     }
 
+    /// Returns directed edges touching the provided node and direction.
+    #[must_use]
+    pub fn edge_refs(&self, node: &NodeRef, direction: NeighborDirection) -> Vec<Edge> {
+        self.edges
+            .iter()
+            .filter(|edge| match direction {
+                NeighborDirection::Inbound => edge.target == *node,
+                NeighborDirection::Outbound => edge.source == *node,
+            })
+            .cloned()
+            .collect()
+    }
+
     /// Returns neighboring nodes for the provided node and direction.
     #[must_use]
     pub fn neighbors(&self, node: &NodeRef, direction: NeighborDirection) -> Vec<NodeRef> {

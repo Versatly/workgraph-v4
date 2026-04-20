@@ -7,8 +7,9 @@ use serde_yaml::Value;
 use super::{
     ActorListOutput, ActorRegisterOutput, ActorShowOutput, CapabilitiesOutput, CheckpointOutput,
     CommandOutput, ConnectOutput, CreateOutcome, CreateOutput, InitOutput, LedgerOutput,
-    QueryOutput, RunCreateOutcome, RunCreateOutput, RunLifecycleOutput, SchemaOutput, ShowOutput,
-    StatusOutput, ThreadClaimOutput, ThreadCompleteOutput, TriggerIngestOutput,
+    PrimitiveReferenceSummary, QueryOutput, RunCreateOutcome, RunCreateOutput, RunLifecycleOutput,
+    SchemaOutput, ShowOutput, StatusOutput, ThreadClaimOutput, ThreadCompleteOutput,
+    TriggerIngestOutput,
     TriggerReplayOutput, TriggerValidateOutput, WhoamiOutput,
 };
 
@@ -427,6 +428,9 @@ fn render_actor_show(output: &ActorShowOutput) -> String {
     render_show(&ShowOutput {
         reference: output.reference.clone(),
         primitive: output.primitive.clone(),
+        outbound_references: Vec::new(),
+        inbound_references: Vec::new(),
+        broken_references: Vec::new(),
     })
 }
 
@@ -623,15 +627,27 @@ fn render_query(output: &QueryOutput) -> String {
         "{} result(s) for type '{}':",
         output.count, output.primitive_type
     );
+    if !output.applied_filters.is_empty() {
+        let _ = writeln!(rendered, "Filters:");
+        for filter in &output.applied_filters {
+            let _ = writeln!(rendered, "- {} {} {}", filter.field, filter.operator, filter.value);
+        }
+    }
+    if !output.summary_fields.is_empty() {
+        let _ = writeln!(rendered, "Summary fields: {}", output.summary_fields.join(", "));
+    }
     if output.items.is_empty() {
         let _ = writeln!(rendered, "- none");
     } else {
         for item in &output.items {
-            let _ = writeln!(
-                rendered,
+            let mut line = format!(
                 "- {}/{} — {}",
                 item.frontmatter.r#type, item.frontmatter.id, item.frontmatter.title
             );
+            if let Some(summary) = summarize_company_context(item) {
+                line.push_str(&format!(" [{summary}]"));
+            }
+            let _ = writeln!(rendered, "{line}");
         }
     }
     rendered.trim_end().to_owned()
@@ -646,6 +662,9 @@ fn render_show(output: &ShowOutput) -> String {
     let _ = writeln!(rendered, "title: {}", primitive.frontmatter.title);
 
     match primitive.frontmatter.r#type.as_str() {
+        "org" | "team" | "person" | "agent" | "client" | "project" => {
+            render_company_context_sections(&mut rendered, primitive)
+        }
         "thread" => render_thread_sections(&mut rendered, primitive),
         "mission" => render_mission_sections(&mut rendered, primitive),
         "run" => render_run_sections(&mut rendered, primitive),
@@ -653,6 +672,22 @@ fn render_show(output: &ShowOutput) -> String {
         "trigger_receipt" => render_trigger_receipt_sections(&mut rendered, primitive),
         _ => render_generic_fields(&mut rendered, primitive),
     }
+
+    render_reference_sections(
+        &mut rendered,
+        "Outbound references",
+        &output.outbound_references,
+    );
+    render_reference_sections(
+        &mut rendered,
+        "Inbound references",
+        &output.inbound_references,
+    );
+    render_reference_sections(
+        &mut rendered,
+        "Broken references",
+        &output.broken_references,
+    );
 
     if !primitive.body.trim().is_empty() {
         let _ = writeln!(rendered);
@@ -805,6 +840,95 @@ fn render_trigger_receipt_sections(rendered: &mut String, primitive: &wg_store::
     );
 }
 
+fn render_company_context_sections(rendered: &mut String, primitive: &wg_store::StoredPrimitive) {
+    match primitive.frontmatter.r#type.as_str() {
+        "org" => {
+            for key in ["summary"] {
+                render_field(rendered, key, primitive.frontmatter.extra_fields.get(key));
+            }
+            for key in ["tags", "external_refs", "snapshot"] {
+                render_section_list(rendered, key, primitive.frontmatter.extra_fields.get(key));
+            }
+        }
+        "team" => {
+            for key in ["org_id", "mission"] {
+                render_field(rendered, key, primitive.frontmatter.extra_fields.get(key));
+            }
+            for key in ["members", "tags", "external_refs"] {
+                render_section_list(rendered, key, primitive.frontmatter.extra_fields.get(key));
+            }
+        }
+        "person" => {
+            for key in ["email", "role"] {
+                render_field(rendered, key, primitive.frontmatter.extra_fields.get(key));
+            }
+            for key in ["team_ids", "tags", "external_refs"] {
+                render_section_list(rendered, key, primitive.frontmatter.extra_fields.get(key));
+            }
+        }
+        "agent" => {
+            for key in [
+                "runtime",
+                "description",
+                "owner",
+                "parent_actor_id",
+                "root_actor_id",
+                "lineage_mode",
+            ] {
+                render_field(rendered, key, primitive.frontmatter.extra_fields.get(key));
+            }
+            for key in ["capabilities", "tags", "external_refs"] {
+                render_section_list(rendered, key, primitive.frontmatter.extra_fields.get(key));
+            }
+        }
+        "client" => {
+            for key in ["summary", "account_owner"] {
+                render_field(rendered, key, primitive.frontmatter.extra_fields.get(key));
+            }
+            for key in ["tags", "external_refs", "snapshot"] {
+                render_section_list(rendered, key, primitive.frontmatter.extra_fields.get(key));
+            }
+        }
+        "project" => {
+            for key in ["status", "client_id"] {
+                render_field(rendered, key, primitive.frontmatter.extra_fields.get(key));
+            }
+            for key in ["team_ids", "tags", "external_refs", "snapshot"] {
+                render_section_list(rendered, key, primitive.frontmatter.extra_fields.get(key));
+            }
+        }
+        _ => render_generic_fields(rendered, primitive),
+    }
+}
+
+fn render_reference_sections(
+    rendered: &mut String,
+    heading: &str,
+    references: &[PrimitiveReferenceSummary],
+) {
+    let _ = writeln!(rendered);
+    let _ = writeln!(rendered, "{heading}:");
+    if references.is_empty() {
+        let _ = writeln!(rendered, "- none");
+        return;
+    }
+
+    for reference in references {
+        let _ = writeln!(
+            rendered,
+            "- {} [{} via {}]{}",
+            reference.reference,
+            reference.edge_kind,
+            reference.provenance,
+            reference
+                .reason
+                .as_ref()
+                .map(|reason| format!(" ({reason})"))
+                .unwrap_or_default()
+        );
+    }
+}
+
 fn render_generic_fields(rendered: &mut String, primitive: &wg_store::StoredPrimitive) {
     for (key, value) in &primitive.frontmatter.extra_fields {
         let _ = writeln!(rendered, "{key}: {}", yaml_scalar_or_inline(value));
@@ -832,4 +956,52 @@ fn yaml_scalar_or_inline(value: &Value) -> String {
             .map(|text| text.trim().replace('\n', " "))
             .unwrap_or_else(|_| "<unrenderable>".to_owned()),
     }
+}
+
+fn summarize_company_context(primitive: &wg_store::StoredPrimitive) -> Option<String> {
+    match primitive.frontmatter.r#type.as_str() {
+        "person" => Some(join_summary_parts([
+            optional_text(primitive.frontmatter.extra_fields.get("role")),
+            optional_list_count("teams", primitive.frontmatter.extra_fields.get("team_ids")),
+        ])),
+        "team" => Some(join_summary_parts([
+            optional_text(primitive.frontmatter.extra_fields.get("org_id")),
+            optional_list_count("members", primitive.frontmatter.extra_fields.get("members")),
+        ])),
+        "project" => Some(join_summary_parts([
+            optional_text(primitive.frontmatter.extra_fields.get("status")),
+            optional_text(primitive.frontmatter.extra_fields.get("client_id")),
+            optional_list_count("teams", primitive.frontmatter.extra_fields.get("team_ids")),
+        ])),
+        "client" => Some(join_summary_parts([
+            optional_text(primitive.frontmatter.extra_fields.get("account_owner")),
+        ])),
+        "agent" => Some(join_summary_parts([
+            optional_text(primitive.frontmatter.extra_fields.get("runtime")),
+            optional_list_count("capabilities", primitive.frontmatter.extra_fields.get("capabilities")),
+        ])),
+        _ => None,
+    }
+    .filter(|summary| !summary.is_empty())
+}
+
+fn join_summary_parts(parts: [Option<String>; 3]) -> String {
+    parts.into_iter().flatten().collect::<Vec<_>>().join(", ")
+}
+
+fn optional_text(value: Option<&Value>) -> Option<String> {
+    value.and_then(|value| match value {
+        Value::String(text) if !text.trim().is_empty() => Some(text.trim().to_owned()),
+        Value::Tagged(tagged) => optional_text(Some(&tagged.value)),
+        _ => None,
+    })
+}
+
+fn optional_list_count(label: &str, value: Option<&Value>) -> Option<String> {
+    let count = match value {
+        Some(Value::Sequence(items)) if !items.is_empty() => Some(items.len()),
+        Some(Value::Tagged(tagged)) => return optional_list_count(label, Some(&tagged.value)),
+        _ => None,
+    }?;
+    Some(format!("{count} {label}"))
 }

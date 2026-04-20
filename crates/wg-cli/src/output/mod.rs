@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 use wg_dispatch::Run;
+use wg_graph::Edge;
 use wg_orientation::{
     GraphIssue, GraphOrphan, RecentActivity, ThreadEvidenceGap, TriggerHealth,
     TriggerReceiptSummary, WorkspaceBrief,
@@ -378,10 +379,14 @@ pub struct ActorShowOutput {
 pub struct QueryOutput {
     /// The primitive type that was queried.
     pub primitive_type: String,
+    /// Exact filter strings applied to the query.
+    pub applied_filters: Vec<String>,
     /// The number of matched primitives.
     pub count: usize,
     /// The matched stored primitives.
     pub items: Vec<StoredPrimitive>,
+    /// Summary fields rendered for compact browsing.
+    pub summary_fields: Vec<String>,
 }
 
 /// Output model produced by the `show` command.
@@ -391,6 +396,53 @@ pub struct ShowOutput {
     pub reference: String,
     /// The loaded primitive.
     pub primitive: StoredPrimitive,
+    /// Structured references originating from this primitive.
+    pub outbound_references: Vec<GraphReferenceOutput>,
+    /// Structured references pointing at this primitive.
+    pub inbound_references: Vec<GraphReferenceOutput>,
+    /// Broken references declared by this primitive.
+    pub broken_references: Vec<GraphIssue>,
+}
+
+/// Structured graph reference surfaced in `show` output.
+#[derive(Debug, Clone, Serialize)]
+pub struct GraphReferenceOutput {
+    /// Source primitive in `type/id` form.
+    pub source_reference: String,
+    /// Target primitive in `type/id` form.
+    pub target_reference: String,
+    /// Semantic edge kind.
+    pub kind: String,
+    /// Provenance of the edge.
+    pub provenance: String,
+}
+
+impl GraphReferenceOutput {
+    /// Builds a serializable output row from a graph edge.
+    #[must_use]
+    pub fn from_edge(edge: &Edge) -> Self {
+        Self {
+            source_reference: edge.source.reference(),
+            target_reference: edge.target.reference(),
+            kind: match edge.kind {
+                wg_types::GraphEdgeKind::Reference => "reference",
+                wg_types::GraphEdgeKind::Relationship => "relationship",
+                wg_types::GraphEdgeKind::Assignment => "assignment",
+                wg_types::GraphEdgeKind::Containment => "containment",
+                wg_types::GraphEdgeKind::Evidence => "evidence",
+                wg_types::GraphEdgeKind::Trigger => "trigger",
+            }
+            .to_owned(),
+            provenance: match edge.provenance {
+                wg_types::GraphEdgeSource::WikiLink => "wiki_link",
+                wg_types::GraphEdgeSource::Field => "field",
+                wg_types::GraphEdgeSource::RelationshipPrimitive => "relationship_primitive",
+                wg_types::GraphEdgeSource::EvidenceRecord => "evidence_record",
+                wg_types::GraphEdgeSource::TriggerRule => "trigger_rule",
+            }
+            .to_owned(),
+        }
+    }
 }
 
 /// Renders a structured command output in either human-readable or JSON form.

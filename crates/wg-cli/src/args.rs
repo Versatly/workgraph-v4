@@ -469,7 +469,7 @@ impl TriggerCommand {
 pub enum ActorCommand {
     /// Registers a new person or agent actor.
     #[command(
-        after_help = "Examples:\n  workgraph actor register --type person --id person:pedro --title \"Pedro\" --email pedro@example.com\n  workgraph actor register --type agent --id agent:cursor --title \"Cursor\" --runtime cursor --capability coding"
+        after_help = "Examples:\n  workgraph actor register --type person --id person:pedro --title \"Pedro\" --email pedro@example.com --role Founder --team-id team/platform --tag leadership\n  workgraph actor register --type agent --id agent:cursor --title \"Cursor\" --runtime cursor --capability coding --owner person/pedro"
     )]
     Register {
         /// Actor primitive type to create (`person` or `agent`).
@@ -484,9 +484,24 @@ pub enum ActorCommand {
         /// Preferred email for person actors.
         #[arg(long)]
         email: Option<String>,
+        /// Primary role for person actors.
+        #[arg(long)]
+        role: Option<String>,
+        /// Team membership references for person actors.
+        #[arg(long = "team-id")]
+        team_ids: Vec<String>,
+        /// Tags for people and agents.
+        #[arg(long = "tag")]
+        tags: Vec<String>,
         /// Default runtime for agent actors.
         #[arg(long)]
         runtime: Option<String>,
+        /// Description of what an agent is good at.
+        #[arg(long)]
+        description: Option<String>,
+        /// Responsible person, team, or agent for an agent actor.
+        #[arg(long)]
+        owner: Option<String>,
         /// Optional tracked parent actor above this agent.
         #[arg(long = "parent-actor-id")]
         parent_actor_id: Option<String>,

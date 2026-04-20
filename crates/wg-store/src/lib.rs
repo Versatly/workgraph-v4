@@ -9,6 +9,7 @@
 mod document;
 mod io;
 mod query;
+mod registry;
 mod validate;
 
 pub use document::{FieldFilter, PrimitiveFrontmatter, StoredPrimitive};
@@ -17,4 +18,5 @@ pub use io::{
     write_primitive_audited_now,
 };
 pub use query::query_primitives;
+pub use registry::load_workspace_registry;
 pub use validate::validate_primitive;

@@ -29,11 +29,22 @@ pub struct StoredPrimitive {
     pub body: String,
 }
 
-/// An exact-match scalar frontmatter filter expressed as `field=value`.
+/// Supported query operations for a CLI field filter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FilterOperator {
+    /// Match the provided value using the field's registered query behavior.
+    Exact,
+    /// Match any primitive where the field is present.
+    Present,
+}
+
+/// A frontmatter filter expressed as `field=value`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FieldFilter {
     /// The frontmatter field name to compare.
     pub field: String,
-    /// The exact scalar value to match after string conversion.
+    /// The query operator to apply.
+    pub operator: FilterOperator,
+    /// The value to match after string conversion when the operator needs one.
     pub value: String,
 }
