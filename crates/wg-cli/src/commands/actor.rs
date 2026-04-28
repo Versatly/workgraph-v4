@@ -22,6 +22,10 @@ pub struct ActorRegisterArgs {
     pub title: String,
     /// Optional email for person actors.
     pub email: Option<String>,
+    /// Optional primary role for person actors.
+    pub role: Option<String>,
+    /// Optional team references for person actors.
+    pub team_ids: Vec<String>,
     /// Optional runtime for agent actors.
     pub runtime: Option<String>,
     /// Optional tracked parent actor id.
@@ -32,6 +36,12 @@ pub struct ActorRegisterArgs {
     pub lineage_mode: Option<String>,
     /// Optional advertised capabilities.
     pub capabilities: Vec<String>,
+    /// Optional description for agent actors.
+    pub description: Option<String>,
+    /// Optional owner reference for agent actors.
+    pub owner: Option<String>,
+    /// Optional tags for person or agent actors.
+    pub tags: Vec<String>,
 }
 
 /// Registers a new person or agent actor.
@@ -126,6 +136,28 @@ fn actor_primitive(actor_type: &str, args: &ActorRegisterArgs) -> anyhow::Result
     {
         extra_fields.insert("email".to_owned(), Value::String(email.to_owned()));
     }
+    if let Some(role) = args
+        .role
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        extra_fields.insert("role".to_owned(), Value::String(role.to_owned()));
+    }
+    let team_ids = args
+        .team_ids
+        .iter()
+        .map(String::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    if !team_ids.is_empty() {
+        extra_fields.insert(
+            "team_ids".to_owned(),
+            serde_yaml::to_value(team_ids).context("failed to encode team_ids")?,
+        );
+    }
     if let Some(runtime) = args
         .runtime
         .as_deref()
@@ -133,6 +165,25 @@ fn actor_primitive(actor_type: &str, args: &ActorRegisterArgs) -> anyhow::Result
         .filter(|value| !value.is_empty())
     {
         extra_fields.insert("runtime".to_owned(), Value::String(runtime.to_owned()));
+    }
+    if let Some(description) = args
+        .description
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        extra_fields.insert(
+            "description".to_owned(),
+            Value::String(description.to_owned()),
+        );
+    }
+    if let Some(owner) = args
+        .owner
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        extra_fields.insert("owner".to_owned(), Value::String(owner.to_owned()));
     }
     if let Some(parent_actor_id) = args
         .parent_actor_id
@@ -180,6 +231,20 @@ fn actor_primitive(actor_type: &str, args: &ActorRegisterArgs) -> anyhow::Result
         extra_fields.insert(
             "capabilities".to_owned(),
             serde_yaml::to_value(capabilities).context("failed to encode capabilities")?,
+        );
+    }
+    let tags = args
+        .tags
+        .iter()
+        .map(String::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    if !tags.is_empty() {
+        extra_fields.insert(
+            "tags".to_owned(),
+            serde_yaml::to_value(tags).context("failed to encode tags")?,
         );
     }
 

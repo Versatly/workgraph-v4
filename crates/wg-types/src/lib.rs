@@ -24,7 +24,7 @@ pub use coordination::{
 };
 pub use identity::{ActorId, NodeId, WorkspaceId};
 pub use ledger::{LedgerEntry, LedgerOp};
-pub use registry::{FieldDefinition, PrimitiveType, Registry};
+pub use registry::{FieldDefinition, FieldQueryBehavior, PrimitiveType, Registry};
 pub use status::{RunStatus, ThreadStatus};
 pub use support::{
     CachedSnapshot, ExternalRef, HostedCredential, HostedCredentialStore, RemoteAccessScope,

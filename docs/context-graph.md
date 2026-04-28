@@ -46,6 +46,19 @@ Every edge records provenance so the system can distinguish soft references from
 
 Edge provenance is part of the contract, not a debugging nicety.
 
+## Company-Context Reference Semantics
+
+Company-context primitives such as `org`, `team`, `person`, `agent`, `client`, and `project`
+should expose durable references through canonical frontmatter fields, not only through prose.
+
+- registry-declared reference fields are the source of truth for structured graph edges
+- wiki-links remain supported in body text and string-valued frontmatter, but they are secondary
+  provenance and should not replace typed company-context fields
+- new generated references should prefer explicit `type/id` form to avoid ambiguous bare ids as the
+  workspace grows
+- status and browse surfaces should distinguish field-derived references from wiki-link mentions so
+  agents can tell accountability and membership facts apart from loose mentions
+
 ## Graph Hygiene
 
 Graph hygiene is a first-class operational output, not just a debugging helper.

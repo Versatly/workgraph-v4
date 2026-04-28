@@ -229,8 +229,10 @@ mod tests {
     fn success_envelope_serializes_required_contract() {
         let output = CommandOutput::Query(QueryOutput {
             primitive_type: "org".to_owned(),
+            applied_filters: Vec::new(),
             count: 0,
             items: Vec::new(),
+            summary_fields: Vec::new(),
         });
         let envelope = success(&output).expect("success envelope should build");
         let json = serde_json::to_value(&envelope).expect("success envelope should serialize");
