@@ -190,6 +190,40 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
                 ],
             ),
             capability(
+                "invite create",
+                "Create an actor-bound hosted invite credential and print the invited agent's connect command.",
+                vec![],
+                &[
+                    global_flags[0],
+                    global_flags[1],
+                    "--label <label>",
+                    "--actor-id <actor-id>",
+                    "--server <url>",
+                    "--access-scope <read|operate|admin>",
+                ],
+                vec![
+                    "workgraph invite create --label openclaw --actor-id agent:pedro-openclaw --server http://127.0.0.1:8787 --json",
+                    "workgraph invite create --label hermes --actor-id agent:pedro-hermes --server https://wg.example.com --access-scope operate",
+                ],
+            ),
+            capability(
+                "invite list",
+                "List hosted invite credentials without revealing raw tokens.",
+                vec![],
+                &global_flags,
+                vec!["workgraph invite list --json", "workgraph invite list"],
+            ),
+            capability(
+                "invite revoke",
+                "Revoke one hosted invite credential by label or id.",
+                vec!["<label-or-id>"],
+                &global_flags,
+                vec![
+                    "workgraph invite revoke openclaw --json",
+                    "workgraph invite revoke invite-openclaw",
+                ],
+            ),
+            capability(
                 "actor list",
                 "List registered person and agent actors in the active workspace.",
                 vec![],
