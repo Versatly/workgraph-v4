@@ -89,6 +89,53 @@ cargo build --release
 ./target/release/workgraph schema
 ```
 
+## Tonight Agent Onboarding Flow
+
+For one operator bootstrapping OpenClaw, Hermes, or another shell-capable agent:
+
+```bash
+workgraph onboard \
+  --person-id person:pedro \
+  --person-title "Pedro" \
+  --org-title "Versatly" \
+  --project-title "WorkGraph" \
+  --agent agent:pedro-openclaw=openclaw \
+  --agent agent:pedro-hermes=hermes
+
+workgraph invite create \
+  --label openclaw \
+  --actor-id agent:pedro-openclaw \
+  --server http://127.0.0.1:8787
+
+workgraph invite create \
+  --label hermes \
+  --actor-id agent:pedro-hermes \
+  --server http://127.0.0.1:8787
+
+workgraph serve --listen 127.0.0.1:8787
+```
+
+Give each invited agent only its generated `workgraph connect ...` command. The hosted
+server accepts all active invite credentials in `.workgraph/credentials.yaml`, binds each
+request to the credential's actor, and enforces the credential's `read`, `operate`, or
+`admin` scope. Revoke an invite with:
+
+```bash
+workgraph invite revoke openclaw
+```
+
+Agents should start with:
+
+```bash
+workgraph connect --server <server> --token <invite-token> --actor-id <actor-id>
+workgraph brief --json
+workgraph capabilities --json
+```
+
+This is a developer-hosted coordination surface, not org-grade credential management yet:
+tokens are bearer credentials, stored only as hashes on the host, and rotation is performed
+by revoking and recreating an invite.
+
 ## Quality Gate
 
 ```bash

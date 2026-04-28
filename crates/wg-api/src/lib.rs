@@ -15,6 +15,7 @@ use axum::{
     routing::{get, post},
 };
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use wg_types::{RemoteAccessScope, RemoteCommandRequest, RemoteCommandResponse};
 
 /// Remote command executor used by the hosted API server.
@@ -24,8 +25,33 @@ pub trait RemoteCommandExecutor: Send + Sync {
     async fn execute(
         &self,
         workspace_root: PathBuf,
+        credential: AuthenticatedCredential,
         request: RemoteCommandRequest,
     ) -> anyhow::Result<RemoteCommandResponse>;
+}
+
+/// One hosted HTTP credential accepted by the server.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApiCredential {
+    /// Stable credential identifier.
+    pub id: String,
+    /// Actor identity bound to the credential.
+    pub actor_id: String,
+    /// Governance scope granted to this credential.
+    pub access_scope: RemoteAccessScope,
+    /// SHA-256 hash of the bearer token accepted for this credential.
+    pub token_hash: String,
+}
+
+/// Credential details authenticated for a single HTTP request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthenticatedCredential {
+    /// Stable credential identifier.
+    pub id: String,
+    /// Actor identity bound to the credential.
+    pub actor_id: String,
+    /// Governance scope granted to this credential.
+    pub access_scope: RemoteAccessScope,
 }
 
 /// HTTP server configuration for one hosted WorkGraph workspace.
@@ -35,12 +61,8 @@ pub struct ApiServerConfig {
     pub listen_addr: SocketAddr,
     /// Filesystem root of the hosted workspace.
     pub workspace_root: PathBuf,
-    /// Bearer token accepted by the server.
-    pub auth_token: String,
-    /// Actor identity bound to the hosted credential.
-    pub actor_id: String,
-    /// Governance scope granted to the hosted credential.
-    pub access_scope: RemoteAccessScope,
+    /// Bearer credentials accepted by the server.
+    pub credentials: Vec<ApiCredential>,
 }
 
 #[derive(Clone)]
@@ -58,10 +80,12 @@ pub struct HealthResponse {
     pub ok: bool,
     /// Hosted workspace root served by this process.
     pub workspace_root: String,
-    /// Governance scope enforced for the hosted credential.
+    /// Governance scope enforced for the authenticated credential.
     pub access_scope: RemoteAccessScope,
-    /// Actor identity bound to the hosted credential.
+    /// Actor identity bound to the authenticated credential.
     pub actor_id: String,
+    /// Credential id used for this authenticated request.
+    pub credential_id: String,
 }
 
 /// Serves the hosted WorkGraph HTTP adapter until the process is terminated.
@@ -87,14 +111,19 @@ pub async fn serve(
         .context("hosted API server terminated unexpectedly")
 }
 
-async fn health(State(state): State<ApiState>) -> Json<HealthResponse> {
-    Json(HealthResponse {
+async fn health(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+) -> Result<Json<HealthResponse>, ApiError> {
+    let credential = authorize(&headers, &state.config.credentials)?;
+    Ok(Json(HealthResponse {
         service: "workgraph-api",
         ok: true,
         workspace_root: state.config.workspace_root.display().to_string(),
-        access_scope: state.config.access_scope,
-        actor_id: state.config.actor_id.clone(),
-    })
+        access_scope: credential.access_scope,
+        actor_id: credential.actor_id,
+        credential_id: credential.id,
+    }))
 }
 
 async fn execute(
@@ -102,24 +131,43 @@ async fn execute(
     headers: HeaderMap,
     Json(request): Json<RemoteCommandRequest>,
 ) -> Result<Json<RemoteCommandResponse>, ApiError> {
-    authorize(&headers, &state.config.auth_token)?;
+    let credential = authorize(&headers, &state.config.credentials)?;
     let response = state
         .executor
-        .execute(state.config.workspace_root.clone(), request)
+        .execute(state.config.workspace_root.clone(), credential, request)
         .await
         .map_err(ApiError::internal)?;
     Ok(Json(response))
 }
 
-fn authorize(headers: &HeaderMap, expected_token: &str) -> Result<(), ApiError> {
+fn authorize(
+    headers: &HeaderMap,
+    credentials: &[ApiCredential],
+) -> Result<AuthenticatedCredential, ApiError> {
     let provided = headers
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "));
-    match provided {
-        Some(token) if token == expected_token => Ok(()),
-        _ => Err(ApiError::unauthorized()),
+    let Some(provided) = provided else {
+        return Err(ApiError::unauthorized());
+    };
+
+    let provided_hash = token_hash(provided);
+    for credential in credentials {
+        if credential.token_hash == provided_hash {
+            return Ok(AuthenticatedCredential {
+                id: credential.id.clone(),
+                actor_id: credential.actor_id.clone(),
+                access_scope: credential.access_scope,
+            });
+        }
     }
+    Err(ApiError::unauthorized())
+}
+
+fn token_hash(token: &str) -> String {
+    let digest = Sha256::digest(token.as_bytes());
+    format!("{digest:x}")
 }
 
 struct ApiError {

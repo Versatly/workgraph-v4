@@ -28,6 +28,8 @@ pub const AGENT_SCHEMA_VERSION: &str = "v1";
 pub enum CommandOutput {
     /// Result of `workgraph init`.
     Init(InitOutput),
+    /// Result of `workgraph onboard`.
+    Onboard(OnboardOutput),
     /// Result of `workgraph connect`.
     Connect(ConnectOutput),
     /// Result of `workgraph whoami`.
@@ -72,6 +74,12 @@ pub enum CommandOutput {
     ActorList(ActorListOutput),
     /// Result of `workgraph actor show`.
     ActorShow(ActorShowOutput),
+    /// Result of `workgraph invite create`.
+    InviteCreate(InviteCreateOutput),
+    /// Result of `workgraph invite list`.
+    InviteList(InviteListOutput),
+    /// Result of `workgraph invite revoke`.
+    InviteRevoke(InviteRevokeOutput),
 }
 
 /// Output model produced by the `init` command.
@@ -89,6 +97,32 @@ pub struct InitOutput {
     pub created_directories: Vec<String>,
 }
 
+/// Primitive created or reused during onboarding.
+#[derive(Debug, Serialize)]
+pub struct OnboardCreatedPrimitive {
+    /// Created primitive reference.
+    pub reference: String,
+    /// Whether onboarding created the primitive or found an existing one.
+    pub created: bool,
+    /// Stored primitive payload.
+    pub primitive: StoredPrimitive,
+}
+
+/// Output model produced by `workgraph onboard`.
+#[derive(Debug, Serialize)]
+pub struct OnboardOutput {
+    /// Initialization output for the workspace.
+    pub init: InitOutput,
+    /// Registered operator actor.
+    pub person: ActorRegisterOutput,
+    /// Registered initial agent actors.
+    pub agents: Vec<ActorRegisterOutput>,
+    /// Optional org/project/mission/thread primitives created by onboarding.
+    pub created_primitives: Vec<OnboardCreatedPrimitive>,
+    /// Actor id set as the default local actor.
+    pub default_actor_id: String,
+}
+
 /// Output model produced by the `connect` command.
 #[derive(Debug, Serialize)]
 pub struct ConnectOutput {
@@ -100,6 +134,8 @@ pub struct ConnectOutput {
     pub actor_id: String,
     /// Governance scope granted by the hosted credential.
     pub access_scope: String,
+    /// Hosted credential id authenticated by the server.
+    pub credential_id: String,
     /// The persisted workspace configuration after adding the remote profile.
     pub config: WorkgraphConfig,
 }
@@ -136,6 +172,8 @@ pub struct ServeOutput {
     pub actor_id: Option<String>,
     /// Governance scope granted to the served credential or session.
     pub access_scope: String,
+    /// Number of actor-bound credentials accepted by this served endpoint.
+    pub credential_count: usize,
 }
 
 /// Output model produced by the `status` command.
@@ -373,6 +411,70 @@ pub struct ActorShowOutput {
     pub primitive: StoredPrimitive,
 }
 
+/// Redacted summary of one hosted invite credential.
+#[derive(Debug, Serialize)]
+pub struct InviteSummary {
+    /// Stable credential identifier.
+    pub id: String,
+    /// Human-readable credential label.
+    pub label: String,
+    /// Actor bound to this credential.
+    pub actor_id: String,
+    /// Access scope granted by this credential.
+    pub access_scope: String,
+    /// Whether this credential has been revoked.
+    pub revoked: bool,
+}
+
+impl InviteSummary {
+    /// Builds a redacted summary from a stored hosted credential.
+    #[must_use]
+    pub fn from_credential(credential: &wg_types::HostedCredential) -> Self {
+        Self {
+            id: credential.id.clone(),
+            label: credential.label.clone(),
+            actor_id: credential.actor_id.to_string(),
+            access_scope: credential.access_scope.as_str().to_owned(),
+            revoked: credential.revoked,
+        }
+    }
+}
+
+/// Output model produced by `workgraph invite create`.
+#[derive(Debug, Serialize)]
+pub struct InviteCreateOutput {
+    /// Redacted persisted credential summary.
+    pub credential: InviteSummary,
+    /// Server URL included in the generated connect command.
+    pub server: String,
+    /// Raw token shown only at creation time.
+    pub token: String,
+    /// Ready-to-copy command for the invited agent.
+    pub connect_command: String,
+    /// Credential store path on the host workspace.
+    pub credentials_path: String,
+}
+
+/// Output model produced by `workgraph invite list`.
+#[derive(Debug, Serialize)]
+pub struct InviteListOutput {
+    /// Number of hosted credentials.
+    pub count: usize,
+    /// Redacted hosted credential summaries.
+    pub credentials: Vec<InviteSummary>,
+    /// Credential store path on the host workspace.
+    pub credentials_path: String,
+}
+
+/// Output model produced by `workgraph invite revoke`.
+#[derive(Debug, Serialize)]
+pub struct InviteRevokeOutput {
+    /// Redacted revoked credential summary.
+    pub credential: InviteSummary,
+    /// Credential store path on the host workspace.
+    pub credentials_path: String,
+}
+
 /// Output model produced by the `query` command.
 #[derive(Debug, Serialize)]
 pub struct QueryOutput {
@@ -431,6 +533,7 @@ impl CommandOutput {
     pub fn command_name(&self) -> &'static str {
         match self {
             Self::Init(_) => "init",
+            Self::Onboard(_) => "onboard",
             Self::Connect(_) => "connect",
             Self::Whoami(_) => "whoami",
             Self::Serve(_) => "serve",
@@ -459,6 +562,9 @@ impl CommandOutput {
             Self::ActorRegister(_) => "actor_register",
             Self::ActorList(_) => "actor_list",
             Self::ActorShow(_) => "actor_show",
+            Self::InviteCreate(_) => "invite_create",
+            Self::InviteList(_) => "invite_list",
+            Self::InviteRevoke(_) => "invite_revoke",
         }
     }
 
@@ -470,6 +576,7 @@ impl CommandOutput {
     pub fn result_value(&self) -> anyhow::Result<JsonValue> {
         match self {
             Self::Init(output) => serde_json::to_value(output),
+            Self::Onboard(output) => serde_json::to_value(output),
             Self::Connect(output) => serde_json::to_value(output),
             Self::Whoami(output) => serde_json::to_value(output),
             Self::Serve(output) => serde_json::to_value(output),
@@ -492,6 +599,9 @@ impl CommandOutput {
             Self::ActorRegister(output) => serde_json::to_value(output),
             Self::ActorList(output) => serde_json::to_value(output),
             Self::ActorShow(output) => serde_json::to_value(output),
+            Self::InviteCreate(output) => serde_json::to_value(output),
+            Self::InviteList(output) => serde_json::to_value(output),
+            Self::InviteRevoke(output) => serde_json::to_value(output),
         }
         .map_err(Into::into)
     }
@@ -505,6 +615,11 @@ impl CommandOutput {
                 "workgraph capabilities".to_owned(),
                 "workgraph create org --title \"<title>\"".to_owned(),
                 "workgraph show org/versatly".to_owned(),
+            ],
+            Self::Onboard(_) => vec![
+                "workgraph brief --json".to_owned(),
+                "workgraph invite create --label openclaw --actor-id agent:pedro-openclaw --server http://127.0.0.1:8787".to_owned(),
+                "workgraph serve --listen 0.0.0.0:8787".to_owned(),
             ],
             Self::Connect(_) => vec![
                 "workgraph whoami".to_owned(),
@@ -583,6 +698,19 @@ impl CommandOutput {
             Self::ActorShow(output) => vec![
                 format!("workgraph show {}", output.reference),
                 "workgraph actor list".to_owned(),
+            ],
+            Self::InviteCreate(output) => vec![
+                output.connect_command.clone(),
+                "workgraph serve --listen 0.0.0.0:8787".to_owned(),
+                "workgraph invite list".to_owned(),
+            ],
+            Self::InviteList(_) => vec![
+                "workgraph invite create --label <label> --actor-id <actor-id> --server <url>".to_owned(),
+                "workgraph serve --listen 0.0.0.0:8787".to_owned(),
+            ],
+            Self::InviteRevoke(_) => vec![
+                "workgraph invite list".to_owned(),
+                "workgraph serve --listen 0.0.0.0:8787".to_owned(),
             ],
             Self::Query(output) => {
                 let mut actions = vec!["workgraph brief".to_owned()];

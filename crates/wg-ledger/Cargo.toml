@@ -10,11 +10,11 @@ authors.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 tokio.workspace = true
-wg-clock = { path = "../wg-clock" }
-wg-error = { path = "../wg-error" }
-wg-fs = { path = "../wg-fs" }
-wg-paths = { path = "../wg-paths" }
-wg-types = { path = "../wg-types" }
+wg-clock = { version = "0.1.0", path = "../wg-clock" }
+wg-error = { version = "0.1.0", path = "../wg-error" }
+wg-fs = { version = "0.1.0", path = "../wg-fs" }
+wg-paths = { version = "0.1.0", path = "../wg-paths" }
+wg-types = { version = "0.1.0", path = "../wg-types" }
 
 [dev-dependencies]
 tempfile.workspace = true

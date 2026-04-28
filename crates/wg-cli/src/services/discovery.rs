@@ -87,6 +87,24 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
         first_command: "workgraph brief --json".to_owned(),
         commands: vec![
             capability(
+                "onboard",
+                "Initialize a workspace and register the operator plus optional first agents.",
+                vec![],
+                &[
+                    global_flags[0],
+                    global_flags[1],
+                    "--person-id <actor-id>",
+                    "--person-title \"<name>\"",
+                    "--org-title \"<title>\"",
+                    "--project-title \"<title>\"",
+                    "--agent <actor-id>=<runtime>",
+                ],
+                vec![
+                    "workgraph onboard --person-id person:pedro --person-title \"Pedro\" --org-title \"Versatly\" --json",
+                    "workgraph onboard --person-id person:pedro --person-title \"Pedro\" --agent agent:pedro-openclaw=openclaw --agent agent:pedro-hermes=hermes",
+                ],
+            ),
+            capability(
                 "connect",
                 "Connect this CLI profile to a hosted WorkGraph workspace using an actor-bound scoped credential.",
                 vec![],
@@ -128,6 +146,40 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
                 ],
             ),
             capability(
+                "invite create",
+                "Create an actor-bound hosted invite credential and print the invited agent's connect command.",
+                vec![],
+                &[
+                    global_flags[0],
+                    global_flags[1],
+                    "--label <label>",
+                    "--actor-id <actor-id>",
+                    "--server <url>",
+                    "--access-scope <read|operate|admin>",
+                ],
+                vec![
+                    "workgraph invite create --label openclaw --actor-id agent:pedro-openclaw --server http://127.0.0.1:8787 --json",
+                    "workgraph invite create --label hermes --actor-id agent:pedro-hermes --server https://wg.example.com --access-scope operate",
+                ],
+            ),
+            capability(
+                "invite list",
+                "List hosted invite credentials without revealing raw tokens.",
+                vec![],
+                &global_flags,
+                vec!["workgraph invite list --json", "workgraph invite list"],
+            ),
+            capability(
+                "invite revoke",
+                "Revoke one hosted invite credential by label or id.",
+                vec!["<label-or-id>"],
+                &global_flags,
+                vec![
+                    "workgraph invite revoke openclaw --json",
+                    "workgraph invite revoke invite-openclaw",
+                ],
+            ),
+            capability(
                 "actor list",
                 "List registered person and agent actors in the active workspace.",
                 vec![],
@@ -139,11 +191,7 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
                 "Initialize registry, config, ledger, and primitive directories.",
                 vec![],
                 &global_flags,
-                vec![
-                    "workgraph init --json",
-                    "workgraph init",
-                    "workgraph init --server http://127.0.0.1:8787 --workspace-id demo --token dev-token --actor-id agent:cli --json",
-                ],
+                vec!["workgraph init --json", "workgraph init"],
             ),
             capability(
                 "brief",

@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
+use crate::ActorId;
+
 /// References an external system without copying the source of truth into WorkGraph.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExternalRef {
@@ -99,6 +101,32 @@ impl FromStr for RemoteAccessScope {
     }
 }
 
+/// One actor-bound hosted credential accepted by a WorkGraph HTTP server.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HostedCredential {
+    /// Stable credential identifier used for list/revoke operations.
+    pub id: String,
+    /// Human-readable label for the credential.
+    pub label: String,
+    /// Actor identity this credential is allowed to operate as.
+    pub actor_id: ActorId,
+    /// Governance scope granted to this credential.
+    pub access_scope: RemoteAccessScope,
+    /// SHA-256 hash of the bearer token. The raw token is only shown at creation time.
+    pub token_hash: String,
+    /// Whether the credential has been revoked and should no longer authenticate.
+    #[serde(default)]
+    pub revoked: bool,
+}
+
+/// Persistent hosted invite credential store for one WorkGraph workspace.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HostedCredentialStore {
+    /// All hosted invite credentials known to this workspace.
+    #[serde(default)]
+    pub credentials: Vec<HostedCredential>,
+}
+
 /// A remotely executable WorkGraph command request.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemoteCommandRequest {
@@ -121,7 +149,8 @@ pub struct RemoteCommandResponse {
 #[cfg(test)]
 mod tests {
     use super::{
-        CachedSnapshot, ExternalRef, RemoteAccessScope, RemoteCommandRequest, RemoteCommandResponse,
+        CachedSnapshot, ExternalRef, HostedCredential, HostedCredentialStore, RemoteAccessScope,
+        RemoteCommandRequest, RemoteCommandResponse,
     };
     use chrono::{TimeZone, Utc};
     use std::collections::BTreeMap;
@@ -185,6 +214,20 @@ mod tests {
         roundtrip(&RemoteCommandResponse {
             success: true,
             rendered: "{\"success\":true}".into(),
+        });
+    }
+
+    #[test]
+    fn hosted_credential_store_roundtrips_through_json() {
+        roundtrip(&HostedCredentialStore {
+            credentials: vec![HostedCredential {
+                id: "invite-openclaw".into(),
+                label: "OpenClaw".into(),
+                actor_id: crate::ActorId::new("agent:openclaw"),
+                access_scope: RemoteAccessScope::Operate,
+                token_hash: "abc123".into(),
+                revoked: false,
+            }],
         });
     }
 

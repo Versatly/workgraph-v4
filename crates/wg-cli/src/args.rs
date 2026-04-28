@@ -60,6 +60,36 @@ pub enum Command {
         after_help = "Examples:\n  workgraph init\n  workgraph --json init\n  workgraph --format json init"
     )]
     Init,
+    /// Guides first-run workspace setup for an operator and initial agents.
+    #[command(
+        after_help = "Examples:\n  workgraph onboard --person-id person:pedro --person-title \"Pedro\" --org-title \"Versatly\" --project-title \"WorkGraph\"\n  workgraph onboard --person-id person:pedro --person-title \"Pedro\" --agent agent:pedro-openclaw=openclaw --agent agent:pedro-hermes=hermes --json"
+    )]
+    Onboard {
+        /// Durable person actor id for the operator.
+        #[arg(long = "person-id")]
+        person_id: String,
+        /// Human-readable operator name.
+        #[arg(long = "person-title")]
+        person_title: String,
+        /// Optional operator email.
+        #[arg(long)]
+        email: Option<String>,
+        /// Optional initial org title to create.
+        #[arg(long = "org-title")]
+        org_title: Option<String>,
+        /// Optional initial project title to create.
+        #[arg(long = "project-title")]
+        project_title: Option<String>,
+        /// Optional initial mission title to create.
+        #[arg(long = "mission-title")]
+        mission_title: Option<String>,
+        /// Optional initial thread title to create.
+        #[arg(long = "thread-title")]
+        thread_title: Option<String>,
+        /// Initial agent expressed as `<actor-id>=<runtime>`.
+        #[arg(long = "agent", value_parser = parse_key_value_input)]
+        agents: Vec<KeyValueInput>,
+    },
     /// Connects the current directory to a hosted WorkGraph server profile.
     #[command(
         after_help = "Examples:\n  workgraph connect --server http://127.0.0.1:8787 --token secret --actor-id person:pedro\n  workgraph --json connect --server http://127.0.0.1:8787 --token secret --actor-id agent:cursor"
@@ -87,6 +117,15 @@ pub enum Command {
         #[command(subcommand)]
         command: ActorCommand,
     },
+    /// Creates and manages actor-bound hosted invite credentials.
+    #[command(
+        after_help = "Examples:\n  workgraph invite create --actor-id agent:pedro-openclaw --label openclaw --server http://127.0.0.1:8787\n  workgraph invite list\n  workgraph invite revoke openclaw"
+    )]
+    Invite {
+        /// Invite-specific subcommand to execute.
+        #[command(subcommand)]
+        command: InviteCommand,
+    },
     /// Serves the WorkGraph MCP stdio adapter.
     #[command(
         after_help = "Examples:\n  workgraph mcp serve --actor-id agent:cursor\n  workgraph mcp serve --actor-id agent:cursor --access-scope operate\n  workgraph mcp serve --actor-id person:pedro --access-scope admin"
@@ -98,21 +137,12 @@ pub enum Command {
     },
     /// Serves the current workspace over the hosted HTTP API.
     #[command(
-        after_help = "Examples:\n  workgraph serve --listen 127.0.0.1:8787 --token secret --actor-id agent:cursor\n  workgraph serve --listen 0.0.0.0:8787 --token secret --actor-id agent:cursor --access-scope operate\n  workgraph serve --listen 127.0.0.1:8787 --token secret --actor-id person:pedro --access-scope admin"
+        after_help = "Examples:\n  workgraph serve --listen 127.0.0.1:8787\n  workgraph invite create --actor-id agent:cursor --label cursor --server http://127.0.0.1:8787"
     )]
     Serve {
         /// Socket address to bind the hosted server to.
         #[arg(long)]
         listen: String,
-        /// Bearer token required by remote clients.
-        #[arg(long)]
-        token: String,
-        /// Actor identity bound to the hosted credential.
-        #[arg(long = "actor-id")]
-        actor_id: String,
-        /// Governance scope granted to the hosted credential.
-        #[arg(long = "access-scope", value_parser = parse_remote_access_scope)]
-        access_scope: Option<RemoteAccessScopeArg>,
     },
     /// Produces an orientation summary for a human or agent entering the workspace.
     #[command(
@@ -245,6 +275,7 @@ impl Command {
     pub const fn name(&self) -> &'static str {
         match self {
             Self::Init => "init",
+            Self::Onboard { .. } => "onboard",
             Self::Connect { .. } => "connect",
             Self::Whoami => "whoami",
             Self::Serve { .. } => "serve",
@@ -262,6 +293,7 @@ impl Command {
             Self::Run { command } => command.name(),
             Self::Trigger { command } => command.name(),
             Self::Actor { command } => command.name(),
+            Self::Invite { command } => command.name(),
             Self::Mcp { command } => command.name(),
         }
     }
@@ -272,6 +304,7 @@ impl Command {
         !matches!(
             self,
             Self::Init
+                | Self::Onboard { .. }
                 | Self::Connect { .. }
                 | Self::Whoami
                 | Self::Serve { .. }
@@ -283,9 +316,11 @@ impl Command {
     #[must_use]
     pub const fn required_remote_access_scope(&self) -> RemoteAccessScope {
         match self {
-            Self::Init | Self::Connect { .. } | Self::Serve { .. } | Self::Mcp { .. } => {
-                RemoteAccessScope::Admin
-            }
+            Self::Init
+            | Self::Onboard { .. }
+            | Self::Connect { .. }
+            | Self::Serve { .. }
+            | Self::Mcp { .. } => RemoteAccessScope::Admin,
             Self::Whoami
             | Self::Brief { .. }
             | Self::Status
@@ -308,6 +343,12 @@ impl Command {
             Self::Actor { command } => match command {
                 ActorCommand::List { .. } | ActorCommand::Show { .. } => RemoteAccessScope::Read,
                 ActorCommand::Register { .. } => RemoteAccessScope::Admin,
+            },
+            Self::Invite { command } => match command {
+                InviteCommand::List => RemoteAccessScope::Read,
+                InviteCommand::Create { .. } | InviteCommand::Revoke { .. } => {
+                    RemoteAccessScope::Admin
+                }
             },
         }
     }
@@ -527,6 +568,52 @@ impl ActorCommand {
             Self::Register { .. } => "actor_register",
             Self::List { .. } => "actor_list",
             Self::Show { .. } => "actor_show",
+        }
+    }
+}
+
+/// Supported `workgraph invite` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum InviteCommand {
+    /// Creates or reuses an actor-bound hosted credential and prints the connect command.
+    #[command(
+        after_help = "Examples:\n  workgraph invite create --actor-id agent:pedro-openclaw --label openclaw --server http://127.0.0.1:8787\n  workgraph invite create --actor-id agent:pedro-hermes --label hermes --access-scope admin"
+    )]
+    Create {
+        /// Stable invite/credential label.
+        #[arg(long)]
+        label: String,
+        /// Actor identity bound to this invite.
+        #[arg(long = "actor-id")]
+        actor_id: String,
+        /// Server URL agents should use with `workgraph connect`.
+        #[arg(long, default_value = "http://127.0.0.1:8787")]
+        server: String,
+        /// Governance scope granted by the invite.
+        #[arg(long = "access-scope", value_parser = parse_remote_access_scope)]
+        access_scope: Option<RemoteAccessScopeArg>,
+    },
+    /// Lists hosted invite credentials without revealing raw tokens.
+    #[command(after_help = "Examples:\n  workgraph invite list\n  workgraph --json invite list")]
+    List,
+    /// Revokes one hosted invite credential by label or id.
+    #[command(
+        after_help = "Examples:\n  workgraph invite revoke openclaw\n  workgraph invite revoke invite-openclaw"
+    )]
+    Revoke {
+        /// Credential label or id to revoke.
+        label_or_id: String,
+    },
+}
+
+impl InviteCommand {
+    /// Returns the stable command name associated with this parsed invite subcommand.
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::Create { .. } => "invite_create",
+            Self::List => "invite_list",
+            Self::Revoke { .. } => "invite_revoke",
         }
     }
 }

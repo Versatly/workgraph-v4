@@ -6,10 +6,11 @@ use serde_yaml::Value;
 
 use super::{
     ActorListOutput, ActorRegisterOutput, ActorShowOutput, CapabilitiesOutput, CheckpointOutput,
-    CommandOutput, ConnectOutput, CreateOutcome, CreateOutput, InitOutput, LedgerOutput,
-    QueryOutput, RunCreateOutcome, RunCreateOutput, RunLifecycleOutput, SchemaOutput, ShowOutput,
-    StatusOutput, ThreadClaimOutput, ThreadCompleteOutput, TriggerIngestOutput,
-    TriggerReplayOutput, TriggerValidateOutput, WhoamiOutput,
+    CommandOutput, ConnectOutput, CreateOutcome, CreateOutput, InitOutput, InviteCreateOutput,
+    InviteListOutput, InviteRevokeOutput, LedgerOutput, QueryOutput, RunCreateOutcome,
+    RunCreateOutput, RunLifecycleOutput, SchemaOutput, ShowOutput, StatusOutput, ThreadClaimOutput,
+    ThreadCompleteOutput, TriggerIngestOutput, TriggerReplayOutput, TriggerValidateOutput,
+    WhoamiOutput,
 };
 
 /// Renders a structured command output to human-readable text.
@@ -17,6 +18,7 @@ use super::{
 pub fn render(output: &CommandOutput, next_actions: &[String]) -> String {
     let mut rendered = match output {
         CommandOutput::Init(output) => render_init(output),
+        CommandOutput::Onboard(output) => render_onboard(output),
         CommandOutput::Connect(output) => render_connect(output),
         CommandOutput::Whoami(output) => render_whoami(output),
         CommandOutput::Serve(output) => render_serve(output),
@@ -31,6 +33,9 @@ pub fn render(output: &CommandOutput, next_actions: &[String]) -> String {
         CommandOutput::ActorRegister(output) => render_actor_register(output),
         CommandOutput::ActorList(output) => render_actor_list(output),
         CommandOutput::ActorShow(output) => render_actor_show(output),
+        CommandOutput::InviteCreate(output) => render_invite_create(output),
+        CommandOutput::InviteList(output) => render_invite_list(output),
+        CommandOutput::InviteRevoke(output) => render_invite_revoke(output),
         CommandOutput::Create(output) => render_create(output),
         CommandOutput::RunCreate(output) => render_run_create(output),
         CommandOutput::RunLifecycle(output) => render_run_lifecycle(output),
@@ -82,6 +87,39 @@ fn render_init(output: &InitOutput) -> String {
     let _ = writeln!(rendered, "Primitive directories:");
     for directory in &output.created_directories {
         let _ = writeln!(rendered, "- {directory}");
+    }
+    rendered.trim_end().to_owned()
+}
+
+fn render_onboard(output: &super::OnboardOutput) -> String {
+    let mut rendered = String::new();
+    let _ = writeln!(
+        rendered,
+        "Onboarded WorkGraph workspace '{}' ({})",
+        output.init.config.workspace_name, output.init.config.workspace_id
+    );
+    let _ = writeln!(rendered, "default_actor_id: {}", output.default_actor_id);
+    let _ = writeln!(rendered, "operator: {}", output.person.reference);
+    let _ = writeln!(rendered, "agents:");
+    if output.agents.is_empty() {
+        let _ = writeln!(rendered, "- none");
+    } else {
+        for agent in &output.agents {
+            let _ = writeln!(rendered, "- {}", agent.reference);
+        }
+    }
+    let _ = writeln!(rendered, "seeded primitives:");
+    if output.created_primitives.is_empty() {
+        let _ = writeln!(rendered, "- none");
+    } else {
+        for primitive in &output.created_primitives {
+            let state = if primitive.created {
+                "created"
+            } else {
+                "existing"
+            };
+            let _ = writeln!(rendered, "- {} ({state})", primitive.reference);
+        }
     }
     rendered.trim_end().to_owned()
 }
@@ -428,6 +466,56 @@ fn render_actor_show(output: &ActorShowOutput) -> String {
         reference: output.reference.clone(),
         primitive: output.primitive.clone(),
     })
+}
+
+fn render_invite_create(output: &InviteCreateOutput) -> String {
+    let mut rendered = String::new();
+    let _ = writeln!(rendered, "Created invite: {}", output.credential.label);
+    let _ = writeln!(rendered, "credential_id: {}", output.credential.id);
+    let _ = writeln!(rendered, "actor_id: {}", output.credential.actor_id);
+    let _ = writeln!(rendered, "access_scope: {}", output.credential.access_scope);
+    let _ = writeln!(rendered, "server: {}", output.server);
+    let _ = writeln!(rendered, "credentials: {}", output.credentials_path);
+    let _ = writeln!(rendered, "token: {}", output.token);
+    let _ = writeln!(rendered, "connect:");
+    let _ = writeln!(rendered, "{}", output.connect_command);
+    rendered.trim_end().to_owned()
+}
+
+fn render_invite_list(output: &InviteListOutput) -> String {
+    let mut rendered = String::new();
+    let _ = writeln!(rendered, "Invite credentials: {}", output.count);
+    let _ = writeln!(rendered, "credentials: {}", output.credentials_path);
+    if output.credentials.is_empty() {
+        let _ = writeln!(rendered, "- none");
+    } else {
+        for credential in &output.credentials {
+            let status = if credential.revoked {
+                "revoked"
+            } else {
+                "active"
+            };
+            let _ = writeln!(
+                rendered,
+                "- {} ({}) actor={} scope={} status={}",
+                credential.label,
+                credential.id,
+                credential.actor_id,
+                credential.access_scope,
+                status
+            );
+        }
+    }
+    rendered.trim_end().to_owned()
+}
+
+fn render_invite_revoke(output: &InviteRevokeOutput) -> String {
+    let mut rendered = String::new();
+    let _ = writeln!(rendered, "Revoked invite: {}", output.credential.label);
+    let _ = writeln!(rendered, "credential_id: {}", output.credential.id);
+    let _ = writeln!(rendered, "actor_id: {}", output.credential.actor_id);
+    let _ = writeln!(rendered, "credentials: {}", output.credentials_path);
+    rendered.trim_end().to_owned()
 }
 
 fn render_run_create(output: &RunCreateOutput) -> String {

@@ -54,6 +54,13 @@ edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0 OR MIT"
 authors = ["Versatly Holdings"]
+description = "Durable context graph, immutable ledger, and coordination CLI for agentic work."
+readme = "README.md"
+repository = "https://github.com/Versatly/workgraph-v4"
+homepage = "https://github.com/Versatly/workgraph-v4"
+documentation = "https://github.com/Versatly/workgraph-v4/tree/main/docs"
+keywords = ["agents", "cli", "coordination", "ledger", "workflow"]
+categories = ["command-line-utilities", "development-tools"]
 
 [workspace.dependencies]
 anyhow = "1"

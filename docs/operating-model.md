@@ -602,7 +602,9 @@ MCP (`wg-mcp`) and API (`wg-api`) are secondary surfaces for cloud contexts. Bot
 The current remote-access pass now includes a minimal hosted/dev shape for those
 secondary surfaces:
 
-- `workgraph serve --listen ... --token ... --actor-id ... [--access-scope ...]` starts a hosted HTTP adapter over one workspace with one actor-bound credential
+- `workgraph onboard --person-id ... --person-title ... [--agent ...]` initializes a workspace and registers the operator plus first durable agent actors
+- `workgraph invite create --label ... --actor-id ... --server ... [--access-scope ...]` creates an actor-bound hosted credential and prints the invited agent's connect command
+- `workgraph serve --listen ...` starts a hosted HTTP adapter over one workspace using all active invite credentials
 - `workgraph connect --server ... --token ... --actor-id ...` points a local CLI profile at that hosted workspace and verifies that the remote credential is bound to the requested actor
 - `workgraph whoami` shows the active local or hosted actor identity
 - `workgraph actor register|list|show` provides first-class actor registration and inspection
@@ -611,15 +613,16 @@ secondary surfaces:
 Those surfaces are intentionally thin and local/developer-oriented in this pass:
 
 - one workspace per served process
-- one actor-bound credential per served process/session
+- many active actor-bound hosted credentials per served process, stored as hashed bearer tokens in `.workgraph/credentials.yaml`
 - bearer-token auth only on the hosted HTTP adapter
 - three coarse remote access scopes: `read`, `operate`, and `admin`
-- no org-grade scoped credentials, service-account rotation, or approval workflows yet
+- no org-grade service-account rotation or approval workflows yet
 - no separate business logic path outside the CLI/kernel contracts
 
 Remote governance contract in this pass:
 
 - every hosted HTTP credential is bound to exactly one tracked actor
+- hosted HTTP health and execution endpoints both require a valid bearer credential
 - every MCP stdio session is bound to exactly one tracked actor
 - `read` scope allows orientation and inspection commands only
 - `operate` scope allows coordination writes such as claim, complete, checkpoint, and run lifecycle mutations
@@ -638,9 +641,11 @@ Agent-facing CLI expectations:
 
 Coordination commands now include:
 
+- `workgraph onboard --person-id ... --person-title ... [--agent agent:id=runtime]` — bootstrap the local operator identity, optional seed work, and first durable agent actors
+- `workgraph invite create|list|revoke ...` — manage actor-bound hosted invite credentials for agents such as OpenClaw and Hermes
 - `workgraph connect --server ... --token ... --actor-id ...` — bind a CLI profile to a hosted workspace after validating the actor-bound remote credential
 - `workgraph whoami` — show the effective actor and hosted/local execution mode
-- `workgraph serve --listen ... --token ... --actor-id ... [--access-scope ...]` — expose one workspace over the hosted HTTP adapter with one actor-bound scoped credential
+- `workgraph serve --listen ...` — expose one workspace over the hosted HTTP adapter using all active invite credentials
 - `workgraph actor register --type ... --id ... --title ...` — register a durable person or agent actor
 - `workgraph actor list|show ...` — inspect durable actor registrations
 - `workgraph claim <thread-id>` — claim and activate a thread

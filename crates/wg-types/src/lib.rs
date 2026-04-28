@@ -27,7 +27,8 @@ pub use ledger::{LedgerEntry, LedgerOp};
 pub use registry::{FieldDefinition, PrimitiveType, Registry};
 pub use status::{RunStatus, ThreadStatus};
 pub use support::{
-    CachedSnapshot, ExternalRef, RemoteAccessScope, RemoteCommandRequest, RemoteCommandResponse,
+    CachedSnapshot, ExternalRef, HostedCredential, HostedCredentialStore, RemoteAccessScope,
+    RemoteCommandRequest, RemoteCommandResponse,
 };
 pub use tier_one::{Decision, Lesson, Pattern, Policy, Relationship, StrategicNote};
 pub use tier_two::{Agent, Client, Org, Person, Project, Team};
