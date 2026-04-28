@@ -8,7 +8,9 @@ mod claim;
 mod connect;
 mod create;
 mod init;
+mod invite;
 mod ledger;
+mod onboard;
 mod query;
 mod run;
 mod schema;
@@ -19,7 +21,7 @@ mod thread_complete;
 mod trigger;
 
 use crate::app::AppContext;
-use crate::args::{ActorCommand, Command, McpCommand, RunCommand, TriggerCommand};
+use crate::args::{ActorCommand, Command, InviteCommand, McpCommand, RunCommand, TriggerCommand};
 use crate::output::CommandOutput;
 
 /// Executes the selected CLI command using the shared application context.
@@ -30,6 +32,31 @@ use crate::output::CommandOutput;
 pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<CommandOutput> {
     match command {
         Command::Init => Ok(CommandOutput::Init(init::handle(app).await?)),
+        Command::Onboard {
+            person_id,
+            person_title,
+            email,
+            org_title,
+            project_title,
+            mission_title,
+            thread_title,
+            agents,
+        } => Ok(CommandOutput::Onboard(
+            onboard::handle(
+                app,
+                onboard::OnboardArgs {
+                    person_id,
+                    person_title,
+                    email,
+                    org_title,
+                    project_title,
+                    mission_title,
+                    thread_title,
+                    agents,
+                },
+            )
+            .await?,
+        )),
         Command::Connect {
             server,
             token,
@@ -38,17 +65,7 @@ pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<Comma
             connect::handle(app, &server, &token, &actor_id).await?,
         )),
         Command::Whoami => Ok(CommandOutput::Whoami(connect::whoami(app).await?)),
-        Command::Serve {
-            listen,
-            actor_id,
-            access_scope,
-            ..
-        } => Ok(CommandOutput::Serve(serve::describe_http(
-            app,
-            &listen,
-            Some(actor_id.as_str()),
-            access_scope.map(|scope| scope.0),
-        )?)),
+        Command::Serve { listen } => Ok(CommandOutput::Serve(serve::describe_http(app, &listen)?)),
         Command::Brief { lens } => Ok(CommandOutput::Brief(brief::handle(app, lens.0).await?)),
         Command::Status => Ok(CommandOutput::Status(status::handle(app).await?)),
         Command::Claim { thread_id } => {
@@ -199,6 +216,29 @@ pub async fn execute(app: &AppContext, command: Command) -> anyhow::Result<Comma
             )),
             ActorCommand::Show { reference } => Ok(CommandOutput::ActorShow(
                 actor::show(app, &reference).await?,
+            )),
+        },
+        Command::Invite { command } => match command {
+            InviteCommand::Create {
+                label,
+                actor_id,
+                server,
+                access_scope,
+            } => Ok(CommandOutput::InviteCreate(
+                invite::create(
+                    app,
+                    invite::InviteCreateArgs {
+                        label,
+                        actor_id,
+                        server,
+                        access_scope: access_scope.map(|scope| scope.0),
+                    },
+                )
+                .await?,
+            )),
+            InviteCommand::List => Ok(CommandOutput::InviteList(invite::list(app).await?)),
+            InviteCommand::Revoke { label_or_id } => Ok(CommandOutput::InviteRevoke(
+                invite::revoke(app, &label_or_id).await?,
             )),
         },
         Command::Mcp { command } => match command {

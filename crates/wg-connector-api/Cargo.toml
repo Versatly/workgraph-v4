@@ -8,4 +8,4 @@ authors.workspace = true
 
 [dependencies]
 chrono.workspace = true
-wg-types = { path = "../wg-types" }
+wg-types = { version = "0.1.0", path = "../wg-types" }

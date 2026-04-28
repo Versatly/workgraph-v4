@@ -10,20 +10,20 @@ authors.workspace = true
 chrono.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true
-wg-dispatch = { path = "../wg-dispatch" }
-wg-error = { path = "../wg-error" }
-wg-graph = { path = "../wg-graph" }
-wg-ledger = { path = "../wg-ledger" }
-wg-mission = { path = "../wg-mission" }
-wg-paths = { path = "../wg-paths" }
-wg-policy = { path = "../wg-policy" }
-wg-store = { path = "../wg-store" }
-wg-thread = { path = "../wg-thread" }
-wg-trigger = { path = "../wg-trigger" }
-wg-types = { path = "../wg-types" }
+wg-dispatch = { version = "0.1.0", path = "../wg-dispatch" }
+wg-error = { version = "0.1.0", path = "../wg-error" }
+wg-graph = { version = "0.1.0", path = "../wg-graph" }
+wg-ledger = { version = "0.1.0", path = "../wg-ledger" }
+wg-mission = { version = "0.1.0", path = "../wg-mission" }
+wg-paths = { version = "0.1.0", path = "../wg-paths" }
+wg-policy = { version = "0.1.0", path = "../wg-policy" }
+wg-store = { version = "0.1.0", path = "../wg-store" }
+wg-thread = { version = "0.1.0", path = "../wg-thread" }
+wg-trigger = { version = "0.1.0", path = "../wg-trigger" }
+wg-types = { version = "0.1.0", path = "../wg-types" }
 
 [dev-dependencies]
 serde_json.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
-wg-clock = { path = "../wg-clock" }
+wg-clock = { version = "0.1.0", path = "../wg-clock" }

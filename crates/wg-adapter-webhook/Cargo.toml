@@ -7,5 +7,5 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
-wg-adapter-api = { path = "../wg-adapter-api" }
-wg-types = { path = "../wg-types" }
+wg-adapter-api = { version = "0.1.0", path = "../wg-adapter-api" }
+wg-types = { version = "0.1.0", path = "../wg-types" }

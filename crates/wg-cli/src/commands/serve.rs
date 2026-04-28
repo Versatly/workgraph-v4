@@ -4,7 +4,7 @@ use std::{net::SocketAddr, path::Path, path::PathBuf, sync::Arc};
 
 use anyhow::{Context, bail};
 use async_trait::async_trait;
-use wg_api::{ApiServerConfig, RemoteCommandExecutor};
+use wg_api::{ApiServerConfig, AuthenticatedCredential, RemoteCommandExecutor};
 use wg_mcp::McpCommandExecutor;
 use wg_types::{ActorId, RemoteAccessScope, RemoteCommandRequest, RemoteCommandResponse};
 
@@ -15,20 +15,14 @@ use crate::{args::Command, output::ServeOutput};
 /// # Errors
 ///
 /// Returns an error when the requested actor/scope combination is invalid.
-pub fn describe_http(
-    app: &crate::app::AppContext,
-    listen: &str,
-    actor_id: Option<&str>,
-    access_scope: Option<RemoteAccessScope>,
-) -> anyhow::Result<ServeOutput> {
-    let access_scope = resolve_access_scope(actor_id, access_scope);
-    validate_access_config(actor_id, access_scope)?;
+pub fn describe_http(app: &crate::app::AppContext, listen: &str) -> anyhow::Result<ServeOutput> {
     Ok(ServeOutput {
         transport: "http".to_owned(),
         endpoint: Some(format!("http://{listen}")),
         workspace_root: app.root().display().to_string(),
-        actor_id: actor_id.map(ToOwned::to_owned),
-        access_scope: access_scope.as_str().to_owned(),
+        actor_id: None,
+        access_scope: "credential-store".to_owned(),
+        credential_count: 0,
     })
 }
 
@@ -37,30 +31,68 @@ pub fn describe_http(
 /// # Errors
 ///
 /// Returns an error when the socket address is invalid or the server fails.
-pub async fn run_http(
+pub async fn run_http(app: &crate::app::AppContext, listen: &str) -> anyhow::Result<()> {
+    let listen_addr: SocketAddr = listen
+        .parse()
+        .with_context(|| format!("invalid listen address '{listen}'"))?;
+    let credential_store = app.load_credentials().await?;
+    let credentials = credential_store
+        .credentials
+        .into_iter()
+        .filter(|credential| !credential.revoked)
+        .map(|credential| wg_api::ApiCredential {
+            id: credential.id,
+            actor_id: credential.actor_id.to_string(),
+            access_scope: credential.access_scope,
+            token_hash: credential.token_hash,
+        })
+        .collect::<Vec<_>>();
+    if credentials.is_empty() {
+        bail!("no active invite credentials found; run workgraph invite create first");
+    }
+    let config = ApiServerConfig {
+        listen_addr,
+        workspace_root: app.root().to_path_buf(),
+        credentials,
+    };
+    let executor = CliRemoteExecutor {
+        workspace_root: None,
+        bound_actor_id: None,
+        access_scope: RemoteAccessScope::Read,
+    };
+    wg_api::serve(config, Arc::new(executor)).await
+}
+
+/// Serves HTTP with one in-memory actor-bound credential for tests and local development.
+///
+/// # Errors
+///
+/// Returns an error when the socket address is invalid or the server fails.
+#[cfg(test)]
+pub async fn run_http_dev(
     app: &crate::app::AppContext,
     listen: &str,
     token: &str,
-    actor_id: Option<&str>,
-    access_scope: Option<RemoteAccessScope>,
+    actor_id: &str,
+    access_scope: RemoteAccessScope,
 ) -> anyhow::Result<()> {
     let listen_addr: SocketAddr = listen
         .parse()
         .with_context(|| format!("invalid listen address '{listen}'"))?;
-    let access_scope = resolve_access_scope(actor_id, access_scope);
-    validate_access_config(actor_id, access_scope)?;
+    validate_access_config(Some(actor_id), access_scope)?;
     let config = ApiServerConfig {
         listen_addr,
         workspace_root: app.root().to_path_buf(),
-        auth_token: token.to_owned(),
-        actor_id: actor_id
-            .expect("validate_access_config requires actor_id for hosted serve")
-            .to_owned(),
-        access_scope,
+        credentials: vec![wg_api::ApiCredential {
+            id: "dev-token".to_owned(),
+            actor_id: actor_id.to_owned(),
+            access_scope,
+            token_hash: crate::util::token::token_hash(token),
+        }],
     };
     let executor = CliRemoteExecutor {
         workspace_root: None,
-        bound_actor_id: actor_id.map(ActorId::new),
+        bound_actor_id: None,
         access_scope,
     };
     wg_api::serve(config, Arc::new(executor)).await
@@ -84,6 +116,7 @@ pub fn describe_mcp(
         workspace_root: app.root().display().to_string(),
         actor_id: actor_id.map(ToOwned::to_owned),
         access_scope: access_scope.as_str().to_owned(),
+        credential_count: 1,
     })
 }
 
@@ -118,13 +151,15 @@ impl RemoteCommandExecutor for CliRemoteExecutor {
     async fn execute(
         &self,
         workspace_root: PathBuf,
+        credential: AuthenticatedCredential,
         request: RemoteCommandRequest,
     ) -> anyhow::Result<RemoteCommandResponse> {
+        let bound_actor_id = ActorId::new(&credential.actor_id);
         execute_local_request(
             &request.args,
             workspace_root.as_path(),
-            self.bound_actor_id.as_ref(),
-            self.access_scope,
+            Some(&bound_actor_id),
+            credential.access_scope,
             request.actor_id.as_deref(),
         )
         .await

@@ -3,4 +3,5 @@
 pub mod fields;
 pub mod slug;
 pub mod stdin;
+pub mod token;
 pub mod workspace;

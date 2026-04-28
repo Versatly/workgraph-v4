@@ -116,6 +116,9 @@ fn fix_for_clap_error(command: Option<&str>, _error: &clap::Error) -> String {
         Some("connect") => {
             "workgraph connect --server <url> --token <token> --actor-id <actor-id> [--access-scope <read|operate|admin>]"
         }
+        Some("onboard") => {
+            "workgraph onboard --person-id <person-id> --person-title \"<name>\""
+        }
         Some("whoami") => "workgraph whoami",
         Some("claim") => "workgraph claim <thread-id>",
         Some("complete") => "workgraph complete <thread-id>",
@@ -146,6 +149,11 @@ fn fix_for_clap_error(command: Option<&str>, _error: &clap::Error) -> String {
         }
         Some("actor_list") => "workgraph actor list",
         Some("actor_show") => "workgraph actor show <type>/<id>",
+        Some("invite_create") => {
+            "workgraph invite create --label <label> --actor-id <actor-id> --server <url>"
+        }
+        Some("invite_list") => "workgraph invite list",
+        Some("invite_revoke") => "workgraph invite revoke <label-or-id>",
         _ => "workgraph --help",
     }
     .to_owned()
@@ -173,6 +181,7 @@ fn default_fix(command: Option<&str>) -> &'static str {
         Some("connect") => {
             "workgraph connect --server <url> --token <token> --actor-id <actor-id> [--access-scope <read|operate|admin>]"
         }
+        Some("onboard") => "workgraph onboard --person-id <person-id> --person-title \"<name>\"",
         Some("whoami") => "workgraph whoami",
         Some("brief") => "workgraph brief --lens workspace",
         Some("status") => "workgraph status",
@@ -195,6 +204,11 @@ fn default_fix(command: Option<&str>) -> &'static str {
         }
         Some("actor_list") => "workgraph actor list",
         Some("actor_show") => "workgraph actor show <type>/<id>",
+        Some("invite_create") => {
+            "workgraph invite create --label <label> --actor-id <actor-id> --server <url>"
+        }
+        Some("invite_list") => "workgraph invite list",
+        Some("invite_revoke") => "workgraph invite revoke <label-or-id>",
         Some("query") => "workgraph query <type>",
         Some("show") => "workgraph show <type>/<id>",
         Some("trigger_validate") => "workgraph trigger validate <trigger-id>",

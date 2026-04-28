@@ -12,6 +12,7 @@ use wg_types::{ActorId, RemoteAccessScope, RemoteWorkspaceConfig};
 struct HostedHealthResponse {
     actor_id: String,
     access_scope: RemoteAccessScope,
+    credential_id: String,
 }
 
 /// Connects the current local CLI profile to a hosted WorkGraph server.
@@ -50,6 +51,7 @@ pub async fn handle(
         server_url: server,
         actor_id: actor_id.to_owned(),
         access_scope: health.access_scope.as_str().to_owned(),
+        credential_id: health.credential_id,
         config,
     })
 }

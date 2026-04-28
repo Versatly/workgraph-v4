@@ -31,27 +31,11 @@ pub async fn run_from_env() -> anyhow::Result<()> {
         let json_output = cli.json || cli.format.is_json();
         let app = AppContext::new(current_dir.clone());
         match &cli.command {
-            args::Command::Serve {
-                listen,
-                token,
-                actor_id,
-                access_scope,
-            } => {
-                let output = output::CommandOutput::Serve(commands::serve::describe_http(
-                    &app,
-                    listen,
-                    Some(actor_id.as_str()),
-                    access_scope.map(|scope| scope.0),
-                )?);
+            args::Command::Serve { listen } => {
+                let output =
+                    output::CommandOutput::Serve(commands::serve::describe_http(&app, listen)?);
                 println!("{}", output::render_success(&output, json_output)?);
-                return commands::serve::run_http(
-                    &app,
-                    listen,
-                    token,
-                    Some(actor_id.as_str()),
-                    access_scope.map(|scope| scope.0),
-                )
-                .await;
+                return commands::serve::run_http(&app, listen).await;
             }
             args::Command::Mcp {
                 command:
@@ -903,21 +887,19 @@ mod tests {
         let server_app = AppContext::new(server_workspace.path().to_path_buf());
         let listen_for_task = listen_addr.clone();
         tokio::spawn(async move {
-            let _ = crate::commands::serve::run_http(
+            let _ = crate::commands::serve::run_http_dev(
                 &server_app,
                 &listen_for_task,
                 "cursor-token",
-                Some("agent:cursor"),
-                Some(
-                    crate::args::Command::Claim {
-                        thread_id: "unused".to_owned(),
-                    }
-                    .required_remote_access_scope(),
-                ),
+                "agent:cursor",
+                crate::args::Command::Claim {
+                    thread_id: "unused".to_owned(),
+                }
+                .required_remote_access_scope(),
             )
             .await;
         });
-        wait_for_health(&server_url)
+        wait_for_health(&server_url, "cursor-token")
             .await
             .expect("server should become healthy");
 
@@ -1021,43 +1003,39 @@ mod tests {
 
         let operate_addr_for_task = operate_addr.clone();
         tokio::spawn(async move {
-            let _ = crate::commands::serve::run_http(
+            let _ = crate::commands::serve::run_http_dev(
                 &operate_app,
                 &operate_addr_for_task,
                 "cursor-token",
-                Some("agent:cursor"),
-                Some(
-                    crate::args::Command::Claim {
-                        thread_id: "unused".to_owned(),
-                    }
-                    .required_remote_access_scope(),
-                ),
+                "agent:cursor",
+                crate::args::Command::Claim {
+                    thread_id: "unused".to_owned(),
+                }
+                .required_remote_access_scope(),
             )
             .await;
         });
 
         let read_only_addr_for_task = read_only_addr.clone();
         tokio::spawn(async move {
-            let _ = crate::commands::serve::run_http(
+            let _ = crate::commands::serve::run_http_dev(
                 &read_only_app,
                 &read_only_addr_for_task,
                 "reader-token",
-                Some("person:reader"),
-                Some(
-                    crate::args::Command::Query {
-                        primitive_type: "thread".to_owned(),
-                        filters: Vec::new(),
-                    }
-                    .required_remote_access_scope(),
-                ),
+                "person:reader",
+                crate::args::Command::Query {
+                    primitive_type: "thread".to_owned(),
+                    filters: Vec::new(),
+                }
+                .required_remote_access_scope(),
             )
             .await;
         });
 
-        wait_for_health(&operate_url)
+        wait_for_health(&operate_url, "cursor-token")
             .await
             .expect("operate server should become healthy");
-        wait_for_health(&read_only_url)
+        wait_for_health(&read_only_url, "reader-token")
             .await
             .expect("read-only server should become healthy");
 
@@ -1121,11 +1099,11 @@ mod tests {
             .port()
     }
 
-    async fn wait_for_health(server_url: &str) -> anyhow::Result<()> {
+    async fn wait_for_health(server_url: &str, token: &str) -> anyhow::Result<()> {
         let client = reqwest::Client::new();
         let endpoint = format!("{server_url}/v1/health");
         for _ in 0..40 {
-            if let Ok(response) = client.get(&endpoint).send().await {
+            if let Ok(response) = client.get(&endpoint).bearer_auth(token).send().await {
                 if response.status() == StatusCode::OK {
                     return Ok(());
                 }

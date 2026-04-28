@@ -7,5 +7,5 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
-wg-error = { path = "../wg-error" }
-wg-types = { path = "../wg-types" }
+wg-error = { version = "0.1.0", path = "../wg-error" }
+wg-types = { version = "0.1.0", path = "../wg-types" }

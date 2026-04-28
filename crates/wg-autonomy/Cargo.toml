@@ -7,4 +7,4 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
-wg-orientation = { path = "../wg-orientation" }
+wg-orientation = { version = "0.1.0", path = "../wg-orientation" }

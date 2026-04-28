@@ -11,28 +11,30 @@ anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
 clap.workspace = true
+sha2.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-wg-api = { path = "../wg-api" }
-wg-clock = { path = "../wg-clock" }
-wg-dispatch = { path = "../wg-dispatch" }
-wg-thread = { path = "../wg-thread" }
-wg-fs = { path = "../wg-fs" }
-wg-ledger = { path = "../wg-ledger" }
-wg-orientation = { path = "../wg-orientation" }
-wg-paths = { path = "../wg-paths" }
-wg-policy = { path = "../wg-policy" }
-wg-registry = { path = "../wg-registry" }
-wg-store = { path = "../wg-store" }
-wg-trigger = { path = "../wg-trigger" }
-wg-error = { path = "../wg-error" }
-wg-mcp = { path = "../wg-mcp" }
-wg-mission = { path = "../wg-mission" }
-wg-types = { path = "../wg-types" }
+uuid.workspace = true
+wg-api = { version = "0.1.0", path = "../wg-api" }
+wg-clock = { version = "0.1.0", path = "../wg-clock" }
+wg-dispatch = { version = "0.1.0", path = "../wg-dispatch" }
+wg-thread = { version = "0.1.0", path = "../wg-thread" }
+wg-fs = { version = "0.1.0", path = "../wg-fs" }
+wg-ledger = { version = "0.1.0", path = "../wg-ledger" }
+wg-orientation = { version = "0.1.0", path = "../wg-orientation" }
+wg-paths = { version = "0.1.0", path = "../wg-paths" }
+wg-policy = { version = "0.1.0", path = "../wg-policy" }
+wg-registry = { version = "0.1.0", path = "../wg-registry" }
+wg-store = { version = "0.1.0", path = "../wg-store" }
+wg-trigger = { version = "0.1.0", path = "../wg-trigger" }
+wg-error = { version = "0.1.0", path = "../wg-error" }
+wg-mcp = { version = "0.1.0", path = "../wg-mcp" }
+wg-mission = { version = "0.1.0", path = "../wg-mission" }
+wg-types = { version = "0.1.0", path = "../wg-types" }
 
 [dev-dependencies]
 tempfile.workspace = true

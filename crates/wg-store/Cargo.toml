@@ -10,13 +10,13 @@ authors.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true
 tokio.workspace = true
-wg-clock = { path = "../wg-clock" }
-wg-encoding = { path = "../wg-encoding" }
-wg-error = { path = "../wg-error" }
-wg-fs = { path = "../wg-fs" }
-wg-ledger = { path = "../wg-ledger" }
-wg-paths = { path = "../wg-paths" }
-wg-types = { path = "../wg-types" }
+wg-clock = { version = "0.1.0", path = "../wg-clock" }
+wg-encoding = { version = "0.1.0", path = "../wg-encoding" }
+wg-error = { version = "0.1.0", path = "../wg-error" }
+wg-fs = { version = "0.1.0", path = "../wg-fs" }
+wg-ledger = { version = "0.1.0", path = "../wg-ledger" }
+wg-paths = { version = "0.1.0", path = "../wg-paths" }
+wg-types = { version = "0.1.0", path = "../wg-types" }
 
 [dev-dependencies]
 tempfile.workspace = true

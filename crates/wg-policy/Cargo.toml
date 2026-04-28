@@ -9,10 +9,10 @@ authors.workspace = true
 [dependencies]
 serde.workspace = true
 serde_yaml.workspace = true
-wg-error = { path = "../wg-error" }
-wg-paths = { path = "../wg-paths" }
-wg-store = { path = "../wg-store" }
-wg-types = { path = "../wg-types" }
+wg-error = { version = "0.1.0", path = "../wg-error" }
+wg-paths = { version = "0.1.0", path = "../wg-paths" }
+wg-store = { version = "0.1.0", path = "../wg-store" }
+wg-types = { version = "0.1.0", path = "../wg-types" }
 
 [dev-dependencies]
 tempfile.workspace = true

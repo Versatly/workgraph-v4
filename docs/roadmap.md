@@ -63,7 +63,10 @@ Scope:
 
 Current delivered floor in this repo:
 
-- actor-bound hosted credentials for `workgraph serve`
+- first-run `workgraph onboard` for creating the operator actor, optional initial
+  agents, and seed work primitives
+- actor-bound hosted invite credentials via `workgraph invite create|list|revoke`
+- `workgraph serve` over all active hosted invite credentials for one workspace
 - actor-bound MCP stdio sessions for `workgraph mcp serve`
 - coarse remote access scopes (`read`, `operate`, `admin`) enforced before remote command execution
 - `workgraph connect` validation that a hosted credential matches the requested actor identity

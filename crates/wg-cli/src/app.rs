@@ -7,7 +7,7 @@ use tokio::fs;
 use wg_ledger::{LedgerCursor, LedgerReader};
 use wg_paths::WorkspacePath;
 use wg_registry::RuntimeRegistry;
-use wg_types::{ActorId, LedgerEntry, Registry, WorkgraphConfig};
+use wg_types::{ActorId, HostedCredentialStore, LedgerEntry, Registry, WorkgraphConfig};
 
 /// Shared command context for operating on a single WorkGraph workspace.
 #[derive(Debug, Clone)]
@@ -72,6 +72,12 @@ impl AppContext {
     #[must_use]
     pub fn config_path(&self) -> PathBuf {
         self.metadata_dir_path().join("config.yaml")
+    }
+
+    /// Returns the path to the hosted credential store.
+    #[must_use]
+    pub fn credentials_path(&self) -> PathBuf {
+        self.metadata_dir_path().join("credentials.yaml")
     }
 
     /// Returns the path to the immutable workspace ledger file.
@@ -209,6 +215,47 @@ impl AppContext {
                 format!(
                     "failed to write config file '{}'",
                     self.config_path().display()
+                )
+            })
+    }
+
+    /// Loads the hosted credential store, returning an empty store when none exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the credential store cannot be read or parsed.
+    pub async fn load_credentials(&self) -> anyhow::Result<HostedCredentialStore> {
+        let path = self.credentials_path();
+        if !fs::try_exists(&path)
+            .await
+            .with_context(|| format!("failed to inspect credential store '{}'", path.display()))?
+        {
+            return Ok(HostedCredentialStore::default());
+        }
+
+        let encoded = fs::read_to_string(&path)
+            .await
+            .with_context(|| format!("failed to read credential store '{}'", path.display()))?;
+
+        serde_yaml::from_str(&encoded)
+            .with_context(|| format!("failed to parse credential store '{}'", path.display()))
+    }
+
+    /// Writes the hosted credential store atomically.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when serialization or persistence fails.
+    pub async fn write_credentials(&self, store: &HostedCredentialStore) -> anyhow::Result<()> {
+        self.ensure_metadata_dir().await?;
+        let encoded =
+            serde_yaml::to_string(store).context("failed to serialize credential store")?;
+        wg_fs::atomic_write(self.credentials_path(), encoded.as_bytes())
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to write credential store '{}'",
+                    self.credentials_path().display()
                 )
             })
     }
