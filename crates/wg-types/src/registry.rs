@@ -2,6 +2,21 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::GraphEdgeKind;
+
+/// Query behavior supported for a primitive field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum FieldQueryBehavior {
+    /// Field supports exact scalar matching.
+    #[default]
+    Exact,
+    /// Field supports containment checks against repeated values.
+    Contains,
+    /// Field should not participate in direct query matching.
+    Opaque,
+}
+
 /// Describes a field available on a primitive type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FieldDefinition {
@@ -15,6 +30,15 @@ pub struct FieldDefinition {
     pub required: bool,
     /// Whether the field can hold multiple values.
     pub repeated: bool,
+    /// How `workgraph query` should interpret this field.
+    #[serde(default)]
+    pub query_behavior: FieldQueryBehavior,
+    /// Allowed primitive target types when this field stores durable references.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reference_types: Vec<String>,
+    /// Typed graph edge emitted for this field when the reference resolves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph_edge_kind: Option<GraphEdgeKind>,
 }
 
 impl FieldDefinition {
@@ -33,7 +57,39 @@ impl FieldDefinition {
             description: description.into(),
             required,
             repeated,
+            query_behavior: if repeated {
+                FieldQueryBehavior::Contains
+            } else {
+                FieldQueryBehavior::Exact
+            },
+            reference_types: Vec::new(),
+            graph_edge_kind: None,
         }
+    }
+
+    /// Declares the query behavior for this field.
+    #[must_use]
+    pub fn with_query_behavior(mut self, query_behavior: FieldQueryBehavior) -> Self {
+        self.query_behavior = query_behavior;
+        self
+    }
+
+    /// Declares the allowed reference target types and graph edge kind for this field.
+    #[must_use]
+    pub fn with_reference_targets(
+        mut self,
+        reference_types: impl IntoIterator<Item = impl Into<String>>,
+        graph_edge_kind: GraphEdgeKind,
+    ) -> Self {
+        self.reference_types = reference_types.into_iter().map(Into::into).collect();
+        self.graph_edge_kind = Some(graph_edge_kind);
+        self
+    }
+
+    /// Returns whether this field participates in structured graph reference emission.
+    #[must_use]
+    pub fn is_reference(&self) -> bool {
+        !self.reference_types.is_empty() && self.graph_edge_kind.is_some()
     }
 }
 
@@ -131,6 +187,21 @@ fn builtin_types() -> Vec<PrimitiveType> {
                 ),
                 field("title", "string", "Organization display name", true, false),
                 field("summary", "string", "Brief operating context", false, false),
+                field_contains("tags", "string[]", "Tags used for filtering and grouping"),
+                opaque_field(
+                    "external_refs",
+                    "object[]",
+                    "Links to authoritative external systems.",
+                    false,
+                    true,
+                ),
+                opaque_field(
+                    "snapshot",
+                    "object",
+                    "A lightweight cached view of important external state.",
+                    false,
+                    false,
+                ),
             ],
         ),
         builtin_type(
@@ -146,11 +217,28 @@ fn builtin_types() -> Vec<PrimitiveType> {
                     "Owning organization identifier",
                     false,
                     false,
+                )
+                .with_reference_targets(["org"], GraphEdgeKind::Containment),
+                field(
+                    "mission",
+                    "string",
+                    "Team mission or responsibility summary",
+                    false,
+                    false,
                 ),
                 field(
                     "members",
                     "string[]",
                     "Human and agent members",
+                    false,
+                    true,
+                )
+                .with_reference_targets(["person", "agent"], GraphEdgeKind::Assignment),
+                field_contains("tags", "string[]", "Tags used for filtering and grouping"),
+                opaque_field(
+                    "external_refs",
+                    "object[]",
+                    "Links to authoritative external systems.",
                     false,
                     true,
                 ),
@@ -164,7 +252,17 @@ fn builtin_types() -> Vec<PrimitiveType> {
                 field("id", "string", "Stable person identifier", true, false),
                 field("title", "string", "Display name", true, false),
                 field("email", "string", "Preferred email address", false, false),
-                field("team_ids", "string[]", "Associated teams", false, true),
+                field("role", "string", "Primary role or function", false, false),
+                field("team_ids", "string[]", "Associated teams", false, true)
+                    .with_reference_targets(["team"], GraphEdgeKind::Assignment),
+                field_contains("tags", "string[]", "Tags used for filtering and grouping"),
+                opaque_field(
+                    "external_refs",
+                    "object[]",
+                    "Links to authoritative external systems.",
+                    false,
+                    true,
+                ),
             ],
         ),
         builtin_type(
@@ -187,14 +285,16 @@ fn builtin_types() -> Vec<PrimitiveType> {
                     "Optional tracked parent actor above this agent",
                     false,
                     false,
-                ),
+                )
+                .with_reference_targets(["person", "agent"], GraphEdgeKind::Assignment),
                 field(
                     "root_actor_id",
                     "string",
                     "Optional root tracked actor for delegated lineages",
                     false,
                     false,
-                ),
+                )
+                .with_reference_targets(["person", "agent"], GraphEdgeKind::Assignment),
                 field(
                     "lineage_mode",
                     "string",
@@ -209,6 +309,29 @@ fn builtin_types() -> Vec<PrimitiveType> {
                     false,
                     true,
                 ),
+                field(
+                    "description",
+                    "string",
+                    "Concise explanation of what the agent is good at.",
+                    false,
+                    false,
+                ),
+                field(
+                    "owner",
+                    "string",
+                    "Responsible person, team, or agent for this durable actor",
+                    false,
+                    false,
+                )
+                .with_reference_targets(["person", "team", "agent"], GraphEdgeKind::Assignment),
+                field_contains("tags", "string[]", "Tags used for filtering and grouping"),
+                opaque_field(
+                    "external_refs",
+                    "object[]",
+                    "Links to authoritative external systems.",
+                    false,
+                    true,
+                ),
             ],
         ),
         builtin_type(
@@ -218,11 +341,27 @@ fn builtin_types() -> Vec<PrimitiveType> {
             vec![
                 field("id", "string", "Stable client identifier", true, false),
                 field("title", "string", "Client display name", true, false),
-                field("account_owner", "string", "Primary owner", false, false),
+                field("account_owner", "string", "Primary owner", false, false)
+                    .with_reference_targets(["person", "team", "agent"], GraphEdgeKind::Assignment),
                 field(
                     "summary",
                     "string",
                     "Customer context summary",
+                    false,
+                    false,
+                ),
+                field_contains("tags", "string[]", "Tags used for filtering and grouping"),
+                opaque_field(
+                    "external_refs",
+                    "object[]",
+                    "Links to authoritative external systems.",
+                    false,
+                    true,
+                ),
+                opaque_field(
+                    "snapshot",
+                    "object",
+                    "A lightweight cached view of important external state.",
                     false,
                     false,
                 ),
@@ -236,7 +375,31 @@ fn builtin_types() -> Vec<PrimitiveType> {
                 field("id", "string", "Stable project identifier", true, false),
                 field("title", "string", "Project display name", true, false),
                 field("status", "string", "Current project status", false, false),
-                field("client_id", "string", "Associated client", false, false),
+                field("client_id", "string", "Associated client", false, false)
+                    .with_reference_targets(["client"], GraphEdgeKind::Containment),
+                field(
+                    "team_ids",
+                    "string[]",
+                    "Teams currently working on the project",
+                    false,
+                    true,
+                )
+                .with_reference_targets(["team"], GraphEdgeKind::Assignment),
+                field_contains("tags", "string[]", "Tags used for filtering and grouping"),
+                opaque_field(
+                    "external_refs",
+                    "object[]",
+                    "Links to authoritative external systems.",
+                    false,
+                    true,
+                ),
+                opaque_field(
+                    "snapshot",
+                    "object",
+                    "A lightweight cached view of important external state.",
+                    false,
+                    false,
+                ),
             ],
         ),
         builtin_type(
@@ -253,7 +416,8 @@ fn builtin_types() -> Vec<PrimitiveType> {
                     "Primary decision maker",
                     false,
                     false,
-                ),
+                )
+                .with_reference_targets(["person", "agent"], GraphEdgeKind::Assignment),
             ],
         ),
         builtin_type(
@@ -289,8 +453,14 @@ fn builtin_types() -> Vec<PrimitiveType> {
             vec![
                 field("id", "string", "Stable policy identifier", true, false),
                 field("title", "string", "Policy title", true, false),
-                field("scope", "string", "Scope of the policy", false, false),
-                field("rule", "string", "Normative rule statement", false, false),
+                field_contains("scope", "string[]", "Primitive types covered by the policy"),
+                opaque_field(
+                    "rules",
+                    "object[]",
+                    "Allow/deny policy rules scoped to actors and actions.",
+                    false,
+                    true,
+                ),
             ],
         ),
         builtin_type(
@@ -719,6 +889,22 @@ fn field(
     repeated: bool,
 ) -> FieldDefinition {
     FieldDefinition::new(name, field_type, description, required, repeated)
+}
+
+fn field_contains(name: &str, field_type: &str, description: &str) -> FieldDefinition {
+    FieldDefinition::new(name, field_type, description, false, true)
+        .with_query_behavior(FieldQueryBehavior::Contains)
+}
+
+fn opaque_field(
+    name: &str,
+    field_type: &str,
+    description: &str,
+    required: bool,
+    repeated: bool,
+) -> FieldDefinition {
+    FieldDefinition::new(name, field_type, description, required, repeated)
+        .with_query_behavior(FieldQueryBehavior::Opaque)
 }
 
 #[cfg(test)]

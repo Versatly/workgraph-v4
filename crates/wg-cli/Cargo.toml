@@ -22,6 +22,7 @@ uuid.workspace = true
 wg-api = { version = "0.1.0", path = "../wg-api" }
 wg-clock = { version = "0.1.0", path = "../wg-clock" }
 wg-dispatch = { version = "0.1.0", path = "../wg-dispatch" }
+wg-graph = { version = "0.1.0", path = "../wg-graph" }
 wg-thread = { version = "0.1.0", path = "../wg-thread" }
 wg-fs = { version = "0.1.0", path = "../wg-fs" }
 wg-ledger = { version = "0.1.0", path = "../wg-ledger" }

@@ -136,6 +136,35 @@ This is a developer-hosted coordination surface, not org-grade credential manage
 tokens are bearer credentials, stored only as hashes on the host, and rotation is performed
 by revoking and recreating an invite.
 
+## Company Context and Agent-Friendly CLI Use
+
+WorkGraph already includes built-in company-context primitives:
+
+- `org`
+- `team`
+- `person`
+- `agent`
+- `client`
+- `project`
+
+Use `workgraph schema <type>` as the authoritative machine-readable contract for their frontmatter.
+The schema now distinguishes:
+
+- repeated metadata fields such as `tags`, `team_ids`, and `members`
+- durable reference-bearing fields such as `org_id`, `client_id`, `account_owner`, and `owner`
+- opaque fields such as `external_refs` and `snapshot` that are stored and shown but not directly filterable
+
+Examples:
+
+```bash
+./target/release/workgraph create person --title "Pedro" --field role=Founder --field team_ids=team/platform
+./target/release/workgraph actor register --type person --id person:pedro --title "Pedro" --role Founder --team-id team/platform
+./target/release/workgraph query person --filter team_ids=team/platform
+./target/release/workgraph show person/person:pedro
+```
+
+`workgraph show <type>/<id>` now includes inbound and outbound graph references so agents and humans can inspect where a company-context primitive is linked, assigned, contained, or mentioned. Prefer explicit typed references such as `person/pedro` or `team/platform` in structured fields and generated output; bare wiki-link ids remain supported when they resolve uniquely.
+
 ## Quality Gate
 
 ```bash

@@ -77,6 +77,12 @@ pub struct PrimitiveFieldSchema {
     pub required: bool,
     /// Whether the field accepts repeated values.
     pub repeated: bool,
+    /// Query behavior supported for this field.
+    pub query_behavior: String,
+    /// Allowed primitive target types when this field stores durable references.
+    pub reference_types: Vec<String>,
+    /// Typed graph edge emitted when the reference resolves.
+    pub graph_edge_kind: Option<String>,
 }
 
 /// Returns the static CLI capabilities catalog.
@@ -137,12 +143,50 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
                     "--type <person|agent>",
                     "--id <actor-id>",
                     "--title \"<title>\"",
+                    "--role <role>",
+                    "--team-id <team-ref>",
+                    "--tag <tag>",
+                    "--owner <actor-ref>",
                     "--runtime <runtime>",
                     "--capability <capability>",
                 ],
                 vec![
-                    "workgraph actor register --type person --id person:pedro --title \"Pedro\" --json",
-                    "workgraph actor register --type agent --id agent:cursor --title \"Cursor Agent\" --runtime cursor --capability coding",
+                    "workgraph actor register --type person --id person:pedro --title \"Pedro\" --role \"Founder\" --team-id team/platform --json",
+                    "workgraph actor register --type agent --id agent:cursor --title \"Cursor Agent\" --runtime cursor --owner person/pedro --capability coding",
+                ],
+            ),
+            capability(
+                "invite create",
+                "Create an actor-bound hosted invite credential and print the invited agent's connect command.",
+                vec![],
+                &[
+                    global_flags[0],
+                    global_flags[1],
+                    "--label <label>",
+                    "--actor-id <actor-id>",
+                    "--server <url>",
+                    "--access-scope <read|operate|admin>",
+                ],
+                vec![
+                    "workgraph invite create --label openclaw --actor-id agent:pedro-openclaw --server http://127.0.0.1:8787 --json",
+                    "workgraph invite create --label hermes --actor-id agent:pedro-hermes --server https://wg.example.com --access-scope operate",
+                ],
+            ),
+            capability(
+                "invite list",
+                "List hosted invite credentials without revealing raw tokens.",
+                vec![],
+                &global_flags,
+                vec!["workgraph invite list --json", "workgraph invite list"],
+            ),
+            capability(
+                "invite revoke",
+                "Revoke one hosted invite credential by label or id.",
+                vec!["<label-or-id>"],
+                &global_flags,
+                vec![
+                    "workgraph invite revoke openclaw --json",
+                    "workgraph invite revoke invite-openclaw",
                 ],
             ),
             capability(
@@ -397,27 +441,30 @@ pub fn capabilities_catalog() -> CapabilitiesCatalog {
                 vec![
                     "workgraph create org --title \"Versatly\" --json",
                     "workgraph create decision --title \"Use Rust\" --field status=decided --json",
-                    "echo '{\"title\":\"Versatly\",\"fields\":{\"summary\":\"AI-native company\"}}' | workgraph create org --stdin --json",
+                    "workgraph create person --title \"Pedro\" --field team_ids=team/platform --field role=Founder --json",
+                    "echo '{\"title\":\"Versatly\",\"fields\":{\"summary\":\"AI-native company\",\"tags\":[\"company\"]}}' | workgraph create org --stdin --json",
                 ],
             ),
             capability(
                 "query",
-                "Query primitives by type with exact field filters.",
+                "Query primitives by type with exact scalar filters and repeated-field containment where the schema allows it.",
                 vec!["<type>"],
                 &[global_flags[0], global_flags[1], "--filter key=value"],
                 vec![
                     "workgraph query org --json",
                     "workgraph query decision --filter status=decided --json",
+                    "workgraph query person --filter team_ids=team/platform --json",
                     "workgraph query thread",
                 ],
             ),
             capability(
                 "show",
-                "Load one primitive by <type>/<id>.",
+                "Load one primitive by <type>/<id> with graph-backed references when available.",
                 vec!["<type>/<id>"],
                 &global_flags,
                 vec![
                     "workgraph show org/versatly --json",
+                    "workgraph show person/person:pedro --json",
                     "workgraph show decision/rust-for-workgraph-v4 --json",
                     "workgraph show thread/kernel-thread-1",
                 ],
@@ -454,6 +501,24 @@ pub fn cli_schema(
                     description: field.description.clone(),
                     required: field.required,
                     repeated: field.repeated,
+                    query_behavior: match field.query_behavior {
+                        wg_types::FieldQueryBehavior::Exact => "exact",
+                        wg_types::FieldQueryBehavior::Contains => "contains",
+                        wg_types::FieldQueryBehavior::Opaque => "opaque",
+                    }
+                    .to_owned(),
+                    reference_types: field.reference_types.clone(),
+                    graph_edge_kind: field.graph_edge_kind.map(|kind| {
+                        match kind {
+                            wg_types::GraphEdgeKind::Reference => "reference",
+                            wg_types::GraphEdgeKind::Relationship => "relationship",
+                            wg_types::GraphEdgeKind::Assignment => "assignment",
+                            wg_types::GraphEdgeKind::Containment => "containment",
+                            wg_types::GraphEdgeKind::Evidence => "evidence",
+                            wg_types::GraphEdgeKind::Trigger => "trigger",
+                        }
+                        .to_owned()
+                    }),
                 })
                 .collect(),
         })

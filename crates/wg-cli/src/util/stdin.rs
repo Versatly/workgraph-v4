@@ -22,7 +22,7 @@ pub struct CreateStdinPayload {
 /// # Errors
 ///
 /// Returns an error when stdin cannot be read, contains invalid UTF-8 JSON,
-/// or fields are unsupported compound values.
+/// or fields cannot be encoded into YAML-compatible values.
 pub fn parse_create_stdin_payload() -> anyhow::Result<CreateStdinPayload> {
     let mut input = String::new();
     std::io::stdin()
@@ -52,7 +52,7 @@ pub fn parse_create_stdin_payload() -> anyhow::Result<CreateStdinPayload> {
             .as_object()
             .ok_or_else(|| anyhow::anyhow!("stdin payload field 'fields' must be an object"))?;
         for (key, value) in fields_object {
-            let scalar = json_value_to_scalar_string(key, value)?;
+            let scalar = json_value_to_yaml_string(key, value)?;
             fields.push(KeyValueInput {
                 key: key.clone(),
                 value: scalar,
@@ -64,7 +64,7 @@ pub fn parse_create_stdin_payload() -> anyhow::Result<CreateStdinPayload> {
         if key == "title" || key == "fields" {
             continue;
         }
-        let scalar = json_value_to_scalar_string(key, value)?;
+        let scalar = json_value_to_yaml_string(key, value)?;
         if let Some(existing) = fields.iter_mut().find(|field| field.key == *key) {
             existing.value = scalar;
         } else {
@@ -78,15 +78,15 @@ pub fn parse_create_stdin_payload() -> anyhow::Result<CreateStdinPayload> {
     Ok(CreateStdinPayload { title, fields })
 }
 
-fn json_value_to_scalar_string(key: &str, value: &serde_json::Value) -> anyhow::Result<String> {
+fn json_value_to_yaml_string(key: &str, value: &serde_json::Value) -> anyhow::Result<String> {
     match value {
         serde_json::Value::Null => Ok(String::new()),
         serde_json::Value::Bool(value) => Ok(value.to_string()),
         serde_json::Value::Number(value) => Ok(value.to_string()),
         serde_json::Value::String(value) => Ok(value.clone()),
-        serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
-            bail!("stdin payload field '{key}' must be a scalar value")
-        }
+        serde_json::Value::Array(_) | serde_json::Value::Object(_) => serde_yaml::to_string(value)
+            .map(|encoded| encoded.trim().to_owned())
+            .with_context(|| format!("stdin payload field '{key}' could not be encoded")),
     }
 }
 
