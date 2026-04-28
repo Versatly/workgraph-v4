@@ -947,50 +947,50 @@ dependencies = [
 
 [[package]]
 name = "wg-adapter-api"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 
 [[package]]
 name = "wg-adapter-claude"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "wg-adapter-api",
 ]
 
 [[package]]
 name = "wg-adapter-cursor"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "wg-adapter-api",
 ]
 
 [[package]]
 name = "wg-adapter-shell"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "wg-adapter-api",
 ]
 
 [[package]]
 name = "wg-adapter-webhook"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "wg-adapter-api",
 ]
 
 [[package]]
 name = "wg-api"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 
 [[package]]
 name = "wg-autonomy"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "wg-orientation",
 ]
 
 [[package]]
 name = "wg-cli"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1014,25 +1014,25 @@ dependencies = [
 
 [[package]]
 name = "wg-clock"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "chrono",
 ]
 
 [[package]]
 name = "wg-connector-api"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 
 [[package]]
 name = "wg-connector-github"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "wg-connector-api",
 ]
 
 [[package]]
 name = "wg-dispatch"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "serde",
  "serde_yaml",
@@ -1048,7 +1048,7 @@ dependencies = [
 
 [[package]]
 name = "wg-encoding"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "serde",
  "serde_yaml",
@@ -1056,18 +1056,18 @@ dependencies = [
 
 [[package]]
 name = "wg-error"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "wg-federation"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 
 [[package]]
 name = "wg-fs"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "tempfile",
  "tokio",
@@ -1075,7 +1075,7 @@ dependencies = [
 
 [[package]]
 name = "wg-graph"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "serde_yaml",
  "tempfile",
@@ -1090,7 +1090,7 @@ dependencies = [
 
 [[package]]
 name = "wg-ledger"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "serde_json",
  "sha2",
@@ -1105,15 +1105,15 @@ dependencies = [
 
 [[package]]
 name = "wg-markdown"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 
 [[package]]
 name = "wg-mcp"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 
 [[package]]
 name = "wg-mission"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "serde",
  "serde_yaml",
@@ -1129,15 +1129,15 @@ dependencies = [
 
 [[package]]
 name = "wg-net"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 
 [[package]]
 name = "wg-obsidian"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 
 [[package]]
 name = "wg-orientation"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "chrono",
  "serde",
@@ -1160,15 +1160,15 @@ dependencies = [
 
 [[package]]
 name = "wg-otel"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 
 [[package]]
 name = "wg-paths"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 
 [[package]]
 name = "wg-policy"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "serde",
  "serde_yaml",
@@ -1182,11 +1182,11 @@ dependencies = [
 
 [[package]]
 name = "wg-projections"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 
 [[package]]
 name = "wg-registry"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "wg-error",
  "wg-types",
@@ -1194,11 +1194,11 @@ dependencies = [
 
 [[package]]
 name = "wg-signal"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 
 [[package]]
 name = "wg-store"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "serde",
  "serde_yaml",
@@ -1215,7 +1215,7 @@ dependencies = [
 
 [[package]]
 name = "wg-thread"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "chrono",
  "serde",
@@ -1232,11 +1232,11 @@ dependencies = [
 
 [[package]]
 name = "wg-transport"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 
 [[package]]
 name = "wg-trigger"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "serde",
  "serde_yaml",
@@ -1253,7 +1253,7 @@ dependencies = [
 
 [[package]]
 name = "wg-types"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "chrono",
  "serde",
@@ -1418,7 +1418,7 @@ dependencies = [
 
 [[package]]
 name = "workgraph"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "anyhow",
  "tokio",
@@ -1428,7 +1428,7 @@ dependencies = [
 
 [[package]]
 name = "workgraph-workspace"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 dependencies = [
  "serde_json",
  "serde_yaml",
